@@ -1,0 +1,9 @@
+{
+  "name": "Berry Creek Tics",
+  "short_name": "BC Tics",
+  "description": "Golf scoring and tics tracker for The Club at Berry Creek.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#b51222"
+}

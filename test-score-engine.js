@@ -1,0 +1,43 @@
+const assert = require("node:assert/strict");
+const E = require("./score-engine.js");
+
+const settings = { par: 72, allowance: 100, kpWinners: {} };
+assert.equal(E.COURSE.holes.length, 18);
+assert.equal(E.COURSE.holes.reduce((sum, h) => sum + h.par, 0), 72);
+assert.equal(E.COURSE.tees.championship.yards.reduce((sum, y) => sum + y, 0), 6600);
+assert.equal(E.COURSE.tees.member.yards.reduce((sum, y) => sum + y, 0), 6104);
+assert.equal(E.COURSE.tees.memberCreekCombo.yards.reduce((sum, y) => sum + y, 0), 5707);
+assert.equal(E.COURSE.tees.creekMen.yards.reduce((sum, y) => sum + y, 0), 5469);
+assert.equal(E.COURSE.tees.creekBerryCombo.yards.reduce((sum, y) => sum + y, 0), 5291);
+assert.equal(E.COURSE.tees.berryMen.yards.reduce((sum, y) => sum + y, 0), 5017);
+assert.equal(E.courseHandicap(10, 130, 72.1, 72), 12);
+assert.equal(E.playingHandicap(10, { ...settings, allowance: 90 }, E.COURSE.tees.championship), 11);
+assert.deepEqual(E.COURSE.strokeIndexes.upper, [15,17,1,5,13,3,7,11,9,8,4,10,6,12,16,14,18,2]);
+assert.equal(E.strokesForHole(20, 1), 2);
+assert.equal(E.strokesForHole(20, 2), 2);
+assert.equal(E.strokesForHole(20, 3), 1);
+assert.equal(E.strokesForHole(-2, 18), -1);
+assert.equal(E.strokesForHole(-2, 17), -1);
+assert.equal(E.strokesForHole(-2, 16), 0);
+for (const handicap of [-36, -19, -2, 0, 7, 18, 23, 54]) {
+  const allocated = E.COURSE.strokeIndexes.upper.reduce((sum, si) => sum + E.strokesForHole(handicap, si), 0);
+  assert.equal(allocated, handicap);
+}
+assert.equal(E.netScore(5, 2), 3);
+
+const alice = { id: "a", name: "Alice", ghin: 0, teeKey: "championship", scores: E.COURSE.holes.map((h) => h.par), skins: Array(18).fill(false), sandies: Array(18).fill(false) };
+const bob = { id: "b", name: "Bob", ghin: 0, teeKey: "member", scores: E.COURSE.holes.map((h) => h.par), skins: Array(18).fill(false), sandies: Array(18).fill(false) };
+alice.scores[0] = 3;
+alice.sandies[1] = true;
+settings.kpWinners["2"] = "a";
+const tics = E.ticSummary(alice, [alice, bob], E.COURSE, settings);
+assert.deepEqual(tics, { birdies: 1, skins: 3, front: 1, back: 1, totalNet: 1, sandyPars: 1, sandyBirdies: 0, kps: 1, total: 9 });
+
+const scratch = { ...alice, id: "scratch", scores: [4, ...Array(17).fill("")] };
+const eighteen = { ...bob, id: "eighteen", ghin: 18, scores: [4, ...Array(17).fill("")] };
+assert.deepEqual(E.skinResult([scratch, eighteen], E.COURSE, settings, 0), { status: "awarded", winnerId: "eighteen", lowNet: 3 });
+scratch.scores[0] = 3;
+assert.deepEqual(E.skinResult([scratch, eighteen], E.COURSE, settings, 0), { status: "tie", winnerId: null, lowNet: 3 });
+eighteen.scores[0] = "";
+assert.deepEqual(E.skinResult([scratch, eighteen], E.COURSE, settings, 0), { status: "pending", winnerId: null, lowNet: null });
+console.log("All score engine tests passed.");

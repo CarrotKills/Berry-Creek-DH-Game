@@ -1,0 +1,15 @@
+const assert = require("node:assert/strict");
+const R = require("./round-state.js");
+let state = R.defaultState();
+for (let i = 0; i < 5; i += 1) state = R.applyAction(state, { type: "ADD_PLAYER", payload: { player: { id: `a${i}`, name: `A${i}`, group: "A" } } });
+state = R.applyAction(state, { type: "ADD_PLAYER", payload: { player: { id: "overflow", name: "Overflow", group: "A" } } });
+assert.equal(state.players.length, 5);
+state = R.applyAction(state, { type: "ADD_PLAYER", payload: { player: { id: "b1", name: "B1", group: "B", teeKey: "member" } } });
+state = R.applyAction(state, { type: "SET_SCORE", payload: { playerId: "b1", holeIndex: 0, score: 4 } });
+assert.equal(state.players.find((p) => p.id === "b1").scores[0], 4);
+state = R.applyAction(state, { type: "SET_KP", payload: { hole: 2, playerId: "b1" } });
+assert.equal(state.settings.kpWinners["2"], "b1");
+state = R.applyAction(state, { type: "SET_KP", payload: { hole: 2, playerId: "a1" } });
+assert.equal(state.settings.kpWinners["2"], "a1");
+assert.notEqual(state.settings.kpWinners["2"], "b1");
+console.log("All round state tests passed.");

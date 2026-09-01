@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#b51222">
+  <meta name="description" content="Live golf scoring and tics tracker for The Club at Berry Creek.">
+  <title>Berry Creek Tics</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand-lockup"><img class="club-logo" src="berry-creek-logo.jpeg" alt="The Club at Berry Creek, Georgetown Texas"><div><p class="eyebrow">Live tournament scoring</p><h1>Berry Creek Tics</h1></div></div>
+    <div class="header-actions"><span id="syncStatus" class="save-status" aria-live="polite">Connecting…</span><button id="printBtn" class="button button-quiet" type="button">Print</button></div>
+  </header>
+  <nav class="tabs" aria-label="App sections">
+    <button class="tab active" type="button" data-view="setup" aria-selected="true">Players</button>
+    <button class="tab" type="button" data-view="score" aria-selected="false">Group scoring</button>
+    <button class="tab" type="button" data-view="leaderboard" aria-selected="false">Leaderboard</button>
+  </nav>
+  <main>
+    <section id="setupView" class="view active" aria-labelledby="setupTitle">
+      <div class="section-heading"><div><p class="kicker">Organizer setup</p><h2 id="setupTitle">Players and groups</h2></div><button id="addPlayerBtn" class="button button-primary" type="button">Add player</button></div>
+      <div class="settings-panel compact-settings">
+        <label>Round name<input id="roundName" type="text" maxlength="60" value="Berry Creek Round"></label>
+        <label>Date<input id="roundDate" type="date"></label>
+        <label>Handicap allowance<input id="allowance" type="number" min="0" max="100" step="1" value="100"><span class="input-suffix">%</span></label>
+      </div>
+      <p class="helper">Assign up to five players to each group. Course Handicap is calculated from each player's GHIN Index and selected tee rating/slope.</p>
+      <div id="groupCounts" class="group-counts"></div>
+      <div id="playerList" class="player-list" aria-live="polite"></div>
+      <p id="playerLimit" class="validation" role="alert" hidden></p>
+      <details class="data-tools"><summary>Round data</summary><div class="tool-row"><button id="exportBtn" class="button button-quiet" type="button">Export backup</button><label class="button button-quiet file-button">Import backup<input id="importInput" type="file" accept="application/json"></label><button id="newRoundBtn" class="button button-danger" type="button">New round</button></div></details>
+    </section>
+    <section id="scoreView" class="view" aria-labelledby="scoreTitle" hidden>
+      <div class="section-heading score-heading"><div><p class="kicker">One scorekeeper per fivesome</p><h2 id="scoreTitle">Group scoring</h2></div><label class="player-picker">Scoring group<select id="activeGroupSelect"></select></label></div>
+      <div class="hole-nav" aria-label="Choose hole"><button id="prevHoleBtn" class="icon-button" type="button" aria-label="Previous hole">←</button><label>Hole<select id="holeSelect"></select></label><button id="nextHoleBtn" class="icon-button" type="button" aria-label="Next hole">→</button></div>
+      <div id="holeBanner" class="hole-banner"></div>
+      <div id="groupScoreList" class="group-score-list" aria-live="polite"></div>
+      <div id="noGroupPlayers" class="empty-state" hidden>No players are assigned to this group.</div>
+      <div class="scorecard-wrap"><table class="scorecard group-scorecard"><thead id="groupScorecardHead"></thead><tbody id="groupScorecardBody"></tbody></table></div>
+    </section>
+    <section id="leaderboardView" class="view" aria-labelledby="leaderboardTitle" hidden>
+      <div class="section-heading"><div><p class="kicker">Updates live</p><h2 id="leaderboardTitle">Leaderboard and tics</h2></div></div>
+      <p class="helper">Birdies and low front/back/total net tics are automatic. Tied low net scores each receive a tic.</p>
+      <div id="kpPanel" class="kp-panel"></div>
+      <div class="leaderboard-wrap"><table class="leaderboard"><thead><tr><th>Player</th><th>Grp</th><th>Thru</th><th>Hcp</th><th>Gross</th><th>Net</th><th>Birdies</th><th>Skins</th><th>F</th><th>B</th><th>Total</th><th>Sandy par</th><th>Sandy birdie</th><th>KP</th><th>Tics</th></tr></thead><tbody id="leaderboardBody"></tbody></table></div>
+      <div id="leaderboardEmpty" class="empty-state" hidden>No players yet.</div>
+    </section>
+  </main>
+  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Shared scores require the included server.</span></footer>
+  <dialog id="confirmDialog"><form method="dialog"><h2>Start a new round?</h2><p>This clears all players, scores, and tics for everyone connected.</p><div class="dialog-actions"><button class="button button-quiet" value="cancel">Cancel</button><button class="button button-danger" value="confirm">Clear round</button></div></form></dialog>
+  <template id="playerRowTemplate"><article class="player-row"><span class="player-number" aria-hidden="true"></span><label>Name<input class="player-name" type="text" maxlength="40" placeholder="Player name"></label><label>GHIN Index<input class="player-ghin" type="number" min="-10" max="54" step="0.1" inputmode="decimal" value="0"></label><label>Tee<select class="player-tee"></select></label><label>Group<select class="player-group"></select></label><div class="playing-hcp"><span>Playing hcp</span><strong></strong></div><button class="remove-player icon-button" type="button" aria-label="Remove player">×</button></article></template>
+  <script src="score-engine.js"></script><script src="round-state.js"></script><script src="app.js"></script>
+</body>
+</html>
