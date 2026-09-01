@@ -1,4 +1,4 @@
-const CACHE = "berry-creek-tics-v5";
+const CACHE = "berry-creek-tics-v8";
 const ASSETS = ["./", "./index.html", "./styles.css", "./score-engine.js", "./round-state.js", "./app.js", "./manifest.webmanifest", "./berry-creek-logo.jpeg"];
 self.addEventListener("install", (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS))));
 self.addEventListener("activate", (event) => event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))));

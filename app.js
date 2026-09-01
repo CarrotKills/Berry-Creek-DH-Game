@@ -10,6 +10,8 @@
   let online = false;
   let selectedGroup = new URLSearchParams(location.search).get("group") || "A";
   let selectedHole = 1;
+  let scorecardOpen = false;
+  let celebrationAudioContext;
 
   function loadLocal() {
     try { return R.normalizeState(JSON.parse(localStorage.getItem(STORAGE_KEY))); }
@@ -120,7 +122,79 @@
     $("#holeBanner").innerHTML = `<strong>Hole ${selectedHole} · Par ${base.par}</strong><span>${details.length ? details.join("  |  ") : "Add players to see tee details."}</span><span class="skin-status">${skinText}</span>${kpStatus}`;
   }
 
-  function setScore(playerId, score) { dispatch({ type: "SET_SCORE", payload: { playerId, holeIndex: selectedHole - 1, score } }); }
+  function playEagleCelebration() {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    celebrationAudioContext ||= new AudioContextClass();
+    const ctx = celebrationAudioContext;
+    ctx.resume().catch(() => {});
+    const start = ctx.currentTime;
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.0001, start);
+    master.gain.exponentialRampToValueAtTime(0.22, start + 0.04);
+    master.gain.setValueAtTime(0.22, start + 2.45);
+    master.gain.exponentialRampToValueAtTime(0.0001, start + 2.95);
+    master.connect(ctx.destination);
+    [
+      { frequency: 392, delay: 0, duration: 0.42 },
+      { frequency: 523.25, delay: 0.34, duration: 0.46 },
+      { frequency: 659.25, delay: 0.7, duration: 0.5 },
+      { frequency: 783.99, delay: 1.08, duration: 0.72 },
+      { frequency: 1046.5, delay: 1.55, duration: 1.35 }
+    ].forEach((note, index) => {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = index === 4 ? "sine" : "triangle";
+      oscillator.frequency.setValueAtTime(note.frequency, start + note.delay);
+      if (index === 4) oscillator.frequency.exponentialRampToValueAtTime(1318.5, start + 2.15);
+      gain.gain.setValueAtTime(0.0001, start + note.delay);
+      gain.gain.exponentialRampToValueAtTime(index === 4 ? 0.65 : 0.45, start + note.delay + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + note.delay + note.duration);
+      oscillator.connect(gain).connect(master);
+      oscillator.start(start + note.delay);
+      oscillator.stop(start + note.delay + note.duration + 0.05);
+    });
+  }
+
+  function playBirdieTweets() {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    celebrationAudioContext ||= new AudioContextClass();
+    const ctx = celebrationAudioContext;
+    ctx.resume().catch(() => {});
+    const start = ctx.currentTime;
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.18, start);
+    master.connect(ctx.destination);
+    [0, 0.29].forEach((delay, index) => {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const noteStart = start + delay;
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(index ? 1850 : 1700, noteStart);
+      oscillator.frequency.exponentialRampToValueAtTime(index ? 2550 : 2350, noteStart + 0.09);
+      oscillator.frequency.exponentialRampToValueAtTime(index ? 2100 : 1950, noteStart + 0.2);
+      gain.gain.setValueAtTime(0.0001, noteStart);
+      gain.gain.exponentialRampToValueAtTime(0.5, noteStart + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + 0.22);
+      oscillator.connect(gain).connect(master);
+      oscillator.start(noteStart);
+      oscillator.stop(noteStart + 0.23);
+    });
+  }
+
+  function setScore(playerId, score) {
+    const player = state.players.find((item) => item.id === playerId);
+    const holeIndex = selectedHole - 1;
+    const par = E.COURSE.holes[holeIndex].par;
+    const wasEagle = E.isEagle(player?.scores[holeIndex], par);
+    const isNewEagle = E.isEagle(score, par) && !wasEagle;
+    const wasBirdie = E.isBirdie(player?.scores[holeIndex], par);
+    const isNewBirdie = E.isBirdie(score, par) && !wasBirdie;
+    if (isNewEagle) playEagleCelebration();
+    else if (isNewBirdie) playBirdieTweets();
+    dispatch({ type: "SET_SCORE", payload: { playerId, holeIndex, score } });
+  }
 
   function renderGroupScoring() {
     renderGroupSelectors();
@@ -134,8 +208,10 @@
       const strokes = E.strokesForHole(hcp(player), hole.strokeIndex);
       const net = E.netScore(gross, strokes);
       const birdie = Number(gross) > 0 && Number(gross) <= hole.par - 1;
+      const achievement = E.isEagle(gross, hole.par) ? "Eagle" : E.isBirdie(gross, hole.par) ? "Birdie" : Number(gross) > 0 && Number(gross) <= hole.par - 3 ? "Albatross" : "";
       const sandyPar = player.sandies[i] && Number(gross) === hole.par;
       const sandyBirdie = player.sandies[i] && birdie;
+      const canMarkSandy = Number(gross) >= 1 && Number(gross) <= hole.par;
       const isKpHole = KP_HOLES.includes(selectedHole);
       const hasKp = state.settings.kpWinners[String(selectedHole)] === player.id;
       const hasSkin = E.skinResult(state.players, E.COURSE, state.settings, i).winnerId === player.id;
@@ -143,7 +219,7 @@
         <div class="score-player"><strong>${esc(nameOf(player, state.players.indexOf(player)))}</strong><span>${esc(teeOf(player).name)} · Hcp ${hcp(player)} · ${strokes > 0 ? `gets ${strokes}` : strokes < 0 ? `gives ${Math.abs(strokes)}` : "no stroke"}</span></div>
         <div class="score-stepper"><button type="button" data-delta="-1" aria-label="Decrease ${esc(nameOf(player, 0))}'s score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" aria-label="Increase ${esc(nameOf(player, 0))}'s score">+</button></div>
         <div class="net-box"><span>Net</span><strong>${net ?? "—"}</strong></div>
-        <div class="card-tics">${birdie ? '<span class="auto-tic">Birdie ✓</span>' : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}<label class="tic-toggle"><input data-kind="sandy" type="checkbox" ${player.sandies[i] ? "checked" : ""}>Sand save</label>${isKpHole ? `<label class="tic-toggle kp-toggle"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""}>KP</label>` : ""}${sandyPar ? '<span class="auto-tic">Sandy par ✓</span>' : ""}${sandyBirdie ? '<span class="auto-tic">Sandy birdie ✓</span>' : ""}</div>
+        <div class="card-tics">${achievement ? `<span class="auto-tic">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle"><input data-kind="sandy" type="checkbox" ${player.sandies[i] ? "checked" : ""}>Sand save</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""}>KP</label>` : ""}${sandyPar ? '<span class="auto-tic">Sandy par ✓</span>' : ""}${sandyBirdie ? '<span class="auto-tic">Sandy birdie ✓</span>' : ""}</div>
       </article>`;
     }).join("");
     list.querySelectorAll(".group-score-card").forEach((card) => {
@@ -151,12 +227,19 @@
       const input = card.querySelector('input[type="number"]');
       input.addEventListener("change", (e) => setScore(player.id, e.target.value));
       card.querySelectorAll("[data-delta]").forEach((button) => button.addEventListener("click", () => setScore(player.id, Math.max(1, Math.min(20, (Number(player.scores[selectedHole - 1]) || E.COURSE.holes[selectedHole - 1].par) + Number(button.dataset.delta))))));
-      card.querySelector('[data-kind="sandy"]').addEventListener("change", (e) => dispatch({ type: "SET_SANDY", payload: { playerId: player.id, holeIndex: selectedHole - 1, value: e.target.checked } }));
+      card.querySelector('[data-kind="sandy"]')?.addEventListener("change", (e) => dispatch({ type: "SET_SANDY", payload: { playerId: player.id, holeIndex: selectedHole - 1, value: e.target.checked } }));
       card.querySelector('[data-kind="kp"]')?.addEventListener("change", (e) => dispatch({ type: "SET_KP", payload: { hole: selectedHole, playerId: e.target.checked ? player.id : "" } }));
     });
     $("#noGroupPlayers").hidden = players.length > 0;
     list.hidden = players.length === 0;
     renderGroupScorecard(players);
+    updateScorecardVisibility();
+  }
+
+  function updateScorecardVisibility() {
+    $("#groupScorecardPanel").hidden = !scorecardOpen;
+    $("#toggleScorecardBtn").setAttribute("aria-expanded", String(scorecardOpen));
+    $("#toggleScorecardBtn").textContent = scorecardOpen ? "Hide group scorecard" : "Show group scorecard";
   }
 
   function renderGroupScorecard(players) {
@@ -204,6 +287,7 @@
   $("#holeSelect").addEventListener("change", (e) => { selectedHole = Number(e.target.value); renderGroupScoring(); });
   $("#prevHoleBtn").addEventListener("click", () => { selectedHole = selectedHole === 1 ? 18 : selectedHole - 1; renderGroupScoring(); });
   $("#nextHoleBtn").addEventListener("click", () => { selectedHole = selectedHole === 18 ? 1 : selectedHole + 1; renderGroupScoring(); });
+  $("#toggleScorecardBtn").addEventListener("click", () => { scorecardOpen = !scorecardOpen; updateScorecardVisibility(); });
   $("#printBtn").addEventListener("click", () => window.print());
   $("#roundName").addEventListener("change", (e) => dispatch({ type: "SET_META", payload: { roundName: e.target.value } }));
   $("#roundDate").addEventListener("change", (e) => dispatch({ type: "SET_META", payload: { date: e.target.value } }));
@@ -211,8 +295,11 @@
   $("#exportBtn").addEventListener("click", () => { const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" })); link.download = `berry-creek-${state.date}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); });
   $("#importInput").addEventListener("change", async (e) => { try { const imported = R.normalizeState(JSON.parse(await e.target.files[0].text())); await dispatch({ type: "REPLACE_ROUND", payload: { state: imported } }); } catch (_) { alert("That file is not a valid Berry Creek Tics backup."); } e.target.value = ""; });
   const dialog = $("#confirmDialog");
-  $("#newRoundBtn").addEventListener("click", () => dialog.showModal());
-  dialog.addEventListener("close", () => { if (dialog.returnValue === "confirm") dispatch({ type: "CLEAR_ROUND" }); });
+  $("#resetAppBtn").addEventListener("click", () => dialog.showModal());
+  dialog.addEventListener("close", () => {
+    if (dialog.returnValue === "scores") { selectedHole = 1; dispatch({ type: "RESET_SCORES" }); }
+    if (dialog.returnValue === "everything") { selectedHole = 1; selectedGroup = "A"; dispatch({ type: "CLEAR_ROUND" }); }
+  });
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("service-worker.js").catch(() => {});
   render(); connect();
 })();

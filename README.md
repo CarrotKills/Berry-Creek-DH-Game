@@ -21,6 +21,7 @@ For a hosted event, deploy this folder to any service that runs a persistent Nod
 3. Give each scorekeeper the app URL with their group selected, such as `?group=A`.
 4. Each scorekeeper enters all five gross scores for the current hole and marks sand saves and par-3 KPs.
 5. Everyone can view the live Leaderboard. A new KP claim on the same hole automatically replaces the previous holder.
+6. Use Show group scorecard during play to open or close the group's live-updating scorecard.
 
 ## Handicap and tic rules
 
@@ -31,6 +32,11 @@ For a hosted event, deploy this folder to any service that runs a persistent Nod
 - Front, back, and total net tics are automatic once the relevant holes are complete. Tied leaders each get a tic.
 - Net skins are automatic after every player has a score for the hole. The single lowest handicap-adjusted net score wins; a tie awards no skin.
 - A marked sand save becomes a sandy-par or sandy-birdie tic when the score qualifies.
+- Sand Save is available only after a par-or-better gross score. Changing that score to bogey or worse automatically clears the sand save.
 - KPs can be marked during play on holes 2, 8, 12, and 17. Only one player can hold each KP at a time.
+- Entering a new eagle score plays an original three-second celebration on the scorekeeper's device.
+- Entering a new birdie score plays a short original two-note tweet sound on the scorekeeper's device.
+
+The Reset button can clear only scores and tics while keeping the roster, or clear the entire app for a new event.
 
 The server saves event data to `data/round.json`. Use Export backup during the round for an additional copy.

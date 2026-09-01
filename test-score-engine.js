@@ -24,6 +24,12 @@ for (const handicap of [-36, -19, -2, 0, 7, 18, 23, 54]) {
   assert.equal(allocated, handicap);
 }
 assert.equal(E.netScore(5, 2), 3);
+assert.equal(E.isEagle(3, 5), true);
+assert.equal(E.isEagle(2, 4), true);
+assert.equal(E.isEagle(2, 3), false);
+assert.equal(E.isBirdie(4, 5), true);
+assert.equal(E.isBirdie(3, 5), false);
+assert.equal(E.isBirdie(5, 5), false);
 
 const alice = { id: "a", name: "Alice", ghin: 0, teeKey: "championship", scores: E.COURSE.holes.map((h) => h.par), skins: Array(18).fill(false), sandies: Array(18).fill(false) };
 const bob = { id: "b", name: "Bob", ghin: 0, teeKey: "member", scores: E.COURSE.holes.map((h) => h.par), skins: Array(18).fill(false), sandies: Array(18).fill(false) };

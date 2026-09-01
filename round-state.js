@@ -8,6 +8,7 @@
   const MAX_PLAYERS = 30;
   const MAX_GROUP_SIZE = 5;
   const GROUPS = ["A", "B", "C", "D", "E", "F"];
+  const HOLE_PARS = [4, 3, 5, 4, 4, 4, 5, 3, 4, 4, 5, 3, 5, 4, 4, 4, 3, 4];
 
   function defaultState() {
     return {
@@ -29,7 +30,10 @@
       group: GROUPS.includes(player.group) ? player.group : "A",
       scores: Array.from({ length: 18 }, (_, i) => player.scores?.[i] ?? ""),
       skins: Array.from({ length: 18 }, (_, i) => Boolean(player.skins?.[i])),
-      sandies: Array.from({ length: 18 }, (_, i) => Boolean(player.sandies?.[i]))
+      sandies: Array.from({ length: 18 }, (_, i) => {
+        const gross = Number(player.scores?.[i]);
+        return Boolean(player.sandies?.[i]) && gross >= 1 && gross <= HOLE_PARS[i];
+      })
     };
   }
 
@@ -85,6 +89,7 @@
         const holeIndex = Number(p.holeIndex);
         if (!player || holeIndex < 0 || holeIndex > 17) break;
         player.scores[holeIndex] = p.score === "" ? "" : Math.max(1, Math.min(20, Number(p.score) || 1));
+        if (player.scores[holeIndex] === "" || Number(player.scores[holeIndex]) > HOLE_PARS[holeIndex]) player.sandies[holeIndex] = false;
         break;
       }
       case "SET_SKIN": {
@@ -94,7 +99,9 @@
       }
       case "SET_SANDY": {
         const player = state.players.find((item) => item.id === p.playerId);
-        if (player && p.holeIndex >= 0 && p.holeIndex < 18) player.sandies[p.holeIndex] = Boolean(p.value);
+        const holeIndex = Number(p.holeIndex);
+        const gross = Number(player?.scores[holeIndex]);
+        if (player && holeIndex >= 0 && holeIndex < 18) player.sandies[holeIndex] = Boolean(p.value) && gross >= 1 && gross <= HOLE_PARS[holeIndex];
         break;
       }
       case "SET_KP":
@@ -105,6 +112,14 @@
         break;
       case "REPLACE_ROUND":
         return normalizeState(p.state);
+      case "RESET_SCORES":
+        state.players.forEach((player) => {
+          player.scores = Array(18).fill("");
+          player.skins = Array(18).fill(false);
+          player.sandies = Array(18).fill(false);
+        });
+        state.settings.kpWinners = {};
+        break;
       case "CLEAR_ROUND":
         return defaultState();
       default:
@@ -114,5 +129,5 @@
     return state;
   }
 
-  return { MAX_PLAYERS, MAX_GROUP_SIZE, GROUPS, defaultState, normalizePlayer, normalizeState, applyAction };
+  return { MAX_PLAYERS, MAX_GROUP_SIZE, GROUPS, HOLE_PARS, defaultState, normalizePlayer, normalizeState, applyAction };
 });

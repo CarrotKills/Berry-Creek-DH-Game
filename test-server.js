@@ -27,6 +27,10 @@ async function action(type, payload = {}) {
   assert.equal(state.players.length, 2);
   assert.equal(state.players.find((p) => p.id === "live-a").scores[0], 4);
   assert.equal(state.players.find((p) => p.id === "live-b").scores[0], 5);
+  await action("RESET_SCORES");
+  const resetState = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(resetState.players.length, 2);
+  assert.equal(resetState.players.every((player) => player.scores.every((score) => score === "")), true);
   await reader.cancel();
   await action("CLEAR_ROUND");
   console.log("Concurrent API and live-update tests passed.");

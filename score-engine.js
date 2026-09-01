@@ -72,6 +72,14 @@
     return Number(gross) - Number(strokes || 0);
   }
 
+  function isEagle(gross, par) {
+    return Number(gross) >= 1 && Number(gross) === Number(par) - 2;
+  }
+
+  function isBirdie(gross, par) {
+    return Number(gross) >= 1 && Number(gross) === Number(par) - 1;
+  }
+
   function segmentTotals(player, course, settings, start, end) {
     let gross = 0;
     let net = 0;
@@ -168,6 +176,8 @@
     playingHandicap,
     strokesForHole,
     netScore,
+    isEagle,
+    isBirdie,
     segmentTotals,
     playerTotals,
     leaders,
