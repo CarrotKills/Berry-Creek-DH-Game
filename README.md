@@ -14,14 +14,21 @@ Open `http://localhost:8080`. Other scorekeepers on the same Wi-Fi network can o
 
 For a hosted event, deploy this folder to any service that runs a persistent Node.js process and provides persistent disk storage. Set `PORT` if the host requires it.
 
+## Organizer PIN
+
+Organizer-only controls protect the roster, handicaps, reset/import tools, and final round lock. The default PIN is `2468`.
+
+Before an event on Render, add an environment variable named `ADMIN_PIN` with your own private PIN and redeploy. Scorekeepers do not need the PIN; their group links allow scoring only for the assigned fivesome.
+
 ## Event workflow
 
 1. Add up to 30 players on the Players tab.
 2. Enter each player's GHIN Handicap Index, tee, and group (A-F). Each group is limited to five.
-3. Give each scorekeeper the app URL with their group selected, such as `?group=A`.
+3. Open the Tournament tab and use Copy link, Share, or QR code for each group. Group links open directly to scoring and keep the group selector fixed.
 4. Each scorekeeper enters all five gross scores for the current hole and marks sand saves and par-3 KPs.
 5. Everyone can view the live Leaderboard. A new KP claim on the same hole automatically replaces the previous holder.
 6. Use Show group scorecard during play to open or close the group's live-updating scorecard.
+7. Finalize and lock the round when scoring is complete. Only the organizer can unlock it.
 
 ## Handicap and tic rules
 
@@ -36,6 +43,16 @@ For a hosted event, deploy this folder to any service that runs a persistent Nod
 - KPs can be marked during play on holes 2, 8, 12, and 17. Only one player can hold each KP at a time.
 - Entering a new eagle score plays an original three-second celebration on the scorekeeper's device.
 - Entering a new birdie score plays a short original two-note tweet sound on the scorekeeper's device.
+
+## Tournament controls
+
+- The connection badge shows Live, Reconnecting, or Offline. Offline score changes are queued on the device and sent when the connection returns.
+- Missing names, duplicate names, incomplete holes, and unusually high or low scores produce warnings.
+- Every score, KP, sand save, roster edit, reset, import, and lock change is recorded in Change history.
+- Results can be printed or saved as PDF, downloaded as a spreadsheet-compatible CSV, or backed up as JSON.
+- Celebration sounds can be muted per device. Normal, outdoor high-contrast, and dark display modes are also device-specific.
+- The visible app version and Check for updates button make cached versions easier to identify and replace.
+- Group QR images require an internet connection; Copy link remains available if the QR image service is unavailable.
 
 The Reset button can clear only scores and tics while keeping the roster, or clear the entire app for a new event.
 

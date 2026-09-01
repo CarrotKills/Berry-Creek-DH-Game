@@ -4,54 +4,87 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#b51222">
-  <meta name="description" content="Live golf scoring and tics tracker for The Club at Berry Creek.">
+  <meta name="description" content="Live golf scoring and tournament controls for The Club at Berry Creek.">
   <title>Berry Creek Tics</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body data-display="normal">
   <header class="app-header">
     <div class="brand-lockup"><img class="club-logo" src="berry-creek-logo.jpeg" alt="The Club at Berry Creek, Georgetown Texas"><div><p class="eyebrow">Live tournament scoring</p><h1>Berry Creek Tics</h1></div></div>
-    <div class="header-actions"><span id="syncStatus" class="save-status" aria-live="polite">Connecting…</span><button id="printBtn" class="button button-quiet" type="button">Print</button></div>
+    <div class="header-actions">
+      <span id="lockStatus" class="status-pill lock-pill" hidden>Round locked</span>
+      <span id="syncStatus" class="status-pill connection-pill is-connecting" aria-live="polite"><span class="status-dot"></span>Connecting</span>
+      <button id="organizerBtn" class="button button-quiet" type="button">Organizer unlock</button>
+    </div>
   </header>
+  <div id="updateBanner" class="update-banner" hidden><span>A newer app version is ready.</span><button id="installUpdateBtn" class="button button-primary" type="button">Update now</button></div>
   <nav class="tabs" aria-label="App sections">
     <button class="tab active" type="button" data-view="setup" aria-selected="true">Players</button>
-    <button class="tab" type="button" data-view="score" aria-selected="false">Group scoring</button>
+    <button class="tab" type="button" data-view="score" aria-selected="false">Scoring</button>
     <button class="tab" type="button" data-view="leaderboard" aria-selected="false">Leaderboard</button>
+    <button class="tab" type="button" data-view="tournament" aria-selected="false">Tournament</button>
   </nav>
   <main>
     <section id="setupView" class="view active" aria-labelledby="setupTitle">
-      <div class="section-heading"><div><p class="kicker">Organizer setup</p><h2 id="setupTitle">Players and groups</h2></div><div class="section-actions"><button id="resetAppBtn" class="button button-quiet" type="button">Reset</button><button id="addPlayerBtn" class="button button-primary" type="button">Add player</button></div></div>
+      <div class="section-heading"><div><p class="kicker">Organizer setup</p><h2 id="setupTitle">Players and groups</h2></div><div class="section-actions"><button id="resetAppBtn" class="button button-quiet admin-control" type="button">Reset</button><button id="addPlayerBtn" class="button button-primary admin-control" type="button">Add player</button></div></div>
+      <div id="setupLockedNotice" class="notice">Unlock organizer controls to edit the roster, handicaps, or event settings.</div>
       <div class="settings-panel compact-settings">
-        <label>Round name<input id="roundName" type="text" maxlength="60" value="Berry Creek Round"></label>
-        <label>Date<input id="roundDate" type="date"></label>
-        <label>Handicap allowance<input id="allowance" type="number" min="0" max="100" step="1" value="100"><span class="input-suffix">%</span></label>
+        <label>Round name<input id="roundName" class="admin-control" type="text" maxlength="60" value="Berry Creek Round"></label>
+        <label>Date<input id="roundDate" class="admin-control" type="date"></label>
+        <label>Handicap allowance<input id="allowance" class="admin-control" type="number" min="0" max="100" step="1" value="100"><span class="input-suffix">%</span></label>
       </div>
       <p class="helper">Assign up to five players to each group. Course Handicap is calculated from each player's GHIN Index and selected tee rating/slope.</p>
+      <div id="setupWarnings" class="warning-list" hidden></div>
       <div id="groupCounts" class="group-counts"></div>
       <div id="playerList" class="player-list" aria-live="polite"></div>
       <p id="playerLimit" class="validation" role="alert" hidden></p>
-      <details class="data-tools"><summary>Round data</summary><div class="tool-row"><button id="exportBtn" class="button button-quiet" type="button">Export backup</button><label class="button button-quiet file-button">Import backup<input id="importInput" type="file" accept="application/json"></label></div></details>
     </section>
+
     <section id="scoreView" class="view" aria-labelledby="scoreTitle" hidden>
       <div class="section-heading score-heading"><div><p class="kicker">One scorekeeper per fivesome</p><h2 id="scoreTitle">Group scoring</h2></div><div class="score-heading-actions"><label class="player-picker">Scoring group<select id="activeGroupSelect"></select></label><button id="toggleScorecardBtn" class="button button-primary" type="button" aria-expanded="false" aria-controls="groupScorecardPanel">Show group scorecard</button></div></div>
+      <div id="scorerLinkNotice" class="notice scorer-notice" hidden>This scoring link is assigned to one group.</div>
+      <div id="roundLockedNotice" class="notice notice-danger" hidden>The organizer finalized this round. Scores can be viewed but not changed.</div>
       <div class="hole-nav" aria-label="Choose hole"><button id="prevHoleBtn" class="icon-button" type="button" aria-label="Previous hole">←</button><label>Hole<select id="holeSelect"></select></label><button id="nextHoleBtn" class="icon-button" type="button" aria-label="Next hole">→</button></div>
+      <div id="holeWarning" class="hole-warning" aria-live="polite"></div>
       <div id="holeBanner" class="hole-banner"></div>
       <div id="groupScoreList" class="group-score-list" aria-live="polite"></div>
       <div id="noGroupPlayers" class="empty-state" hidden>No players are assigned to this group.</div>
       <div id="groupScorecardPanel" class="scorecard-wrap" hidden><table class="scorecard group-scorecard"><thead id="groupScorecardHead"></thead><tbody id="groupScorecardBody"></tbody></table></div>
     </section>
+
     <section id="leaderboardView" class="view" aria-labelledby="leaderboardTitle" hidden>
-      <div class="section-heading"><div><p class="kicker">Updates live</p><h2 id="leaderboardTitle">Leaderboard and tics</h2></div></div>
-      <p class="helper">Birdies and low front/back/total net tics are automatic. Tied low net scores each receive a tic.</p>
+      <div class="section-heading"><div><p class="kicker">Updates live</p><h2 id="leaderboardTitle">Leaderboard and tics</h2></div><div class="section-actions"><button id="printBtn" class="button button-quiet" type="button">Print results</button><button id="csvBtn" class="button button-primary" type="button">Download spreadsheet</button></div></div>
+      <p class="helper">Birdies, skins, and low front/back/total net tics are automatic. Tied net skins receive no skin.</p>
       <div id="kpPanel" class="kp-panel"></div>
       <div class="leaderboard-wrap"><table class="leaderboard"><thead><tr><th>Player</th><th>Grp</th><th>Thru</th><th>Hcp</th><th>Gross</th><th>Net</th><th>Birdies</th><th>Skins</th><th>F</th><th>B</th><th>Total</th><th>Sandy par</th><th>Sandy birdie</th><th>KP</th><th>Tics</th></tr></thead><tbody id="leaderboardBody"></tbody></table></div>
       <div id="leaderboardEmpty" class="empty-state" hidden>No players yet.</div>
     </section>
+
+    <section id="tournamentView" class="view" aria-labelledby="tournamentTitle" hidden>
+      <div class="section-heading"><div><p class="kicker">Tournament control</p><h2 id="tournamentTitle">Event tools</h2></div></div>
+      <div class="control-grid">
+        <article class="control-card"><h3>Round status</h3><p id="roundStatusText">The round is open for scoring.</p><button id="toggleRoundLockBtn" class="button button-danger admin-control" type="button">Finalize and lock round</button></article>
+        <article class="control-card"><h3>Device preferences</h3><label class="switch-row"><input id="soundToggle" type="checkbox" checked> Birdie and eagle sounds</label><label>Display mode<select id="displayMode"><option value="normal">Normal</option><option value="outdoor">Outdoor high contrast</option><option value="dark">Dark</option></select></label></article>
+        <article class="control-card"><h3>App version</h3><p><strong id="appVersion">Version 9.0.0</strong><br><span id="versionStatus">Checking for updates…</span></p><button id="checkUpdateBtn" class="button button-quiet" type="button">Check for updates</button></article>
+        <article class="control-card"><h3>Results and backups</h3><div class="tool-row"><button id="exportBtn" class="button button-quiet" type="button">Export backup</button><label class="button button-quiet file-button admin-only-label">Import backup<input id="importInput" class="admin-control" type="file" accept="application/json"></label></div></article>
+      </div>
+
+      <section class="tournament-panel" aria-labelledby="shareTitle"><div class="panel-heading"><div><p class="kicker">Scorekeeper access</p><h3 id="shareTitle">Group links and QR codes</h3></div></div><p class="helper">Send each scorekeeper only their group link. It opens directly to that fivesome and keeps the group selector fixed.</p><div id="groupShareGrid" class="group-share-grid"></div></section>
+
+      <section class="tournament-panel" aria-labelledby="historyTitle"><div class="panel-heading"><div><p class="kicker">Accountability</p><h3 id="historyTitle">Change history</h3></div><button id="clearHistoryBtn" class="button button-quiet admin-control" type="button">Clear history</button></div><div id="auditList" class="audit-list"></div></section>
+    </section>
   </main>
-  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Shared scores require the included server.</span></footer>
-  <dialog id="confirmDialog"><form method="dialog"><h2>Reset the app?</h2><p>Choose whether to keep the player list or clear the entire round for everyone connected.</p><div class="dialog-actions reset-actions"><button class="button button-quiet" value="cancel">Cancel</button><button class="button button-quiet" value="scores">Reset scores only</button><button class="button button-danger" value="everything">Reset everything</button></div></form></dialog>
-  <template id="playerRowTemplate"><article class="player-row"><span class="player-number" aria-hidden="true"></span><label>Name<input class="player-name" type="text" maxlength="40" placeholder="Player name"></label><label>GHIN Index<input class="player-ghin" type="number" min="-10" max="54" step="0.1" inputmode="decimal" value="0"></label><label>Tee<select class="player-tee"></select></label><label>Group<select class="player-group"></select></label><div class="playing-hcp"><span>Playing hcp</span><strong></strong></div><button class="remove-player icon-button" type="button" aria-label="Remove player">×</button></article></template>
+
+  <section id="printReport" class="print-report" aria-hidden="true"></section>
+  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Connecting to shared scoring…</span><button id="footerVersionBtn" class="text-button" type="button">App v9.0.0</button></footer>
+
+  <dialog id="adminDialog"><form method="dialog"><h2>Organizer access</h2><p>Enter the organizer PIN to change the roster, settings, or round status.</p><label>Organizer PIN<input id="adminPinInput" type="password" inputmode="numeric" autocomplete="current-password" maxlength="20"></label><p id="adminError" class="validation" role="alert" hidden></p><div class="dialog-actions"><button class="button button-quiet" value="cancel">Cancel</button><button id="adminSubmitBtn" class="button button-primary" value="unlock">Unlock</button></div></form></dialog>
+  <dialog id="confirmDialog"><form method="dialog"><h2>Reset the app?</h2><p>Choose whether to keep the player list or clear the entire event.</p><div class="dialog-actions reset-actions"><button class="button button-quiet" value="cancel">Cancel</button><button class="button button-quiet" value="scores">Reset scores only</button><button class="button button-danger" value="everything">Reset everything</button></div></form></dialog>
+  <dialog id="qrDialog"><form method="dialog"><h2 id="qrTitle">Group scoring link</h2><div class="qr-wrap"><img id="qrImage" width="220" height="220" alt="Scannable group scoring QR code"></div><p id="qrLinkText" class="qr-link"></p><div class="dialog-actions"><button class="button button-primary" value="close">Done</button></div></form></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <template id="playerRowTemplate"><article class="player-row"><span class="player-number" aria-hidden="true"></span><label>Name<input class="player-name admin-control" type="text" maxlength="40" placeholder="Player name"></label><label>GHIN Index<input class="player-ghin admin-control" type="number" min="-10" max="54" step="0.1" inputmode="decimal" value="0"></label><label>Tee<select class="player-tee admin-control"></select></label><label>Group<select class="player-group admin-control"></select></label><div class="playing-hcp"><span>Playing hcp</span><strong></strong></div><button class="remove-player icon-button admin-control" type="button" aria-label="Remove player">×</button></article></template>
   <script src="score-engine.js"></script><script src="round-state.js"></script><script src="app.js"></script>
 </body>
 </html>
