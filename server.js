@@ -10,7 +10,7 @@ const Round = require("./round-state.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.0.0";
+const APP_VERSION = "9.0.1";
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
 const DATA_FILE = path.join(DATA_DIR, "round.json");
@@ -158,7 +158,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Berry Creek Tics v${APP_VERSION} running at http://localhost:${PORT}`);
+  console.log(`Berry Creek DH Game v${APP_VERSION} running at http://localhost:${PORT}`);
   if (!process.env.ADMIN_PIN) console.log("Organizer PIN is using the default 2468. Set ADMIN_PIN in your host before the event.");
 });
 

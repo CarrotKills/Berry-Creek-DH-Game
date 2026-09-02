@@ -1,6 +1,6 @@
 {
-  "name": "Berry Creek Tics",
-  "short_name": "BC Tics",
+  "name": "Berry Creek DH Game",
+  "short_name": "BC DH Game",
   "description": "Golf scoring and tics tracker for The Club at Berry Creek.",
   "start_url": "./",
   "display": "standalone",

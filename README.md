@@ -1,4 +1,4 @@
-# Berry Creek Tics
+# Berry Creek DH Game
 
 A responsive, real-time golf scoring app configured from The Club at Berry Creek's current scorecard.
 

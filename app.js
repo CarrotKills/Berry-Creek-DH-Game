@@ -2,7 +2,7 @@
   "use strict";
   const E = window.BerryCreekScoring;
   const R = window.BerryCreekRoundState;
-  const APP_VERSION = "9.0.0";
+  const APP_VERSION = "9.0.1";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
