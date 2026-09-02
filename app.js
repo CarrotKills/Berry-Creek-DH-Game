@@ -3,7 +3,7 @@
   const E = window.BerryCreekScoring;
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
-  const APP_VERSION = "9.5.1";
+  const APP_VERSION = "9.5.2";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -75,6 +75,8 @@
   function nameOf(player, index) { return player.name.trim() || `Player ${index + 1}`; }
   function teeOf(player) { return E.teeForPlayer(E.COURSE, player); }
   function hcp(player) { return E.playingHandicap(player.ghin, state.settings, teeOf(player)); }
+  function displayIndex(value) { return E.formatHandicap(value, 1); }
+  function displayPlayingHandicap(value) { return E.formatHandicap(value, 0); }
   function complete(value, done) { return done ? String(value) : "—"; }
   function groupPlayers(group = selectedGroup) { return state.players.filter((player) => player.group === group); }
   function isLocked() { return Boolean(state.settings.locked); }
@@ -352,7 +354,7 @@
       row.className = "saved-player-row";
       row.dataset.savedPlayerId = saved.id;
       row.innerHTML = `<label class="saved-player-name">Name<input class="saved-name" type="text" maxlength="40" value="${esc(saved.name)}" ${canEdit ? "" : "disabled"}></label>
-        <label>GHIN Index<input class="saved-ghin" type="number" min="-10" max="54" step="0.1" inputmode="decimal" value="${saved.ghin}" ${canEdit ? "" : "disabled"}></label>
+        <label>GHIN Index<input class="saved-ghin" type="text" maxlength="6" inputmode="decimal" value="${displayIndex(saved.ghin)}" placeholder="12.4 or +4.2" ${canEdit ? "" : "disabled"}></label>
         <label>Tee<select class="saved-tee" ${canEdit ? "" : "disabled"}>${teeOptions(saved.teeKey)}</select></label>
         <label>Add to<select class="saved-group" ${addDisabled ? "disabled" : ""}>${savedGroupOptions(selected)}</select></label>
         <div class="saved-player-actions"><button class="button button-primary add-saved-player" type="button" ${addDisabled ? "disabled" : ""}>${activePlayer ? `In Group ${activePlayer.group}` : "Add to group"}</button><button class="button button-quiet delete-saved-player" type="button" ${canEdit ? "" : "disabled"}>Delete</button></div>`;
@@ -361,7 +363,7 @@
       const tee = row.querySelector(".saved-tee");
       const group = row.querySelector(".saved-group");
       name.addEventListener("change", () => updateSavedPlayer(saved.id, { name: name.value }));
-      ghin.addEventListener("change", () => updateSavedPlayer(saved.id, { ghin: Number(ghin.value) }));
+      ghin.addEventListener("change", () => updateSavedPlayer(saved.id, { ghin: E.parseHandicapInput(ghin.value) }));
       tee.addEventListener("change", () => updateSavedPlayer(saved.id, { teeKey: tee.value }));
       group.addEventListener("change", () => savedPlayerGroupSelections.set(saved.id, group.value));
       row.querySelector(".add-saved-player").addEventListener("click", () => addSavedPlayerToRound(saved.id, group.value));
@@ -377,11 +379,11 @@
     try {
       const body = await databaseRequest("/api/players", {
         method: "POST",
-        body: JSON.stringify({ name, ghin: Number($("#savedPlayerGhin").value), teeKey: $("#savedPlayerTee").value })
+        body: JSON.stringify({ name, ghin: E.parseHandicapInput($("#savedPlayerGhin").value), teeKey: $("#savedPlayerTee").value })
       });
       savedPlayers = [...savedPlayers, body.player].sort((a, b) => a.name.localeCompare(b.name));
       $("#savedPlayerName").value = "";
-      $("#savedPlayerGhin").value = "0";
+      $("#savedPlayerGhin").value = "0.0";
       render();
       showToast(`${body.player.name} saved to the player database.`, "success");
     } catch (error) {
@@ -452,12 +454,12 @@
       const row = $("#playerRowTemplate").content.firstElementChild.cloneNode(true);
       row.querySelector(".player-number").textContent = index + 1;
       const name = row.querySelector(".player-name"); name.value = player.name;
-      const ghinInput = row.querySelector(".player-ghin"); ghinInput.value = player.ghin;
+      const ghinInput = row.querySelector(".player-ghin"); ghinInput.value = displayIndex(player.ghin);
       const tee = row.querySelector(".player-tee"); tee.innerHTML = teeOptions(player.teeKey);
       const group = row.querySelector(".player-group"); group.innerHTML = groupOptions(player.group, player.id);
-      row.querySelector(".playing-hcp strong").textContent = hcp(player);
+      row.querySelector(".playing-hcp strong").textContent = displayPlayingHandicap(hcp(player));
       name.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, name: event.target.value } }));
-      ghinInput.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, ghin: Number(event.target.value) || 0 } }));
+      ghinInput.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, ghin: E.parseHandicapInput(event.target.value) } }));
       tee.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, teeKey: event.target.value } }));
       group.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, group: event.target.value } }));
       row.querySelector(".remove-player").addEventListener("click", () => dispatch({ type: "REMOVE_PLAYER", payload: { playerId: player.id } }));
@@ -594,7 +596,7 @@
       const hasSkin = E.skinResult(state.players, E.COURSE, state.settings, index).winnerId === player.id;
       const disabled = canScore() ? "" : "disabled";
       return `<article class="group-score-card" data-player-id="${player.id}">
-        <div class="score-player"><strong>${esc(nameOf(player, state.players.indexOf(player)))}</strong><span>${esc(teeOf(player).name)} · Hcp ${hcp(player)} · ${strokes > 0 ? `gets ${strokes}` : strokes < 0 ? `gives ${Math.abs(strokes)}` : "no stroke"}</span></div>
+        <div class="score-player"><strong>${esc(nameOf(player, state.players.indexOf(player)))}</strong><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${strokes > 0 ? `gets ${strokes}` : strokes < 0 ? `gives ${Math.abs(strokes)}` : "no stroke"}</span></div>
         <div class="score-stepper"><button type="button" data-delta="-1" ${disabled} aria-label="Decrease score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" ${disabled} aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" ${disabled} aria-label="Increase score">+</button></div>
         <div class="net-box"><span>Net</span><strong>${net ?? "—"}</strong></div>
         <div class="card-tics">${achievement ? `<span class="auto-tic">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${disabled}>Sand save</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${disabled}>KP</label>` : ""}${sandyPar ? '<span class="auto-tic">Sandy par ✓</span>' : ""}${sandyBirdie ? '<span class="auto-tic">Sandy birdie ✓</span>' : ""}</div>
@@ -730,7 +732,7 @@
       const thru = item.sortValues.thru;
       const netClass = ledger.net > 0 ? "is-positive" : ledger.net < 0 ? "is-negative" : "";
       const netText = `${ledger.net > 0 ? "+" : ""}${ledger.net.toFixed(1)}`;
-      return `<tr class="${item.player.id === standingLeaderId && item.totals.total.completed ? "leader-row-leading" : ""}"><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${hcp(item.player)}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.front}</td><td>${tics.back}</td><td>${tics.totalNet}</td><td>${tics.sandyPars}</td><td>${tics.sandyBirdies}</td><td>${tics.kps}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
+      return `<tr class="${item.player.id === standingLeaderId && item.totals.total.completed ? "leader-row-leading" : ""}"><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${displayPlayingHandicap(hcp(item.player))}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.front}</td><td>${tics.back}</td><td>${tics.totalNet}</td><td>${tics.sandyPars}</td><td>${tics.sandyBirdies}</td><td>${tics.kps}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
     }).join("");
     $("#leaderboardEmpty").hidden = state.players.length > 0;
     $(".leaderboard-wrap").hidden = state.players.length === 0;
@@ -1002,7 +1004,7 @@
       const tics = E.ticSummary(player, state.players, E.COURSE, state.settings);
       const ledger = E.pointsLedger(player, state.players, E.COURSE, state.settings);
       const kpHoles = KP_HOLES.filter((hole) => state.settings.kpWinners[String(hole)] === player.id).join("; ");
-      return [nameOf(player, index), player.group, player.ghin, teeOf(player).name, hcp(player), ...player.scores, totals.total.completed ? totals.total.gross : "", totals.total.completed ? totals.total.net : "", tics.birdies, tics.eagles, tics.skins, tics.front, tics.back, tics.totalNet, tics.sandyPars, tics.sandyBirdies, kpHoles, tics.total, tics.weightedTics, tics.pointsEarned.toFixed(1), ledger.positive.toFixed(1), ledger.negative.toFixed(1), ledger.net.toFixed(1)].map(csvCell).join(",");
+      return [nameOf(player, index), player.group, displayIndex(player.ghin), teeOf(player).name, displayPlayingHandicap(hcp(player)), ...player.scores, totals.total.completed ? totals.total.gross : "", totals.total.completed ? totals.total.net : "", tics.birdies, tics.eagles, tics.skins, tics.front, tics.back, tics.totalNet, tics.sandyPars, tics.sandyBirdies, kpHoles, tics.total, tics.weightedTics, tics.pointsEarned.toFixed(1), ledger.positive.toFixed(1), ledger.negative.toFixed(1), ledger.net.toFixed(1)].map(csvCell).join(",");
     });
     downloadBlob([headers.map(csvCell).join(","), ...rows].join("\r\n"), "text/csv;charset=utf-8", `berry-creek-results-${state.date}.csv`);
   }

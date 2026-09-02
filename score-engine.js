@@ -47,6 +47,21 @@
     return Math.round(Number(value) + Number.EPSILON);
   }
 
+  function parseHandicapInput(value) {
+    const text = String(value ?? "").trim();
+    if (!text) return 0;
+    const numeric = Number(text);
+    if (!Number.isFinite(numeric)) return 0;
+    return text.startsWith("+") ? -Math.abs(numeric) : numeric;
+  }
+
+  function formatHandicap(value, decimals = 1) {
+    const numeric = Number(value);
+    const safe = Number.isFinite(numeric) ? numeric : 0;
+    const formatted = Math.abs(safe).toFixed(decimals);
+    return safe < 0 ? `+${formatted}` : formatted;
+  }
+
   function courseHandicap(index, slope, rating, par) {
     return roundHandicap(Number(index) * (Number(slope) / 113) + (Number(rating) - Number(par)));
   }
@@ -197,6 +212,8 @@
     COURSE,
     teeForPlayer,
     holesForPlayer,
+    parseHandicapInput,
+    formatHandicap,
     courseHandicap,
     playingHandicap,
     strokesForHole,

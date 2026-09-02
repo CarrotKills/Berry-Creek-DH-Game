@@ -26,6 +26,8 @@ Before an event on Render, add an environment variable named `ADMIN_PIN` with yo
 
 The Players tab includes an organizer-only reusable player database. Save each golfer's name, GHIN Index, and preferred tee once, then search the list and add that golfer to any Group A-F for a new round. Editing a saved player's GHIN Index, name, or tee also updates their linked entry in the active round.
 
+Enter and display better-than-scratch indexes using standard golf notation, such as `+4.2`. The app stores the value internally in the direction required for stroke calculations, so existing players previously entered as `-4.2` automatically display as `+4.2` after this update.
+
 Deleting a saved player does not delete that golfer's current-round scores. It only removes the reusable database record.
 
 ## Event workflow

@@ -43,10 +43,10 @@
       <p class="helper">Assign up to five players to each group. Course Handicap is calculated from each player's GHIN Index and selected tee rating/slope.</p>
       <section class="player-database-panel" aria-labelledby="playerDatabaseTitle">
         <div class="panel-heading"><div><p class="kicker">Reusable roster</p><h3 id="playerDatabaseTitle">Saved player database</h3></div></div>
-        <p class="helper">Save golfers once, update their GHIN Index or tee, and add them to any available group for a new round.</p>
+        <p class="helper">Save golfers once, update their GHIN Index or tee, and add them to any available group for a new round. Enter better-than-scratch indexes with a plus sign, such as +4.2.</p>
         <form id="savedPlayerForm" class="saved-player-form">
           <label>Name<input id="savedPlayerName" class="admin-control" type="text" maxlength="40" autocomplete="off" placeholder="Player name" required></label>
-          <label>GHIN Index<input id="savedPlayerGhin" class="admin-control" type="number" min="-10" max="54" step="0.1" inputmode="decimal" value="0" required></label>
+          <label>GHIN Index<input id="savedPlayerGhin" class="admin-control" type="text" maxlength="6" inputmode="decimal" value="0.0" placeholder="12.4 or +4.2" required></label>
           <label>Tee<select id="savedPlayerTee" class="admin-control"></select></label>
           <button id="savePlayerBtn" class="button button-primary admin-control" type="submit">Save player</button>
         </form>
@@ -86,7 +86,7 @@
       <div class="control-grid">
         <article class="control-card"><h3>Round status</h3><p id="roundStatusText">The round is open for scoring.</p><button id="toggleRoundLockBtn" class="button button-danger admin-control" type="button">Finalize and lock round</button></article>
         <article class="control-card"><h3>Device preferences</h3><label class="switch-row"><input id="soundToggle" type="checkbox" checked> Birdie and eagle sounds</label><label>Display mode<select id="displayMode"><option value="normal">Normal</option><option value="outdoor">Outdoor high contrast</option><option value="dark">Dark</option></select></label></article>
-        <article class="control-card"><h3>App version</h3><p><strong id="appVersion">Version 9.5.1</strong><br><span id="versionStatus">Checking for updates…</span></p><button id="checkUpdateBtn" class="button button-quiet" type="button">Check for updates</button></article>
+        <article class="control-card"><h3>App version</h3><p><strong id="appVersion">Version 9.5.2</strong><br><span id="versionStatus">Checking for updates…</span></p><button id="checkUpdateBtn" class="button button-quiet" type="button">Check for updates</button></article>
         <article class="control-card"><h3>Results and backups</h3><div class="tool-row"><button id="exportBtn" class="button button-quiet" type="button">Export backup</button><label class="button button-quiet file-button admin-only-label">Import backup<input id="importInput" class="admin-control" type="file" accept="application/json"></label></div></article>
       </div>
 
@@ -101,7 +101,7 @@
   </main>
 
   <section id="printReport" class="print-report" aria-hidden="true"></section>
-  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Connecting to shared scoring…</span><button id="footerVersionBtn" class="text-button" type="button">App v9.5.1</button></footer>
+  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Connecting to shared scoring…</span><button id="footerVersionBtn" class="text-button" type="button">App v9.5.2</button></footer>
 
   <dialog id="adminDialog"><form method="dialog"><h2>Organizer access</h2><p>Enter the organizer PIN to change the roster, settings, or round status.</p><label>Organizer PIN<input id="adminPinInput" type="password" inputmode="numeric" autocomplete="current-password" maxlength="20"></label><p id="adminError" class="validation" role="alert" hidden></p><div class="dialog-actions"><button class="button button-quiet" value="cancel">Cancel</button><button id="adminSubmitBtn" class="button button-primary" value="unlock">Unlock</button></div></form></dialog>
   <dialog id="confirmDialog"><form method="dialog"><h2>Reset the app?</h2><p>Choose whether to keep the player list or clear the entire event.</p><div class="dialog-actions reset-actions"><button class="button button-quiet" value="cancel">Cancel</button><button class="button button-quiet" value="scores">Reset scores only</button><button class="button button-danger" value="everything">Reset everything</button></div></form></dialog>
@@ -109,7 +109,7 @@
   <dialog id="savedRoundDialog" class="wide-dialog"><form method="dialog"><div class="panel-heading"><div><p class="kicker">Saved round</p><h2 id="savedRoundDialogTitle">Round results</h2></div><button class="icon-button" value="close" aria-label="Close saved round">×</button></div><p id="savedRoundDialogMeta" class="helper"></p><div class="leaderboard-wrap"><table class="leaderboard archived-leaderboard"><thead><tr><th>Player</th><th>Grp</th><th>Gross</th><th>Net</th><th>Points +</th><th>Points −</th><th>Net points</th></tr></thead><tbody id="savedRoundDialogBody"></tbody></table></div><div class="dialog-actions"><button id="downloadSavedRoundBtn" class="button button-quiet" type="button">Download backup</button><button class="button button-primary" value="close">Done</button></div></form></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <template id="playerRowTemplate"><article class="player-row"><span class="player-number" aria-hidden="true"></span><label>Name<input class="player-name admin-control" type="text" maxlength="40" placeholder="Player name"></label><label>GHIN Index<input class="player-ghin admin-control" type="number" min="-10" max="54" step="0.1" inputmode="decimal" value="0"></label><label>Tee<select class="player-tee admin-control"></select></label><label>Group<select class="player-group admin-control"></select></label><div class="playing-hcp"><span>Playing hcp</span><strong></strong></div><button class="remove-player icon-button admin-control" type="button" aria-label="Remove player">×</button></article></template>
+  <template id="playerRowTemplate"><article class="player-row"><span class="player-number" aria-hidden="true"></span><label>Name<input class="player-name admin-control" type="text" maxlength="40" placeholder="Player name"></label><label>GHIN Index<input class="player-ghin admin-control" type="text" maxlength="6" inputmode="decimal" value="0.0" placeholder="12.4 or +4.2"></label><label>Tee<select class="player-tee admin-control"></select></label><label>Group<select class="player-group admin-control"></select></label><div class="playing-hcp"><span>Playing hcp</span><strong></strong></div><button class="remove-player icon-button admin-control" type="button" aria-label="Remove player">×</button></article></template>
   <script src="score-engine.js"></script><script src="round-state.js"></script><script src="leaderboard-sort.js"></script><script src="app.js"></script>
 </body>
 </html>

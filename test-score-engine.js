@@ -1,6 +1,13 @@
 const assert = require("node:assert/strict");
 const E = require("./score-engine.js");
 
+assert.equal(E.parseHandicapInput("+4.2"), -4.2);
+assert.equal(E.parseHandicapInput("12.4"), 12.4);
+assert.equal(E.parseHandicapInput("-4.2"), -4.2);
+assert.equal(E.formatHandicap(-4.2, 1), "+4.2");
+assert.equal(E.formatHandicap(12.4, 1), "12.4");
+assert.equal(E.formatHandicap(-4, 0), "+4");
+
 const settings = { par: 72, allowance: 100, kpWinners: {} };
 assert.equal(E.COURSE.holes.length, 18);
 assert.equal(E.COURSE.holes.reduce((sum, h) => sum + h.par, 0), 72);
