@@ -6,15 +6,18 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { URL } = require("node:url");
 const Round = require("./round-state.js");
+const PlayerDatabase = require("./player-database.js");
 
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.1.0";
+const APP_VERSION = "9.2.0";
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
 const DATA_FILE = path.join(DATA_DIR, "round.json");
+const PLAYERS_DB_FILE = process.env.PLAYERS_DB_FILE || path.join(DATA_DIR, "players.sqlite");
 const clients = new Set();
+const playerDatabase = new PlayerDatabase(PLAYERS_DB_FILE);
 
 function readState() {
   try { return Round.normalizeState(JSON.parse(fs.readFileSync(DATA_FILE, "utf8"))); }
@@ -101,6 +104,32 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (url.pathname === "/api/players" || url.pathname.startsWith("/api/players/")) {
+    if (!pinMatches(req.headers["x-admin-pin"])) return sendJson(res, 401, { ok: false, error: "Organizer PIN required" });
+    const playerRoute = url.pathname.match(/^\/api\/players\/([^/]+)$/);
+    try {
+      if (req.method === "GET" && url.pathname === "/api/players") {
+        return sendJson(res, 200, { players: playerDatabase.list() });
+      }
+      if (req.method === "POST" && url.pathname === "/api/players") {
+        const body = await readBody(req);
+        return sendJson(res, 201, { player: playerDatabase.create(body.player || body) });
+      }
+      if (req.method === "PUT" && playerRoute) {
+        const body = await readBody(req);
+        return sendJson(res, 200, { player: playerDatabase.update(decodeURIComponent(playerRoute[1]), body.player || body) });
+      }
+      if (req.method === "DELETE" && playerRoute) {
+        const player = playerDatabase.remove(decodeURIComponent(playerRoute[1]));
+        return sendJson(res, 200, { ok: true, player });
+      }
+      return sendJson(res, 405, { ok: false, error: "Method not allowed" });
+    } catch (error) {
+      const status = error.message === "Saved player not found" ? 404 : 400;
+      return sendJson(res, status, { ok: false, error: error.message });
+    }
+  }
+
   if (req.method === "GET" && url.pathname === "/api/events") {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -162,4 +191,12 @@ server.listen(PORT, HOST, () => {
   if (!process.env.ADMIN_PIN) console.log("Organizer PIN is using the default 2468. Set ADMIN_PIN in your host before the event.");
 });
 
-process.on("SIGINT", () => server.close(() => process.exit(0)));
+let shuttingDown = false;
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  playerDatabase.close();
+  server.close(() => process.exit(0));
+}
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

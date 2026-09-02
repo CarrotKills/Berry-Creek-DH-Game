@@ -13,11 +13,29 @@ async function action(type, payload = {}, options = {}) {
   return response;
 }
 
+async function playerRequest(path = "", options = {}) {
+  const headers = { ...(options.headers || {}), "X-Admin-Pin": options.pin || "2468" };
+  if (options.body) headers["Content-Type"] = "application/json";
+  const response = await fetch(`${base}/api/players${path}`, { method: options.method || "GET", headers, body: options.body ? JSON.stringify(options.body) : undefined });
+  assert.equal(response.status, options.status || 200);
+  return response.json();
+}
+
 (async () => {
   const wrongPin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "wrong" }) });
   assert.equal(wrongPin.status, 401);
   const rightPin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "2468" }) });
   assert.equal(rightPin.status, 200);
+  const unauthorizedPlayers = await fetch(`${base}/api/players`);
+  assert.equal(unauthorizedPlayers.status, 401);
+  const createdSaved = await playerRequest("", { method: "POST", status: 201, body: { name: "Saved Golfer", ghin: 15.2, teeKey: "championship" } });
+  const listedSaved = await playerRequest();
+  assert.equal(listedSaved.players.some((player) => player.id === createdSaved.player.id), true);
+  const updatedSaved = await playerRequest(`/${createdSaved.player.id}`, { method: "PUT", body: { ghin: 13.7 } });
+  assert.equal(updatedSaved.player.ghin, 13.7);
+  await playerRequest(`/${createdSaved.player.id}`, { method: "DELETE" });
+  const emptySaved = await playerRequest();
+  assert.equal(emptySaved.players.some((player) => player.id === createdSaved.player.id), false);
   await action("CLEAR_ROUND");
   const streamResponse = await fetch(`${base}/api/events`);
   assert.equal(streamResponse.status, 200);

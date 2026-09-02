@@ -2,7 +2,7 @@
   "use strict";
   const E = window.BerryCreekScoring;
   const R = window.BerryCreekRoundState;
-  const APP_VERSION = "9.1.0";
+  const APP_VERSION = "9.2.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -23,6 +23,9 @@
   let toastTimer;
   let adminPin = sessionStorage.getItem(ADMIN_PIN_KEY) || "";
   let adminUnlocked = Boolean(adminPin);
+  let savedPlayers = [];
+  let savedPlayerSearch = "";
+  const savedPlayerGroupSelections = new Map();
   let preferences = loadPreferences();
 
   function loadLocal() {
@@ -69,6 +72,7 @@
     if (mode === "live") foot.textContent = "All connected scorekeepers are updating live.";
     else if (queued) foot.textContent = `${queued} change${queued === 1 ? "" : "s"} waiting to sync.`;
     else foot.textContent = mode === "reconnecting" ? "Trying to restore live scoring…" : "Scores entered offline will sync when the connection returns.";
+    renderSavedPlayers();
   }
 
   function stampedAction(action, admin) {
@@ -91,6 +95,43 @@
       const error = new Error(body.error || "The change was not accepted");
       error.serverRejected = true;
       throw error;
+    }
+  }
+
+  async function databaseRequest(path, options = {}) {
+    if (!adminUnlocked) throw new Error("Organizer access is required");
+    const headers = { ...(options.headers || {}), "X-Admin-Pin": adminPin };
+    if (options.body) headers["Content-Type"] = "application/json";
+    const response = await fetch(path, { ...options, headers });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (response.status === 401) {
+        adminUnlocked = false;
+        adminPin = "";
+        savedPlayers = [];
+        sessionStorage.removeItem(ADMIN_PIN_KEY);
+        render();
+      }
+      throw new Error(body.error || "The player database request failed");
+    }
+    return body;
+  }
+
+  async function loadSavedPlayers() {
+    if (!adminUnlocked || connectionMode !== "live") {
+      savedPlayers = [];
+      renderSavedPlayers();
+      return;
+    }
+    const status = $("#playerDatabaseStatus");
+    status.textContent = "Loading saved players…";
+    try {
+      const body = await databaseRequest("/api/players", { cache: "no-store" });
+      savedPlayers = Array.isArray(body.players) ? body.players : [];
+      renderSavedPlayers();
+    } catch (error) {
+      savedPlayers = [];
+      renderSavedPlayers(error.message);
     }
   }
 
@@ -159,6 +200,7 @@
       await refreshState();
       setConnection("live");
       await flushQueue();
+      await loadSavedPlayers();
       eventSource?.close();
       eventSource = new EventSource("/api/events");
       eventSource.addEventListener("state", (event) => {
@@ -193,6 +235,134 @@
       const count = state.players.filter((player) => player.group === group && player.id !== currentPlayerId).length;
       return `<option value="${group}" ${group === selected ? "selected" : ""} ${count >= R.MAX_GROUP_SIZE && group !== selected ? "disabled" : ""}>Group ${group} (${count + (group === selected ? 1 : 0)}/5)</option>`;
     }).join("");
+  }
+
+  function savedGroupOptions(selected) {
+    return R.GROUPS.map((group) => {
+      const count = groupPlayers(group).length;
+      return `<option value="${group}" ${group === selected ? "selected" : ""} ${count >= R.MAX_GROUP_SIZE ? "disabled" : ""}>Group ${group} (${count}/5)</option>`;
+    }).join("");
+  }
+
+  function renderSavedPlayers(errorMessage = "") {
+    const list = $("#savedPlayerList");
+    const status = $("#playerDatabaseStatus");
+    const search = $("#savedPlayerSearch");
+    if (!list || !status || !search) return;
+    list.replaceChildren();
+    search.disabled = !adminUnlocked || connectionMode !== "live";
+    search.value = savedPlayerSearch;
+    if (!adminUnlocked) {
+      status.textContent = "Unlock organizer controls to view saved players.";
+      return;
+    }
+    if (connectionMode !== "live") {
+      status.textContent = "The saved player database requires a live connection.";
+      return;
+    }
+    if (errorMessage) {
+      status.textContent = errorMessage;
+      list.innerHTML = '<div class="empty-state">Saved players could not be loaded.</div>';
+      return;
+    }
+    const query = savedPlayerSearch.trim().toLowerCase();
+    const filtered = savedPlayers.filter((player) => player.name.toLowerCase().includes(query));
+    const activeCount = savedPlayers.filter((saved) => state.players.some((player) => player.directoryId === saved.id)).length;
+    status.textContent = `${savedPlayers.length} saved player${savedPlayers.length === 1 ? "" : "s"} · ${activeCount} in this round`;
+    if (!filtered.length) {
+      list.innerHTML = `<div class="empty-state">${savedPlayers.length ? "No saved players match that search." : "No saved players yet. Use the form above to create the reusable roster."}</div>`;
+      return;
+    }
+    const canEdit = adminUnlocked && connectionMode === "live" && !isLocked();
+    filtered.forEach((saved) => {
+      const activePlayer = state.players.find((player) => player.directoryId === saved.id);
+      let selected = savedPlayerGroupSelections.get(saved.id) || nextAvailableGroup();
+      if (groupPlayers(selected).length >= R.MAX_GROUP_SIZE) selected = nextAvailableGroup();
+      savedPlayerGroupSelections.set(saved.id, selected);
+      const addDisabled = !canEdit || Boolean(activePlayer) || state.players.length >= R.MAX_PLAYERS || groupPlayers(selected).length >= R.MAX_GROUP_SIZE;
+      const row = document.createElement("article");
+      row.className = "saved-player-row";
+      row.dataset.savedPlayerId = saved.id;
+      row.innerHTML = `<label class="saved-player-name">Name<input class="saved-name" type="text" maxlength="40" value="${esc(saved.name)}" ${canEdit ? "" : "disabled"}></label>
+        <label>GHIN Index<input class="saved-ghin" type="number" min="-10" max="54" step="0.1" inputmode="decimal" value="${saved.ghin}" ${canEdit ? "" : "disabled"}></label>
+        <label>Tee<select class="saved-tee" ${canEdit ? "" : "disabled"}>${teeOptions(saved.teeKey)}</select></label>
+        <label>Add to<select class="saved-group" ${addDisabled ? "disabled" : ""}>${savedGroupOptions(selected)}</select></label>
+        <div class="saved-player-actions"><button class="button button-primary add-saved-player" type="button" ${addDisabled ? "disabled" : ""}>${activePlayer ? `In Group ${activePlayer.group}` : "Add to group"}</button><button class="button button-quiet delete-saved-player" type="button" ${canEdit ? "" : "disabled"}>Delete</button></div>`;
+      const name = row.querySelector(".saved-name");
+      const ghin = row.querySelector(".saved-ghin");
+      const tee = row.querySelector(".saved-tee");
+      const group = row.querySelector(".saved-group");
+      name.addEventListener("change", () => updateSavedPlayer(saved.id, { name: name.value }));
+      ghin.addEventListener("change", () => updateSavedPlayer(saved.id, { ghin: Number(ghin.value) }));
+      tee.addEventListener("change", () => updateSavedPlayer(saved.id, { teeKey: tee.value }));
+      group.addEventListener("change", () => savedPlayerGroupSelections.set(saved.id, group.value));
+      row.querySelector(".add-saved-player").addEventListener("click", () => addSavedPlayerToRound(saved.id, group.value));
+      row.querySelector(".delete-saved-player").addEventListener("click", () => deleteSavedPlayer(saved.id));
+      list.append(row);
+    });
+  }
+
+  async function createSavedPlayer(event) {
+    event.preventDefault();
+    const name = $("#savedPlayerName").value.trim();
+    if (!name) return showToast("Enter a player name before saving.", "error");
+    try {
+      const body = await databaseRequest("/api/players", {
+        method: "POST",
+        body: JSON.stringify({ name, ghin: Number($("#savedPlayerGhin").value), teeKey: $("#savedPlayerTee").value })
+      });
+      savedPlayers = [...savedPlayers, body.player].sort((a, b) => a.name.localeCompare(b.name));
+      $("#savedPlayerName").value = "";
+      $("#savedPlayerGhin").value = "0";
+      render();
+      showToast(`${body.player.name} saved to the player database.`, "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  async function updateSavedPlayer(id, patch) {
+    if (!adminUnlocked || connectionMode !== "live" || isLocked()) return;
+    try {
+      const body = await databaseRequest(`/api/players/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(patch) });
+      savedPlayers = savedPlayers.map((player) => player.id === id ? body.player : player).sort((a, b) => a.name.localeCompare(b.name));
+      const linkedPlayers = state.players.filter((player) => player.directoryId === id);
+      for (const player of linkedPlayers) {
+        await dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, directoryId: id, name: body.player.name, ghin: body.player.ghin, teeKey: body.player.teeKey } });
+      }
+      render();
+      showToast(`${body.player.name}'s saved details were updated.`, "success");
+    } catch (error) {
+      render();
+      showToast(error.message, "error");
+    }
+  }
+
+  async function addSavedPlayerToRound(id, group) {
+    const saved = savedPlayers.find((player) => player.id === id);
+    if (!saved) return;
+    if (state.players.some((player) => player.directoryId === id)) return showToast(`${saved.name} is already in this round.`, "error");
+    if (state.players.length >= R.MAX_PLAYERS) return showValidation("Maximum of 30 players reached.");
+    if (!R.GROUPS.includes(group) || groupPlayers(group).length >= R.MAX_GROUP_SIZE) return showValidation(`Group ${group} already has five players.`);
+    const player = R.normalizePlayer({ id: makeId(), directoryId: saved.id, name: saved.name, ghin: saved.ghin, teeKey: saved.teeKey, group });
+    await dispatch({ type: "ADD_PLAYER", payload: { player } });
+    showToast(`${saved.name} added to Group ${group}.`, "success");
+  }
+
+  async function deleteSavedPlayer(id) {
+    const saved = savedPlayers.find((player) => player.id === id);
+    if (!saved || !window.confirm(`Delete ${saved.name} from the saved player database? Their current-round scores will remain.`)) return;
+    try {
+      await databaseRequest(`/api/players/${encodeURIComponent(id)}`, { method: "DELETE" });
+      const linkedPlayers = state.players.filter((player) => player.directoryId === id);
+      savedPlayers = savedPlayers.filter((player) => player.id !== id);
+      savedPlayerGroupSelections.delete(id);
+      for (const player of linkedPlayers) await dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, directoryId: "" } });
+      render();
+      showToast(`${saved.name} deleted from the saved player database.`, "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
   }
 
   function renderSetupWarnings() {
@@ -502,7 +672,11 @@
     $("#roundName").value = state.roundName;
     $("#roundDate").value = state.date;
     $("#allowance").value = state.settings.allowance;
+    const savedPlayerTee = $("#savedPlayerTee");
+    const selectedSavedTee = savedPlayerTee.value || E.COURSE.defaultTee;
+    savedPlayerTee.innerHTML = teeOptions(selectedSavedTee);
     renderPlayers();
+    renderSavedPlayers();
     renderGroupScoring();
     renderLeaderboard();
     renderTournament();
@@ -548,6 +722,7 @@
       sessionStorage.setItem(ADMIN_PIN_KEY, candidate);
       $("#adminDialog").close();
       render();
+      await loadSavedPlayers();
       showToast("Organizer controls unlocked.", "success");
     } catch (error) {
       $("#adminError").textContent = error.message;
@@ -622,6 +797,8 @@
 
   document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => switchView(tab.dataset.view)));
   $("#addPlayerBtn").addEventListener("click", addPlayer);
+  $("#savedPlayerForm").addEventListener("submit", createSavedPlayer);
+  $("#savedPlayerSearch").addEventListener("input", (event) => { savedPlayerSearch = event.target.value; renderSavedPlayers(); });
   $("#activeGroupSelect").addEventListener("change", (event) => { selectedGroup = event.target.value; const url = new URL(location.href); url.searchParams.set("group", selectedGroup); history.replaceState(null, "", url); renderGroupScoring(); });
   $("#holeSelect").addEventListener("change", (event) => moveToHole(Number(event.target.value)));
   $("#prevHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 1 ? 18 : selectedHole - 1));
@@ -631,7 +808,7 @@
   $("#roundDate").addEventListener("change", (event) => dispatch({ type: "SET_META", payload: { date: event.target.value } }));
   $("#allowance").addEventListener("change", (event) => dispatch({ type: "SET_ALLOWANCE", payload: { allowance: Number(event.target.value) } }));
   $("#organizerBtn").addEventListener("click", () => {
-    if (adminUnlocked) { adminUnlocked = false; adminPin = ""; sessionStorage.removeItem(ADMIN_PIN_KEY); render(); showToast("Organizer controls locked."); }
+    if (adminUnlocked) { adminUnlocked = false; adminPin = ""; savedPlayers = []; savedPlayerSearch = ""; savedPlayerGroupSelections.clear(); sessionStorage.removeItem(ADMIN_PIN_KEY); render(); showToast("Organizer controls locked."); }
     else openAdminDialog();
   });
   $("#adminSubmitBtn").addEventListener("click", (event) => { event.preventDefault(); verifyAdmin(); });

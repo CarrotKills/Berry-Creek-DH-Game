@@ -4,15 +4,15 @@ A responsive, real-time golf scoring app configured from The Club at Berry Creek
 
 ## Start the app
 
-No packages are required. Install Node.js 18 or newer, open a terminal in this folder, and run:
+No third-party packages are required. Install Node.js 22.5 or newer, open a terminal in this folder, and run:
 
 ```bash
-node server.js
+npm start
 ```
 
 Open `http://localhost:8080`. Other scorekeepers on the same Wi-Fi network can open `http://YOUR-COMPUTER-IP:8080`.
 
-For a hosted event, deploy this folder to any service that runs a persistent Node.js process and provides persistent disk storage. Set `PORT` if the host requires it.
+For a hosted event, deploy this folder to any service that runs a persistent Node.js process and provides persistent disk storage. Set `PORT` if the host requires it. On Render, attach a persistent disk and mount it to the app's `data` directory; otherwise the round and player database can reset during a redeploy.
 
 ## Organizer PIN
 
@@ -20,10 +20,16 @@ Organizer-only controls protect the roster, handicaps, reset/import tools, and f
 
 Before an event on Render, add an environment variable named `ADMIN_PIN` with your own private PIN and redeploy. Scorekeepers do not need the PIN; their group links allow scoring only for the assigned fivesome.
 
+## Saved player database
+
+The Players tab includes an organizer-only reusable player database. Save each golfer's name, GHIN Index, and preferred tee once, then search the list and add that golfer to any Group A-F for a new round. Editing a saved player's GHIN Index, name, or tee also updates their linked entry in the active round.
+
+Deleting a saved player does not delete that golfer's current-round scores. It only removes the reusable database record.
+
 ## Event workflow
 
-1. Add up to 30 players on the Players tab.
-2. Enter each player's GHIN Handicap Index, tee, and group (A-F). Each group is limited to five.
+1. Unlock organizer controls and save or update golfers in the player database.
+2. Add saved golfers to Groups A-F, or use Add player for a one-time entry. The round supports up to 30 players and each group is limited to five.
 3. Open the Tournament tab and use Copy link, Share, or QR code for each group. Group links open directly to scoring and keep the group selector fixed.
 4. Each scorekeeper enters all five gross scores for the current hole and marks sand saves and par-3 KPs.
 5. Everyone can view the live Leaderboard. A new KP claim on the same hole automatically replaces the previous holder.
@@ -59,4 +65,4 @@ Before an event on Render, add an environment variable named `ADMIN_PIN` with yo
 
 The Reset button can clear only scores and tics while keeping the roster, or clear the entire app for a new event.
 
-The server saves event data to `data/round.json`. Use Export backup during the round for an additional copy.
+The server saves event data to `data/round.json` and the reusable player roster to `data/players.sqlite`. Use Export backup during the round for an additional copy of the event data.

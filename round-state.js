@@ -28,6 +28,7 @@
   function normalizePlayer(player) {
     return {
       id: String(player.id || ""),
+      directoryId: player.directoryId ? String(player.directoryId) : "",
       name: String(player.name || "").slice(0, 40),
       ghin: Number(player.ghin) || 0,
       teeKey: String(player.teeKey || "championship"),
@@ -149,6 +150,7 @@
         const player = state.players.find((item) => item.id === p.playerId);
         if (!player) { changed = false; break; }
         if (typeof p.name === "string") player.name = p.name.slice(0, 40);
+        if (typeof p.directoryId === "string") player.directoryId = p.directoryId;
         if (Number.isFinite(Number(p.ghin))) player.ghin = Math.max(-10, Math.min(54, Number(p.ghin)));
         if (typeof p.teeKey === "string") player.teeKey = p.teeKey;
         if (GROUPS.includes(p.group)) {
