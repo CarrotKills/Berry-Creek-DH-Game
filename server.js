@@ -7,17 +7,22 @@ const crypto = require("node:crypto");
 const { URL } = require("node:url");
 const Round = require("./round-state.js");
 const PlayerDatabase = require("./player-database.js");
+const RoundHistoryDatabase = require("./round-history-database.js");
 
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.4.0";
+const APP_VERSION = "9.5.0";
 const ROOT = __dirname;
-const DATA_DIR = path.join(ROOT, "data");
-const DATA_FILE = path.join(DATA_DIR, "round.json");
-const PLAYERS_DB_FILE = process.env.PLAYERS_DB_FILE || path.join(DATA_DIR, "players.sqlite");
+const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
+const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
+const DATA_FILE = path.resolve(process.env.ROUND_FILE || path.join(DATA_DIR, "round.json"));
+const PLAYERS_DB_FILE = path.resolve(process.env.PLAYERS_DB_FILE || path.join(DATA_DIR, "players.sqlite"));
+const ROUND_HISTORY_DB_FILE = path.resolve(process.env.ROUND_HISTORY_DB_FILE || path.join(DATA_DIR, "rounds.sqlite"));
+const SHARE_SECRET = String(process.env.SHARE_SECRET || ADMIN_PIN);
 const clients = new Set();
 const playerDatabase = new PlayerDatabase(PLAYERS_DB_FILE);
+const roundHistoryDatabase = new RoundHistoryDatabase(ROUND_HISTORY_DB_FILE);
 
 function readState() {
   try { return Round.normalizeState(JSON.parse(fs.readFileSync(DATA_FILE, "utf8"))); }
@@ -27,7 +32,7 @@ function readState() {
 let state = readState();
 
 function persist() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
   const temp = `${DATA_FILE}.tmp`;
   fs.writeFileSync(temp, JSON.stringify(state, null, 2));
   fs.renameSync(temp, DATA_FILE);
@@ -61,6 +66,17 @@ function readBody(req) {
 function pinMatches(candidate) {
   const supplied = Buffer.from(String(candidate || ""));
   const expected = Buffer.from(ADMIN_PIN);
+  return supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
+}
+
+function scoreTokenForGroup(group) {
+  return crypto.createHmac("sha256", SHARE_SECRET).update(`berry-creek-score:${group}`).digest("hex");
+}
+
+function scoringTokenMatches(group, candidate) {
+  if (!Round.GROUPS.includes(group)) return false;
+  const supplied = Buffer.from(String(candidate || ""));
+  const expected = Buffer.from(scoreTokenForGroup(group));
   return supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
 }
 
@@ -101,6 +117,29 @@ const server = http.createServer(async (req, res) => {
       return pinMatches(body.pin) ? sendJson(res, 200, { ok: true }) : sendJson(res, 401, { ok: false, error: "Incorrect organizer PIN" });
     } catch (error) {
       return sendJson(res, 400, { ok: false, error: error.message });
+    }
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/share-tokens") {
+    if (!pinMatches(req.headers["x-admin-pin"])) return sendJson(res, 401, { ok: false, error: "Organizer PIN required" });
+    return sendJson(res, 200, { tokens: Object.fromEntries(Round.GROUPS.map((group) => [group, scoreTokenForGroup(group)])) });
+  }
+
+  if (url.pathname === "/api/rounds" || url.pathname.startsWith("/api/rounds/")) {
+    if (!pinMatches(req.headers["x-admin-pin"])) return sendJson(res, 401, { ok: false, error: "Organizer PIN required" });
+    const roundRoute = url.pathname.match(/^\/api\/rounds\/([^/]+)$/);
+    try {
+      if (req.method === "GET" && url.pathname === "/api/rounds") return sendJson(res, 200, { rounds: roundHistoryDatabase.list() });
+      if (req.method === "POST" && url.pathname === "/api/rounds") return sendJson(res, 201, { round: roundHistoryDatabase.create(state) });
+      if (req.method === "GET" && roundRoute) {
+        const round = roundHistoryDatabase.find(decodeURIComponent(roundRoute[1]));
+        return round ? sendJson(res, 200, { round }) : sendJson(res, 404, { ok: false, error: "Saved round not found" });
+      }
+      if (req.method === "DELETE" && roundRoute) return sendJson(res, 200, { ok: true, round: roundHistoryDatabase.remove(decodeURIComponent(roundRoute[1])) });
+      return sendJson(res, 405, { ok: false, error: "Method not allowed" });
+    } catch (error) {
+      const status = error.message === "Saved round not found" ? 404 : 400;
+      return sendJson(res, status, { ok: false, error: error.message });
     }
   }
 
@@ -149,11 +188,12 @@ const server = http.createServer(async (req, res) => {
       const adminAuthorized = pinMatches(req.headers["x-admin-pin"]);
       const adminOverride = req.headers["x-admin-override"] === "1" && adminAuthorized;
       const scoringGroup = String(req.headers["x-scoring-group"] || "").toUpperCase();
+      const scorerAuthorized = scoringTokenMatches(scoringGroup, req.headers["x-scoring-token"]);
 
       if (Round.isAdminAction(action.type) && !adminAuthorized) return sendJson(res, 401, { ok: false, error: "Organizer PIN required" });
       if (state.settings.locked && action.type !== "SET_LOCKED") return sendJson(res, 423, { ok: false, error: "This round is finalized and locked" });
-      if (Round.isScoringAction(action.type) && !adminOverride && !scoringGroupAllowed(action, scoringGroup)) {
-        return sendJson(res, 403, { ok: false, error: `This link can only score Group ${scoringGroup || "?"}` });
+      if (Round.isScoringAction(action.type) && !adminOverride && (!scorerAuthorized || !scoringGroupAllowed(action, scoringGroup))) {
+        return sendJson(res, 403, { ok: false, error: "A current group scorekeeper link or organizer access is required" });
       }
 
       const serverAction = {
@@ -196,6 +236,7 @@ function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
   playerDatabase.close();
+  roundHistoryDatabase.close();
   server.close(() => process.exit(0));
 }
 process.on("SIGINT", shutdown);

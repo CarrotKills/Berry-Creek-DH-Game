@@ -7,12 +7,15 @@
   <meta name="description" content="Live golf scoring and tournament controls for The Club at Berry Creek.">
   <title>Berry Creek DH Game</title>
   <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="app-icon-180.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="app-icon-32.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body data-display="normal">
   <header class="app-header">
     <div class="brand-lockup"><img class="club-logo" src="berry-creek-logo.jpeg" alt="The Club at Berry Creek, Georgetown Texas"><div><p class="eyebrow">Live tournament scoring</p><h1>Berry Creek DH Game</h1></div></div>
     <div class="header-actions">
+      <span id="spectatorStatus" class="status-pill viewer-pill" hidden>Live leaderboard · View only</span>
       <span id="lockStatus" class="status-pill lock-pill" hidden>Round locked</span>
       <span id="syncStatus" class="status-pill connection-pill is-connecting" aria-live="polite"><span class="status-dot"></span>Connecting</span>
       <button id="organizerBtn" class="button button-quiet" type="button">Organizer unlock</button>
@@ -80,22 +83,27 @@
       <div class="control-grid">
         <article class="control-card"><h3>Round status</h3><p id="roundStatusText">The round is open for scoring.</p><button id="toggleRoundLockBtn" class="button button-danger admin-control" type="button">Finalize and lock round</button></article>
         <article class="control-card"><h3>Device preferences</h3><label class="switch-row"><input id="soundToggle" type="checkbox" checked> Birdie and eagle sounds</label><label>Display mode<select id="displayMode"><option value="normal">Normal</option><option value="outdoor">Outdoor high contrast</option><option value="dark">Dark</option></select></label></article>
-        <article class="control-card"><h3>App version</h3><p><strong id="appVersion">Version 9.4.0</strong><br><span id="versionStatus">Checking for updates…</span></p><button id="checkUpdateBtn" class="button button-quiet" type="button">Check for updates</button></article>
+        <article class="control-card"><h3>App version</h3><p><strong id="appVersion">Version 9.5.0</strong><br><span id="versionStatus">Checking for updates…</span></p><button id="checkUpdateBtn" class="button button-quiet" type="button">Check for updates</button></article>
         <article class="control-card"><h3>Results and backups</h3><div class="tool-row"><button id="exportBtn" class="button button-quiet" type="button">Export backup</button><label class="button button-quiet file-button admin-only-label">Import backup<input id="importInput" class="admin-control" type="file" accept="application/json"></label></div></article>
       </div>
 
-      <section class="tournament-panel" aria-labelledby="shareTitle"><div class="panel-heading"><div><p class="kicker">Scorekeeper access</p><h3 id="shareTitle">Group links and QR codes</h3></div></div><p class="helper">Send each scorekeeper only their group link. It opens directly to that fivesome and keeps the group selector fixed.</p><div id="groupShareGrid" class="group-share-grid"></div></section>
+      <section class="tournament-panel" aria-labelledby="viewerShareTitle"><div class="panel-heading"><div><p class="kicker">Spectator access</p><h3 id="viewerShareTitle">Read-only live leaderboard</h3></div></div><p class="helper">Share this link with players who should follow the leaderboard without entering or changing scores.</p><div id="spectatorShareCard" class="group-share-grid"></div></section>
+
+      <section class="tournament-panel" aria-labelledby="shareTitle"><div class="panel-heading"><div><p class="kicker">Scorekeeper access</p><h3 id="shareTitle">Group links and QR codes</h3></div></div><p class="helper">Unlock organizer controls, then send each scorekeeper only their group link. Each protected link can change scores only for that fivesome.</p><div id="groupShareGrid" class="group-share-grid"></div></section>
+
+      <section class="tournament-panel" aria-labelledby="savedRoundsTitle"><div class="panel-heading"><div><p class="kicker">Historical reference</p><h3 id="savedRoundsTitle">Saved rounds</h3></div><button id="saveRoundBtn" class="button button-primary admin-control" type="button">Save current round</button></div><p class="helper">Save a complete snapshot of the current roster, scores, tics, KPs, and results. Resetting the active event does not remove saved rounds.</p><p id="savedRoundsStatus" class="helper" aria-live="polite"></p><div id="savedRoundsList" class="saved-rounds-list"></div></section>
 
       <section class="tournament-panel" aria-labelledby="historyTitle"><div class="panel-heading"><div><p class="kicker">Accountability</p><h3 id="historyTitle">Change history</h3></div><button id="clearHistoryBtn" class="button button-quiet admin-control" type="button">Clear history</button></div><div id="auditList" class="audit-list"></div></section>
     </section>
   </main>
 
   <section id="printReport" class="print-report" aria-hidden="true"></section>
-  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Connecting to shared scoring…</span><button id="footerVersionBtn" class="text-button" type="button">App v9.4.0</button></footer>
+  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Connecting to shared scoring…</span><button id="footerVersionBtn" class="text-button" type="button">App v9.5.0</button></footer>
 
   <dialog id="adminDialog"><form method="dialog"><h2>Organizer access</h2><p>Enter the organizer PIN to change the roster, settings, or round status.</p><label>Organizer PIN<input id="adminPinInput" type="password" inputmode="numeric" autocomplete="current-password" maxlength="20"></label><p id="adminError" class="validation" role="alert" hidden></p><div class="dialog-actions"><button class="button button-quiet" value="cancel">Cancel</button><button id="adminSubmitBtn" class="button button-primary" value="unlock">Unlock</button></div></form></dialog>
   <dialog id="confirmDialog"><form method="dialog"><h2>Reset the app?</h2><p>Choose whether to keep the player list or clear the entire event.</p><div class="dialog-actions reset-actions"><button class="button button-quiet" value="cancel">Cancel</button><button class="button button-quiet" value="scores">Reset scores only</button><button class="button button-danger" value="everything">Reset everything</button></div></form></dialog>
-  <dialog id="qrDialog"><form method="dialog"><h2 id="qrTitle">Group scoring link</h2><div class="qr-wrap"><img id="qrImage" width="220" height="220" alt="Scannable group scoring QR code"></div><p id="qrLinkText" class="qr-link"></p><div class="dialog-actions"><button class="button button-primary" value="close">Done</button></div></form></dialog>
+  <dialog id="qrDialog"><form method="dialog"><h2 id="qrTitle">Shared app link</h2><div class="qr-wrap"><img id="qrImage" width="220" height="220" alt="Scannable Berry Creek app QR code"></div><p id="qrLinkText" class="qr-link"></p><div class="dialog-actions"><button class="button button-primary" value="close">Done</button></div></form></dialog>
+  <dialog id="savedRoundDialog" class="wide-dialog"><form method="dialog"><div class="panel-heading"><div><p class="kicker">Saved round</p><h2 id="savedRoundDialogTitle">Round results</h2></div><button class="icon-button" value="close" aria-label="Close saved round">×</button></div><p id="savedRoundDialogMeta" class="helper"></p><div class="leaderboard-wrap"><table class="leaderboard archived-leaderboard"><thead><tr><th>Player</th><th>Grp</th><th>Gross</th><th>Net</th><th>Points +</th><th>Points −</th><th>Net points</th></tr></thead><tbody id="savedRoundDialogBody"></tbody></table></div><div class="dialog-actions"><button id="downloadSavedRoundBtn" class="button button-quiet" type="button">Download backup</button><button class="button button-primary" value="close">Done</button></div></form></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <template id="playerRowTemplate"><article class="player-row"><span class="player-number" aria-hidden="true"></span><label>Name<input class="player-name admin-control" type="text" maxlength="40" placeholder="Player name"></label><label>GHIN Index<input class="player-ghin admin-control" type="number" min="-10" max="54" step="0.1" inputmode="decimal" value="0"></label><label>Tee<select class="player-tee admin-control"></select></label><label>Group<select class="player-group admin-control"></select></label><div class="playing-hcp"><span>Playing hcp</span><strong></strong></div><button class="remove-player icon-button admin-control" type="button" aria-label="Remove player">×</button></article></template>

@@ -12,7 +12,7 @@ npm start
 
 Open `http://localhost:8080`. Other scorekeepers on the same Wi-Fi network can open `http://YOUR-COMPUTER-IP:8080`.
 
-For a hosted event, deploy this folder to any service that runs a persistent Node.js process and provides persistent disk storage. Set `PORT` if the host requires it. On Render, attach a persistent disk and mount it to the app's `data` directory; otherwise the round and player database can reset during a redeploy.
+For a hosted event, deploy this folder to any service that runs a persistent Node.js process and provides persistent disk storage. Set `PORT` if the host requires it. On Render, attach a persistent disk at `/var/data`, then set `PLAYERS_DB_FILE` to `/var/data/players.sqlite`. The app automatically stores the active round and historical-round database beside that file so all three survive redeploys and restarts.
 
 ## Organizer PIN
 
@@ -30,11 +30,12 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 
 1. Unlock organizer controls and save or update golfers in the player database.
 2. Add saved golfers to Groups A-F, or use Add player for a one-time entry. The round supports up to 30 players and each group is limited to five.
-3. Open the Tournament tab and use Copy link, Share, or QR code for each group. Group links open directly to scoring and keep the group selector fixed.
+3. Open the Tournament tab and use Copy link, Share, or QR code for each group. Protected group links open directly to scoring, keep the group selector fixed, and authorize changes only for that fivesome. Previously shared v9.4 and older group links must be replaced.
 4. Each scorekeeper enters all five gross scores for the current hole and marks sand saves and par-3 KPs.
 5. Everyone can view the live Leaderboard. A new KP claim on the same hole automatically replaces the previous holder.
 6. Use Show group scorecard during play to open or close the group's live-updating scorecard. Its Running total column adds every gross score entered so far.
 7. Finalize and lock the round when scoring is complete. Only the organizer can unlock it.
+8. Select Save current round to preserve a historical snapshot before resetting for the next event.
 
 ## Handicap and tic rules
 
@@ -56,6 +57,8 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - Missing names, duplicate names, incomplete holes, and unusually high or low scores produce warnings.
 - Every score, KP, sand save, roster edit, reset, import, and lock change is recorded in Change history.
 - Results can be printed or saved as PDF, downloaded as a spreadsheet-compatible CSV, or backed up as JSON.
+- The Tournament tab can save durable historical snapshots containing the full roster, scorecards, tics, KPs, and results. Saved rounds can be viewed, downloaded, or deleted without changing the active round.
+- The read-only live leaderboard link updates in real time but has no scoring or organizer capability. Group scoring links use protected tokens and must be created while organizer controls are unlocked.
 - Celebration sounds can be muted per device. Normal, outdoor high-contrast, and dark display modes are also device-specific.
 - The visible app version and Check for updates button make cached versions easier to identify and replace.
 - Group QR images require an internet connection; Copy link remains available if the QR image service is unavailable.
@@ -66,4 +69,4 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 
 The Reset button can clear only scores and tics while keeping the roster, or clear the entire app for a new event.
 
-The server saves event data to `data/round.json` and the reusable player roster to `data/players.sqlite`. Use Export backup during the round for an additional copy of the event data.
+By default, the server saves event data to `data/round.json`, the reusable player roster to `data/players.sqlite`, and historical rounds to `data/rounds.sqlite`. If `PLAYERS_DB_FILE` points to persistent storage, the other two files are placed in that same directory. `DATA_DIR`, `ROUND_FILE`, and `ROUND_HISTORY_DB_FILE` can also override those locations individually. Use Export backup during the round for an additional copy of the event data.
