@@ -3,7 +3,7 @@
   const E = window.BerryCreekScoring;
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
-  const APP_VERSION = "9.5.0";
+  const APP_VERSION = "9.5.1";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";

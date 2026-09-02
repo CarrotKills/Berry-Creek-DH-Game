@@ -2,6 +2,8 @@
 
 A responsive, real-time golf scoring app configured from The Club at Berry Creek's current scorecard.
 
+When installed on an iPhone or Android Home Screen, the app is labeled `DH Game` beneath the icon.
+
 ## Start the app
 
 No third-party packages are required. Install Node.js 22.5 or newer, open a terminal in this folder, and run:
@@ -30,7 +32,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 
 1. Unlock organizer controls and save or update golfers in the player database.
 2. Add saved golfers to Groups A-F, or use Add player for a one-time entry. The round supports up to 30 players and each group is limited to five.
-3. Open the Tournament tab and use Copy link, Share, or QR code for each group. Protected group links open directly to scoring, keep the group selector fixed, and authorize changes only for that fivesome. Previously shared v9.4 and older group links must be replaced.
+3. Open the Settings tab and use Copy link, Share, or QR code for each group. Protected group links open directly to scoring, keep the group selector fixed, and authorize changes only for that fivesome. Previously shared v9.4 and older group links must be replaced.
 4. Each scorekeeper enters all five gross scores for the current hole and marks sand saves and par-3 KPs.
 5. Everyone can view the live Leaderboard. A new KP claim on the same hole automatically replaces the previous holder.
 6. Use Show group scorecard during play to open or close the group's live-updating scorecard. Its Running total column adds every gross score entered so far.
@@ -57,7 +59,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - Missing names, duplicate names, incomplete holes, and unusually high or low scores produce warnings.
 - Every score, KP, sand save, roster edit, reset, import, and lock change is recorded in Change history.
 - Results can be printed or saved as PDF, downloaded as a spreadsheet-compatible CSV, or backed up as JSON.
-- The Tournament tab can save durable historical snapshots containing the full roster, scorecards, tics, KPs, and results. Saved rounds can be viewed, downloaded, or deleted without changing the active round.
+- The Settings tab can save durable historical snapshots containing the full roster, scorecards, tics, KPs, and results. Saved rounds can be viewed, downloaded, or deleted without changing the active round.
 - The read-only live leaderboard link updates in real time but has no scoring or organizer capability. Group scoring links use protected tokens and must be created while organizer controls are unlocked.
 - Celebration sounds can be muted per device. Normal, outdoor high-contrast, and dark display modes are also device-specific.
 - The visible app version and Check for updates button make cached versions easier to identify and replace.
