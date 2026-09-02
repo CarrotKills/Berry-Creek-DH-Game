@@ -37,7 +37,31 @@ alice.scores[0] = 3;
 alice.sandies[1] = true;
 settings.kpWinners["2"] = "a";
 const tics = E.ticSummary(alice, [alice, bob], E.COURSE, settings);
-assert.deepEqual(tics, { birdies: 1, skins: 3, front: 1, back: 1, totalNet: 1, sandyPars: 1, sandyBirdies: 0, kps: 1, total: 9 });
+assert.deepEqual(tics, { birdies: 1, eagles: 0, skins: 3, front: 1, frontWeight: 2, back: 1, backWeight: 2, totalNet: 1, totalNetWeight: 2, sandyPars: 1, sandyBirdies: 0, kps: 1, total: 9, weightedTics: 12, pointsEarned: 6 });
+const aliceLedger = E.pointsLedger(alice, [alice, bob], E.COURSE, settings);
+const bobLedger = E.pointsLedger(bob, [alice, bob], E.COURSE, settings);
+assert.equal(aliceLedger.positive, 6);
+assert.equal(Math.abs(aliceLedger.negative), E.ticSummary(bob, [alice, bob], E.COURSE, settings).pointsEarned);
+assert.equal(aliceLedger.net + bobLedger.net, 0);
+const threePlayerLedger = [alice, bob, { ...bob, id: "c", name: "Carol" }];
+assert.equal(threePlayerLedger.reduce((sum, player) => sum + E.pointsLedger(player, threePlayerLedger, E.COURSE, settings).net, 0), 0);
+
+const tieA = { ...alice, id: "tie-a", scores: E.COURSE.holes.map((h) => h.par), sandies: Array(18).fill(false) };
+const tieB = { ...tieA, id: "tie-b" };
+const tieTics = E.ticSummary(tieA, [tieA, tieB], E.COURSE, { ...settings, kpWinners: {} });
+assert.equal(tieTics.frontWeight, 1);
+assert.equal(tieTics.backWeight, 1);
+assert.equal(tieTics.totalNetWeight, 1);
+assert.equal(tieTics.pointsEarned, 1.5);
+
+const eaglePlayer = { ...alice, id: "eagle", scores: Array(18).fill(""), sandies: Array(18).fill(false) };
+const incompletePlayer = { ...bob, id: "incomplete", scores: Array(18).fill(""), sandies: Array(18).fill(false) };
+eaglePlayer.scores[2] = 3;
+const eagleTics = E.ticSummary(eaglePlayer, [eaglePlayer, incompletePlayer], E.COURSE, { ...settings, kpWinners: {} });
+assert.equal(eagleTics.birdies, 1);
+assert.equal(eagleTics.eagles, 1);
+assert.equal(eagleTics.weightedTics, 2);
+assert.equal(eagleTics.pointsEarned, 1);
 
 const scratch = { ...alice, id: "scratch", scores: [4, ...Array(17).fill("")] };
 const eighteen = { ...bob, id: "eighteen", ghin: 18, scores: [4, ...Array(17).fill("")] };

@@ -50,14 +50,14 @@
       <div id="holeBanner" class="hole-banner"></div>
       <div id="groupScoreList" class="group-score-list" aria-live="polite"></div>
       <div id="noGroupPlayers" class="empty-state" hidden>No players are assigned to this group.</div>
-      <div id="groupScorecardPanel" class="scorecard-wrap" hidden><table class="scorecard group-scorecard"><thead id="groupScorecardHead"></thead><tbody id="groupScorecardBody"></tbody></table></div>
+      <div id="groupScorecardPanel" class="scorecard-wrap" hidden><p class="scorecard-legend"><span class="legend-dot">●</span> Each dot is one handicap stroke received.</p><table class="scorecard group-scorecard"><thead id="groupScorecardHead"></thead><tbody id="groupScorecardBody"></tbody></table></div>
     </section>
 
     <section id="leaderboardView" class="view" aria-labelledby="leaderboardTitle" hidden>
       <div class="section-heading"><div><p class="kicker">Updates live</p><h2 id="leaderboardTitle">Leaderboard and tics</h2></div><div class="section-actions"><button id="printBtn" class="button button-quiet" type="button">Print results</button><button id="csvBtn" class="button button-primary" type="button">Download spreadsheet</button></div></div>
-      <p class="helper">Birdies, skins, and low front/back/total net tics are automatic. Tied net skins receive no skin.</p>
+      <p class="helper">Non-cash points are automatic: ordinary tics earn 0.5 point; eagles and unique front/back/overall net wins earn 1 point. Tied net wins earn 0.5 point. Each earned point is credited against every other player.</p>
       <div id="kpPanel" class="kp-panel"></div>
-      <div class="leaderboard-wrap"><table class="leaderboard"><thead><tr><th>Player</th><th>Grp</th><th>Thru</th><th>Hcp</th><th>Gross</th><th>Net</th><th>Birdies</th><th>Skins</th><th>F</th><th>B</th><th>Total</th><th>Sandy par</th><th>Sandy birdie</th><th>KP</th><th>Tics</th></tr></thead><tbody id="leaderboardBody"></tbody></table></div>
+      <div class="leaderboard-wrap"><table class="leaderboard"><thead><tr><th>Player</th><th>Grp</th><th>Thru</th><th>Hcp</th><th>Gross</th><th>Net</th><th>Birdies</th><th>Eagles+</th><th>Skins</th><th>F</th><th>B</th><th>Total</th><th>Sandy par</th><th>Sandy birdie</th><th>KP</th><th>Points +</th><th>Points −</th><th>Net points</th></tr></thead><tbody id="leaderboardBody"></tbody></table></div>
       <div id="leaderboardEmpty" class="empty-state" hidden>No players yet.</div>
     </section>
 
@@ -66,7 +66,7 @@
       <div class="control-grid">
         <article class="control-card"><h3>Round status</h3><p id="roundStatusText">The round is open for scoring.</p><button id="toggleRoundLockBtn" class="button button-danger admin-control" type="button">Finalize and lock round</button></article>
         <article class="control-card"><h3>Device preferences</h3><label class="switch-row"><input id="soundToggle" type="checkbox" checked> Birdie and eagle sounds</label><label>Display mode<select id="displayMode"><option value="normal">Normal</option><option value="outdoor">Outdoor high contrast</option><option value="dark">Dark</option></select></label></article>
-        <article class="control-card"><h3>App version</h3><p><strong id="appVersion">Version 9.0.1</strong><br><span id="versionStatus">Checking for updates…</span></p><button id="checkUpdateBtn" class="button button-quiet" type="button">Check for updates</button></article>
+        <article class="control-card"><h3>App version</h3><p><strong id="appVersion">Version 9.1.0</strong><br><span id="versionStatus">Checking for updates…</span></p><button id="checkUpdateBtn" class="button button-quiet" type="button">Check for updates</button></article>
         <article class="control-card"><h3>Results and backups</h3><div class="tool-row"><button id="exportBtn" class="button button-quiet" type="button">Export backup</button><label class="button button-quiet file-button admin-only-label">Import backup<input id="importInput" class="admin-control" type="file" accept="application/json"></label></div></article>
       </div>
 
@@ -77,7 +77,7 @@
   </main>
 
   <section id="printReport" class="print-report" aria-hidden="true"></section>
-  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Connecting to shared scoring…</span><button id="footerVersionBtn" class="text-button" type="button">App v9.0.1</button></footer>
+  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Connecting to shared scoring…</span><button id="footerVersionBtn" class="text-button" type="button">App v9.1.0</button></footer>
 
   <dialog id="adminDialog"><form method="dialog"><h2>Organizer access</h2><p>Enter the organizer PIN to change the roster, settings, or round status.</p><label>Organizer PIN<input id="adminPinInput" type="password" inputmode="numeric" autocomplete="current-password" maxlength="20"></label><p id="adminError" class="validation" role="alert" hidden></p><div class="dialog-actions"><button class="button button-quiet" value="cancel">Cancel</button><button id="adminSubmitBtn" class="button button-primary" value="unlock">Unlock</button></div></form></dialog>
   <dialog id="confirmDialog"><form method="dialog"><h2>Reset the app?</h2><p>Choose whether to keep the player list or clear the entire event.</p><div class="dialog-actions reset-actions"><button class="button button-quiet" value="cancel">Cancel</button><button class="button button-quiet" value="scores">Reset scores only</button><button class="button button-danger" value="everything">Reset everything</button></div></form></dialog>

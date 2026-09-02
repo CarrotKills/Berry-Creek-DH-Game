@@ -127,8 +127,12 @@ tbody tr:last-child td { border-bottom: 0; }
 .scorecard th:first-child, .scorecard td:first-child { position: sticky; left: 0; z-index: 2; text-align: left; font-weight: 800; }
 .scorecard th:first-child { background: var(--forest); }
 .scorecard td:first-child { background: var(--paper); }
-.score-cell { border: 0; min-width: 42px; min-height: 38px; padding: 0.35rem; text-align: center; background: transparent; }
+.scorecard-legend { margin: 0; padding: 0.65rem 0.8rem; color: var(--muted); font-size: 0.78rem; font-weight: 700; }
+.legend-dot { color: var(--forest); }
+.score-cell { display: inline-flex; flex-direction: column; justify-content: center; align-items: center; border: 0; min-width: 42px; min-height: 46px; padding: 0.25rem 0.35rem; text-align: center; background: transparent; }
 .score-cell.active-hole { border-radius: 6px; background: var(--gold-soft); }
+.score-cell-value { line-height: 1.1; }
+.handicap-dots { display: block; min-height: 0.75rem; color: var(--forest); font-size: 0.55rem; letter-spacing: 0.05em; line-height: 1; }
 .stroke-dot { color: var(--forest-2); font-weight: 900; }
 .under-par { display: inline-grid; place-items: center; min-width: 28px; height: 28px; border: 2px solid var(--forest-2); border-radius: 50%; }
 .over-par { display: inline-grid; place-items: center; min-width: 28px; height: 28px; border: 2px solid var(--gold); }
@@ -140,6 +144,11 @@ tbody tr:last-child td { border-bottom: 0; }
 .leaderboard th:first-child { background: var(--forest); }
 .leaderboard td:first-child { background: var(--paper); font-weight: 800; }
 .leaderboard .tic-total { color: var(--forest); background: var(--gold-soft); font-weight: 900; }
+.leaderboard .points-positive { color: #176c31; background: #e2f5e6; font-weight: 900; }
+.leaderboard .points-negative { color: #a30d20; background: #fbe3e7; font-weight: 900; }
+.leaderboard .points-net { font-weight: 900; }
+.leaderboard .points-net.is-positive { color: #176c31; }
+.leaderboard .points-net.is-negative { color: #a30d20; }
 .leader-row-leading td:first-child::before { content: "◆ "; color: var(--gold); }
 .empty-state { padding: 2rem; border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); text-align: center; background: rgba(255,255,255,0.45); }
 
@@ -265,6 +274,7 @@ body[data-display="dark"] .hole-warning.complete { color: #72e092; }
   .print-report table { page-break-inside: avoid; }
   .print-report th { color: #fff !important; background: #b51222 !important; }
   .print-report td { color: #000; background: #fff !important; }
+  .print-dots { display: block; color: #b51222; font-size: 6pt; letter-spacing: 0.4pt; }
   .print-columns { display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; }
   .print-group { break-before: page; }
 }

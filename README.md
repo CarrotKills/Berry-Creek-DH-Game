@@ -53,6 +53,9 @@ Before an event on Render, add an environment variable named `ADMIN_PIN` with yo
 - Celebration sounds can be muted per device. Normal, outdoor high-contrast, and dark display modes are also device-specific.
 - The visible app version and Check for updates button make cached versions easier to identify and replace.
 - Group QR images require an internet connection; Copy link remains available if the QR image service is unavailable.
+- Live and printed scorecards show one dot for every handicap stroke a player receives on each hole.
+- The leaderboard uses non-cash points: ordinary tics are 0.5 point; eagles and unique front/back/overall net wins are 1 point; tied net wins are 0.5 point.
+- Points + credits each earned point once for every other player. Points − shows the corresponding losses from all other players, and Net points shows the difference.
 
 The Reset button can clear only scores and tics while keeping the roster, or clear the entire app for a new event.
 

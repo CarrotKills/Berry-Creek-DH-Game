@@ -2,7 +2,7 @@
   "use strict";
   const E = window.BerryCreekScoring;
   const R = window.BerryCreekRoundState;
-  const APP_VERSION = "9.0.1";
+  const APP_VERSION = "9.1.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -379,11 +379,22 @@
     $("#toggleScorecardBtn").textContent = scorecardOpen ? "Hide group scorecard" : "Show group scorecard";
   }
 
+  function strokesReceived(player, holeIndex) {
+    const hole = E.holesForPlayer(E.COURSE, player)[holeIndex];
+    return Math.max(0, E.strokesForHole(hcp(player), hole.strokeIndex));
+  }
+
+  function handicapDots(player, holeIndex) {
+    const strokes = strokesReceived(player, holeIndex);
+    if (!strokes) return "";
+    return `<span class="handicap-dots" aria-label="${strokes} handicap stroke${strokes === 1 ? "" : "s"} received"><span aria-hidden="true">${"●".repeat(strokes)}</span></span>`;
+  }
+
   function renderGroupScorecard(players) {
     $("#groupScorecardHead").innerHTML = `<tr><th>Player</th>${E.COURSE.holes.map((hole) => `<th>${hole.number}</th>`).join("")}<th>Out</th><th>In</th><th>Net</th></tr>`;
     $("#groupScorecardBody").innerHTML = players.map((player) => {
       const totals = E.playerTotals(player, E.COURSE, state.settings);
-      const cells = player.scores.map((score, index) => `<td><button type="button" class="score-cell ${index + 1 === selectedHole ? "active-hole" : ""}" data-card-hole="${index + 1}">${score || "—"}</button></td>`).join("");
+      const cells = player.scores.map((score, index) => `<td><button type="button" class="score-cell ${index + 1 === selectedHole ? "active-hole" : ""}" data-card-hole="${index + 1}"><span class="score-cell-value">${score || "—"}</span>${handicapDots(player, index)}</button></td>`).join("");
       return `<tr><td>${esc(nameOf(player, state.players.indexOf(player)))}</td>${cells}<td>${complete(totals.front.gross, totals.front.completed)}</td><td>${complete(totals.back.gross, totals.back.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`;
     }).join("");
     document.querySelectorAll("[data-card-hole]").forEach((button) => button.addEventListener("click", () => { selectedHole = Number(button.dataset.cardHole); renderGroupScoring(); }));
@@ -396,7 +407,7 @@
   }
 
   function rankedPlayers() {
-    return state.players.map((player, index) => ({ player, index, totals: E.playerTotals(player, E.COURSE, state.settings), tics: E.ticSummary(player, state.players, E.COURSE, state.settings) })).sort((a, b) => {
+    return state.players.map((player, index) => ({ player, index, totals: E.playerTotals(player, E.COURSE, state.settings), tics: E.ticSummary(player, state.players, E.COURSE, state.settings), ledger: E.pointsLedger(player, state.players, E.COURSE, state.settings) })).sort((a, b) => {
       const aThru = a.player.scores.filter(Boolean).length;
       const bThru = b.player.scores.filter(Boolean).length;
       if (a.totals.total.completed !== b.totals.total.completed) return a.totals.total.completed ? -1 : 1;
@@ -409,8 +420,11 @@
     renderKPs();
     $("#leaderboardBody").innerHTML = rankedPlayers().map((item, rank) => {
       const tics = item.tics;
+      const ledger = item.ledger;
       const thru = item.player.scores.filter(Boolean).length;
-      return `<tr class="${rank === 0 && item.totals.total.completed ? "leader-row-leading" : ""}"><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${hcp(item.player)}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.skins}</td><td>${tics.front}</td><td>${tics.back}</td><td>${tics.totalNet}</td><td>${tics.sandyPars}</td><td>${tics.sandyBirdies}</td><td>${tics.kps}</td><td class="tic-total">${tics.total}</td></tr>`;
+      const netClass = ledger.net > 0 ? "is-positive" : ledger.net < 0 ? "is-negative" : "";
+      const netText = `${ledger.net > 0 ? "+" : ""}${ledger.net.toFixed(1)}`;
+      return `<tr class="${rank === 0 && item.totals.total.completed ? "leader-row-leading" : ""}"><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${hcp(item.player)}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.front}</td><td>${tics.back}</td><td>${tics.totalNet}</td><td>${tics.sandyPars}</td><td>${tics.sandyBirdies}</td><td>${tics.kps}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
     }).join("");
     $("#leaderboardEmpty").hidden = state.players.length > 0;
     $(".leaderboard-wrap").hidden = state.players.length === 0;
@@ -551,12 +565,13 @@
   }
 
   function downloadCsv() {
-    const headers = ["Player", "Group", "GHIN Index", "Tee", "Playing Handicap", ...E.COURSE.holes.map((hole) => `Hole ${hole.number}`), "Gross", "Net", "Birdies", "Skins", "Front Net Tic", "Back Net Tic", "Total Net Tic", "Sandy Pars", "Sandy Birdies", "KP Holes", "Total Tics"];
+    const headers = ["Player", "Group", "GHIN Index", "Tee", "Playing Handicap", ...E.COURSE.holes.map((hole) => `Hole ${hole.number}`), "Gross", "Net", "Birdies", "Eagles or Better", "Skins", "Front Net Tic", "Back Net Tic", "Total Net Tic", "Sandy Pars", "Sandy Birdies", "KP Holes", "Raw Tics", "Weighted Tics", "Achievement Points", "Points Positive", "Points Negative", "Net Points"];
     const rows = state.players.map((player, index) => {
       const totals = E.playerTotals(player, E.COURSE, state.settings);
       const tics = E.ticSummary(player, state.players, E.COURSE, state.settings);
+      const ledger = E.pointsLedger(player, state.players, E.COURSE, state.settings);
       const kpHoles = KP_HOLES.filter((hole) => state.settings.kpWinners[String(hole)] === player.id).join("; ");
-      return [nameOf(player, index), player.group, player.ghin, teeOf(player).name, hcp(player), ...player.scores, totals.total.completed ? totals.total.gross : "", totals.total.completed ? totals.total.net : "", tics.birdies, tics.skins, tics.front, tics.back, tics.totalNet, tics.sandyPars, tics.sandyBirdies, kpHoles, tics.total].map(csvCell).join(",");
+      return [nameOf(player, index), player.group, player.ghin, teeOf(player).name, hcp(player), ...player.scores, totals.total.completed ? totals.total.gross : "", totals.total.completed ? totals.total.net : "", tics.birdies, tics.eagles, tics.skins, tics.front, tics.back, tics.totalNet, tics.sandyPars, tics.sandyBirdies, kpHoles, tics.total, tics.weightedTics, tics.pointsEarned.toFixed(1), ledger.positive.toFixed(1), ledger.negative.toFixed(1), ledger.net.toFixed(1)].map(csvCell).join(",");
     });
     downloadBlob([headers.map(csvCell).join(","), ...rows].join("\r\n"), "text/csv;charset=utf-8", `berry-creek-results-${state.date}.csv`);
   }
@@ -572,9 +587,9 @@
       const resultText = result.status === "awarded" ? esc(nameOf(player, state.players.indexOf(player))) : result.status === "tie" ? "No skin — tie" : "Pending";
       return `<tr><td>${hole.number}</td><td>${resultText}</td></tr>`;
     }).join("");
-    const groupTables = R.GROUPS.filter((group) => groupPlayers(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><table><thead><tr><th>Player</th>${E.COURSE.holes.map((hole) => `<th>${hole.number}</th>`).join("")}<th>Gross</th><th>Net</th></tr></thead><tbody>${groupPlayers(group).map((player, playerIndex) => { const totals = E.playerTotals(player, E.COURSE, state.settings); return `<tr><td>${esc(nameOf(player, playerIndex))}</td>${player.scores.map((score) => `<td>${score || "—"}</td>`).join("")}<td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
-    const leaders = rankedPlayers().map((item, rank) => `<tr><td>${rank + 1}</td><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${item.player.scores.filter(Boolean).length}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.total}</td></tr>`).join("");
-    $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(state.roundName)}</h1><p>${esc(state.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table><thead><tr><th>Place</th><th>Player</th><th>Group</th><th>Thru</th><th>Gross</th><th>Net</th><th>Tics</th></tr></thead><tbody>${leaders}</tbody></table><div class="print-columns"><section><h2>KPs</h2><table><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
+    const groupTables = R.GROUPS.filter((group) => groupPlayers(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>Each dot is one handicap stroke received.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.map((hole) => `<th>${hole.number}</th>`).join("")}<th>Gross</th><th>Net</th></tr></thead><tbody>${groupPlayers(group).map((player, playerIndex) => { const totals = E.playerTotals(player, E.COURSE, state.settings); return `<tr><td>${esc(nameOf(player, playerIndex))}</td>${player.scores.map((score, holeIndex) => `<td>${score || "—"}<span class="print-dots">${"●".repeat(strokesReceived(player, holeIndex))}</span></td>`).join("")}<td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
+    const leaders = rankedPlayers().map((item, rank) => `<tr><td>${rank + 1}</td><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${item.player.scores.filter(Boolean).length}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${item.ledger.net.toFixed(1)}</td></tr>`).join("");
+    $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(state.roundName)}</h1><p>${esc(state.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table><thead><tr><th>Place</th><th>Player</th><th>Group</th><th>Thru</th><th>Gross</th><th>Net</th><th>Points +</th><th>Points −</th><th>Net points</th></tr></thead><tbody>${leaders}</tbody></table><div class="print-columns"><section><h2>KPs</h2><table><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
   }
 
   async function checkVersion() {
