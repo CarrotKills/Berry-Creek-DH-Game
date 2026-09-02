@@ -31,6 +31,11 @@ assert.equal(E.isBirdie(4, 5), true);
 assert.equal(E.isBirdie(3, 5), false);
 assert.equal(E.isBirdie(5, 5), false);
 
+const partialRound = { id: "partial", ghin: 0, teeKey: "championship", scores: [4, 3, 5, ...Array(15).fill("")] };
+const partialTotals = E.playerTotals(partialRound, E.COURSE, settings);
+assert.equal(partialTotals.total.gross, 12);
+assert.equal(partialTotals.total.completed, false);
+
 const alice = { id: "a", name: "Alice", ghin: 0, teeKey: "championship", scores: E.COURSE.holes.map((h) => h.par), skins: Array(18).fill(false), sandies: Array(18).fill(false) };
 const bob = { id: "b", name: "Bob", ghin: 0, teeKey: "member", scores: E.COURSE.holes.map((h) => h.par), skins: Array(18).fill(false), sandies: Array(18).fill(false) };
 alice.scores[0] = 3;

@@ -2,12 +2,33 @@
   "use strict";
   const E = window.BerryCreekScoring;
   const R = window.BerryCreekRoundState;
-  const APP_VERSION = "9.2.0";
+  const L = window.BerryCreekLeaderboardSort;
+  const APP_VERSION = "9.4.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
   const ADMIN_PIN_KEY = "berry-creek-admin-pin";
   const KP_HOLES = [2, 8, 12, 17];
+  const LEADERBOARD_COLUMNS = [
+    { key: "player", label: "Player", firstDirection: "asc", text: true },
+    { key: "group", label: "Grp", firstDirection: "asc", text: true },
+    { key: "thru", label: "Thru", firstDirection: "desc" },
+    { key: "handicap", label: "Hcp", firstDirection: "asc" },
+    { key: "gross", label: "Gross", firstDirection: "asc" },
+    { key: "net", label: "Net", firstDirection: "asc" },
+    { key: "birdies", label: "Birdies", firstDirection: "desc" },
+    { key: "eagles", label: "Eagles+", firstDirection: "desc" },
+    { key: "skins", label: "Skins", firstDirection: "desc" },
+    { key: "front", label: "F", firstDirection: "desc" },
+    { key: "back", label: "B", firstDirection: "desc" },
+    { key: "totalNet", label: "Total", firstDirection: "desc" },
+    { key: "sandyPars", label: "Sandy par", firstDirection: "desc" },
+    { key: "sandyBirdies", label: "Sandy birdie", firstDirection: "desc" },
+    { key: "kps", label: "KP", firstDirection: "desc" },
+    { key: "positive", label: "Points +", firstDirection: "desc" },
+    { key: "negative", label: "Points −", firstDirection: "desc" },
+    { key: "netPoints", label: "Net points", firstDirection: "desc" }
+  ];
   const $ = (selector) => document.querySelector(selector);
   const teeEntries = Object.entries(E.COURSE.tees);
   const params = new URLSearchParams(location.search);
@@ -26,6 +47,7 @@
   let savedPlayers = [];
   let savedPlayerSearch = "";
   const savedPlayerGroupSelections = new Map();
+  let leaderboardSort = { key: "standing", direction: "asc" };
   let preferences = loadPreferences();
 
   function loadLocal() {
@@ -561,11 +583,13 @@
   }
 
   function renderGroupScorecard(players) {
-    $("#groupScorecardHead").innerHTML = `<tr><th>Player</th>${E.COURSE.holes.map((hole) => `<th>${hole.number}</th>`).join("")}<th>Out</th><th>In</th><th>Net</th></tr>`;
+    $("#groupScorecardHead").innerHTML = `<tr><th>Player</th>${E.COURSE.holes.map((hole) => `<th>${hole.number}</th>`).join("")}<th>Out</th><th>In</th><th class="running-total-heading">Running total</th><th>Net</th></tr>`;
     $("#groupScorecardBody").innerHTML = players.map((player) => {
       const totals = E.playerTotals(player, E.COURSE, state.settings);
+      const completedHoles = player.scores.filter((score) => Number.isFinite(Number(score)) && Number(score) >= 1).length;
+      const runningTotal = completedHoles ? totals.total.gross : "—";
       const cells = player.scores.map((score, index) => `<td><button type="button" class="score-cell ${index + 1 === selectedHole ? "active-hole" : ""}" data-card-hole="${index + 1}"><span class="score-cell-value">${score || "—"}</span>${handicapDots(player, index)}</button></td>`).join("");
-      return `<tr><td>${esc(nameOf(player, state.players.indexOf(player)))}</td>${cells}<td>${complete(totals.front.gross, totals.front.completed)}</td><td>${complete(totals.back.gross, totals.back.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`;
+      return `<tr><td>${esc(nameOf(player, state.players.indexOf(player)))}</td>${cells}<td>${complete(totals.front.gross, totals.front.completed)}</td><td>${complete(totals.back.gross, totals.back.completed)}</td><td class="running-total" aria-label="Running gross total after ${completedHoles} hole${completedHoles === 1 ? "" : "s"}">${runningTotal}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`;
     }).join("");
     document.querySelectorAll("[data-card-hole]").forEach((button) => button.addEventListener("click", () => { selectedHole = Number(button.dataset.cardHole); renderGroupScoring(); }));
   }
@@ -576,25 +600,88 @@
     document.querySelectorAll("[data-kp-hole]").forEach((select) => select.addEventListener("change", (event) => dispatch({ type: "SET_KP", payload: { hole: Number(event.target.dataset.kpHole), playerId: event.target.value } }, { admin: true })));
   }
 
-  function rankedPlayers() {
-    return state.players.map((player, index) => ({ player, index, totals: E.playerTotals(player, E.COURSE, state.settings), tics: E.ticSummary(player, state.players, E.COURSE, state.settings), ledger: E.pointsLedger(player, state.players, E.COURSE, state.settings) })).sort((a, b) => {
-      const aThru = a.player.scores.filter(Boolean).length;
-      const bThru = b.player.scores.filter(Boolean).length;
-      if (a.totals.total.completed !== b.totals.total.completed) return a.totals.total.completed ? -1 : 1;
-      if (a.totals.total.completed) return a.totals.total.net - b.totals.total.net;
-      return bThru - aThru || a.totals.total.net - b.totals.total.net;
+  function standingCompare(a, b) {
+    const aThru = a.sortValues.thru;
+    const bThru = b.sortValues.thru;
+    if (a.totals.total.completed !== b.totals.total.completed) return a.totals.total.completed ? -1 : 1;
+    if (a.totals.total.completed) return a.totals.total.net - b.totals.total.net || a.sortValues.player.localeCompare(b.sortValues.player);
+    return bThru - aThru || a.totals.total.net - b.totals.total.net || a.sortValues.player.localeCompare(b.sortValues.player);
+  }
+
+  function leaderboardItems() {
+    return state.players.map((player, index) => {
+      const totals = E.playerTotals(player, E.COURSE, state.settings);
+      const tics = E.ticSummary(player, state.players, E.COURSE, state.settings);
+      const ledger = E.pointsLedger(player, state.players, E.COURSE, state.settings);
+      return {
+        player,
+        index,
+        totals,
+        tics,
+        ledger,
+        sortValues: {
+          player: nameOf(player, index),
+          group: player.group,
+          thru: player.scores.filter(Boolean).length,
+          handicap: hcp(player),
+          gross: totals.total.completed ? totals.total.gross : null,
+          net: totals.total.completed ? totals.total.net : null,
+          birdies: tics.birdies,
+          eagles: tics.eagles,
+          skins: tics.skins,
+          front: tics.front,
+          back: tics.back,
+          totalNet: tics.totalNet,
+          sandyPars: tics.sandyPars,
+          sandyBirdies: tics.sandyBirdies,
+          kps: tics.kps,
+          positive: ledger.positive,
+          negative: ledger.negative,
+          netPoints: ledger.net
+        }
+      };
     });
+  }
+
+  function rankedPlayers() {
+    const items = leaderboardItems();
+    if (leaderboardSort.key === "standing") return items.sort(standingCompare);
+    return L.sortItems(items, leaderboardSort.key, leaderboardSort.direction, standingCompare);
+  }
+
+  function renderLeaderboardHeaders() {
+    $("#leaderboardHead").innerHTML = `<tr>${LEADERBOARD_COLUMNS.map((column) => {
+      const active = leaderboardSort.key === column.key;
+      const ariaSort = active ? ` aria-sort="${leaderboardSort.direction === "asc" ? "ascending" : "descending"}"` : "";
+      const icon = active ? (leaderboardSort.direction === "asc" ? "▲" : "▼") : "↕";
+      return `<th${ariaSort}><button class="leaderboard-sort-button" type="button" data-leaderboard-sort="${column.key}" title="Sort by ${esc(column.label)}">${esc(column.label)}<span class="sort-icon" aria-hidden="true">${icon}</span></button></th>`;
+    }).join("")}</tr>`;
+    document.querySelectorAll("[data-leaderboard-sort]").forEach((button) => button.addEventListener("click", () => {
+      const column = LEADERBOARD_COLUMNS.find((item) => item.key === button.dataset.leaderboardSort);
+      leaderboardSort = leaderboardSort.key === column.key
+        ? { key: column.key, direction: leaderboardSort.direction === "asc" ? "desc" : "asc" }
+        : { key: column.key, direction: column.firstDirection };
+      renderLeaderboard();
+    }));
+    const activeColumn = LEADERBOARD_COLUMNS.find((column) => column.key === leaderboardSort.key);
+    $("#resetLeaderboardSortBtn").hidden = !activeColumn;
+    $("#leaderboardSortStatus").textContent = activeColumn
+      ? `Sorted by ${activeColumn.label}, ${activeColumn.text ? (leaderboardSort.direction === "asc" ? "A to Z" : "Z to A") : (leaderboardSort.direction === "asc" ? "lowest to highest" : "highest to lowest")}.`
+      : "Live standings order. Select a column heading to sort.";
   }
 
   function renderLeaderboard() {
     renderKPs();
-    $("#leaderboardBody").innerHTML = rankedPlayers().map((item, rank) => {
+    renderLeaderboardHeaders();
+    const players = rankedPlayers();
+    const standingLeaderId = [...players].sort(standingCompare)[0]?.player.id;
+    $("#leaderboardBody").innerHTML = players.map((item) => {
       const tics = item.tics;
       const ledger = item.ledger;
-      const thru = item.player.scores.filter(Boolean).length;
+      const thru = item.sortValues.thru;
       const netClass = ledger.net > 0 ? "is-positive" : ledger.net < 0 ? "is-negative" : "";
       const netText = `${ledger.net > 0 ? "+" : ""}${ledger.net.toFixed(1)}`;
-      return `<tr class="${rank === 0 && item.totals.total.completed ? "leader-row-leading" : ""}"><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${hcp(item.player)}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.front}</td><td>${tics.back}</td><td>${tics.totalNet}</td><td>${tics.sandyPars}</td><td>${tics.sandyBirdies}</td><td>${tics.kps}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
+      return `<tr class="${item.player.id === standingLeaderId && item.totals.total.completed ? "leader-row-leading" : ""}"><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${hcp(item.player)}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.front}</td><td>${tics.back}</td><td>${tics.totalNet}</td><td>${tics.sandyPars}</td><td>${tics.sandyBirdies}</td><td>${tics.kps}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
     }).join("");
     $("#leaderboardEmpty").hidden = state.players.length > 0;
     $(".leaderboard-wrap").hidden = state.players.length === 0;
@@ -799,6 +886,7 @@
   $("#addPlayerBtn").addEventListener("click", addPlayer);
   $("#savedPlayerForm").addEventListener("submit", createSavedPlayer);
   $("#savedPlayerSearch").addEventListener("input", (event) => { savedPlayerSearch = event.target.value; renderSavedPlayers(); });
+  $("#resetLeaderboardSortBtn").addEventListener("click", () => { leaderboardSort = { key: "standing", direction: "asc" }; renderLeaderboard(); });
   $("#activeGroupSelect").addEventListener("change", (event) => { selectedGroup = event.target.value; const url = new URL(location.href); url.searchParams.set("group", selectedGroup); history.replaceState(null, "", url); renderGroupScoring(); });
   $("#holeSelect").addEventListener("change", (event) => moveToHole(Number(event.target.value)));
   $("#prevHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 1 ? 18 : selectedHole - 1));

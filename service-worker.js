@@ -1,5 +1,5 @@
-const CACHE = "berry-creek-dh-game-v9-2-0";
-const ASSETS = ["./", "./index.html", "./styles.css", "./score-engine.js", "./round-state.js", "./app.js", "./manifest.webmanifest", "./version.json", "./berry-creek-logo.jpeg"];
+const CACHE = "berry-creek-dh-game-v9-4-0";
+const ASSETS = ["./", "./index.html", "./styles.css", "./score-engine.js", "./round-state.js", "./leaderboard-sort.js", "./app.js", "./manifest.webmanifest", "./version.json", "./berry-creek-logo.jpeg"];
 self.addEventListener("install", (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS))));
 self.addEventListener("activate", (event) => event.waitUntil(Promise.all([caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))), self.clients.claim()])));
 self.addEventListener("message", (event) => { if (event.data?.type === "SKIP_WAITING") self.skipWaiting(); });

@@ -33,7 +33,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 3. Open the Tournament tab and use Copy link, Share, or QR code for each group. Group links open directly to scoring and keep the group selector fixed.
 4. Each scorekeeper enters all five gross scores for the current hole and marks sand saves and par-3 KPs.
 5. Everyone can view the live Leaderboard. A new KP claim on the same hole automatically replaces the previous holder.
-6. Use Show group scorecard during play to open or close the group's live-updating scorecard.
+6. Use Show group scorecard during play to open or close the group's live-updating scorecard. Its Running total column adds every gross score entered so far.
 7. Finalize and lock the round when scoring is complete. Only the organizer can unlock it.
 
 ## Handicap and tic rules
@@ -61,6 +61,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - Group QR images require an internet connection; Copy link remains available if the QR image service is unavailable.
 - Live and printed scorecards show one dot for every handicap stroke a player receives on each hole.
 - The leaderboard uses non-cash points: ordinary tics are 0.5 point; eagles and unique front/back/overall net wins are 1 point; tied net wins are 0.5 point.
+- Every leaderboard column is sortable in either direction. Use Reset sort to return to the live standings order.
 - Points + credits each earned point once for every other player. Points − shows the corresponding losses from all other players, and Net points shows the difference.
 
 The Reset button can clear only scores and tics while keeping the roster, or clear the entire app for a new event.
