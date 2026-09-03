@@ -155,7 +155,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .kp-scorecard-mark { display: inline-grid; place-items: center; min-width: 1.7rem; min-height: 0.95rem; margin-top: 0.12rem; padding: 0.08rem 0.2rem; border: 1px solid var(--forest); border-radius: 3px; color: var(--forest); background: var(--paper); font-size: 0.52rem; font-weight: 900; line-height: 1; letter-spacing: 0.02em; }
 .kp-scorecard-mark.is-current { color: #fff; background: var(--forest); }
 .kp-scorecard-mark.is-pending { border-width: 2px; }
-.kp-scorecard-fail { position: absolute; top: 50%; left: 50%; z-index: 4; width: 3.1rem; padding: 0.08rem 0.12rem; transform: translate(-50%, -50%) rotate(-28deg); color: var(--forest); background: rgba(255,255,255,0.88); font-size: 0.61rem; font-weight: 1000; line-height: 1; letter-spacing: -0.02em; white-space: nowrap; pointer-events: none; }
+.kp-scorecard-fail { position: absolute; top: 50%; left: 50%; z-index: 4; width: 3.1rem; padding: 0.08rem 0.12rem; transform: translate(-50%, -50%) rotate(-28deg); color: rgba(181,18,34,0.34); background: transparent; -webkit-text-stroke: 0.55px rgba(181,18,34,0.72); font-size: 0.61rem; font-weight: 1000; line-height: 1; letter-spacing: -0.02em; white-space: nowrap; pointer-events: none; }
 .kp-fails-count { color: var(--forest-2); font-weight: 900; }
 .score-mark { position: relative; border: 2px solid currentColor; }
 .score-mark--birdie, .score-mark--eagle { border-radius: 50%; }

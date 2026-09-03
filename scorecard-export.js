@@ -147,13 +147,16 @@
       ctx.save();
       ctx.translate(x + width / 2, y + height / 2);
       ctx.rotate(-Math.PI / 7);
-      ctx.fillStyle = "rgba(255,255,255,0.88)";
-      ctx.fillRect(-width * 0.46, -13, width * 0.92, 26);
       ctx.fillStyle = COLORS.red;
       ctx.font = "900 18px Arial, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
+      ctx.globalAlpha = 0.34;
       ctx.fillText("KP FAIL", 0, 1);
+      ctx.globalAlpha = 0.72;
+      ctx.strokeStyle = COLORS.red;
+      ctx.lineWidth = 0.9;
+      ctx.strokeText("KP FAIL", 0, 1);
       ctx.restore();
       return;
     }

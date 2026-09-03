@@ -49,5 +49,31 @@ assert.equal(model.playerRows[0].kpStatuses[11], "current");
   assert.equal(pdfBytes.subarray(0, 8).toString("latin1"), "%PDF-1.4");
   assert.match(pdfBytes.toString("latin1"), /\/Count 2/);
   assert.match(pdfBytes.toString("latin1"), /%%EOF/);
+  const drawCalls = [];
+  const savedAlpha = [];
+  const context = {
+    globalAlpha: 1,
+    measureText: (value) => ({ width: String(value).length * 10 }),
+    save() { savedAlpha.push(this.globalAlpha); },
+    restore() { this.globalAlpha = savedAlpha.pop() ?? 1; },
+    fillText(value) { drawCalls.push({ kind: "fill", value, alpha: this.globalAlpha }); },
+    strokeText(value) { drawCalls.push({ kind: "stroke", value, alpha: this.globalAlpha }); },
+    beginPath() {}, arc() {}, drawImage() {}, fill() {}, fillRect() {}, rotate() {}, stroke() {}, strokeRect() {}, translate() {}
+  };
+  global.document = { createElement: () => ({ getContext: () => context, toBlob: (callback) => callback(sampleJpeg) }) };
+  await X.createScorecardJpeg({
+    course: E.COURSE,
+    settings: { par: 72, allowance: 100, kpWinners: { 8: "another-player" }, kpClaims: { 8: ["export-player", "another-player"] } },
+    players: [player],
+    group: "A",
+    roundName: "Overlay Test",
+    date: "2026-09-03",
+    scoring: E
+  });
+  delete global.document;
+  const failFill = drawCalls.find((call) => call.kind === "fill" && call.value === "KP FAIL");
+  const failStroke = drawCalls.find((call) => call.kind === "stroke" && call.value === "KP FAIL");
+  assert.equal(failFill.alpha, 0.34);
+  assert.equal(failStroke.alpha, 0.72);
   console.log("Scorecard JPEG, PDF, and ZIP export tests passed.");
 })().catch((error) => { console.error(error); process.exit(1); });
