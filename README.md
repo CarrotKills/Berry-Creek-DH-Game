@@ -52,6 +52,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - A marked sand save becomes a sandy-par or sandy-birdie tic when the score qualifies.
 - Sand Save is available only after a par-or-better gross score. Changing that score to bogey or worse automatically clears the sand save.
 - Group scorecards use traditional score shapes: birdies are circled, eagles or better are double-circled, bogeys are squared, and double bogeys or worse are double-squared.
+- The selected group's live scorecard can be exported as a high-resolution JPEG styled after the club's physical card, including front/back panels, par, handicap, tee yardages, gross/net totals, handicap dots, and score shapes.
 - KPs can be marked during play on holes 2, 8, 12, and 17. Only one player can hold each KP at a time.
 - Entering a new eagle score plays an original three-second celebration on the scorekeeper's device.
 - Entering a new birdie score plays a short original two-note tweet sound on the scorekeeper's device.

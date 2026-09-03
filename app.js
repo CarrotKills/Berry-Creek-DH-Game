@@ -3,7 +3,8 @@
   const E = window.BerryCreekScoring;
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
-  const APP_VERSION = "9.5.4";
+  const X = window.BerryCreekScorecardExport;
+  const APP_VERSION = "9.5.5";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -585,6 +586,7 @@
     renderHoleBanner(players);
     $("#roundLockedNotice").hidden = !isLocked();
     const list = $("#groupScoreList");
+    $("#exportScorecardJpegBtn").disabled = players.length === 0;
     list.innerHTML = players.map((player) => {
       const index = selectedHole - 1;
       const hole = E.holesForPlayer(E.COURSE, player)[index];
@@ -1002,10 +1004,42 @@
   function csvCell(value) { return `"${String(value ?? "").replace(/"/g, '""')}"`; }
   function downloadBlob(contents, type, filename) {
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(new Blob([contents], { type }));
+    const blob = contents instanceof Blob ? contents : new Blob([contents], { type });
+    link.href = URL.createObjectURL(blob);
     link.download = filename;
+    link.hidden = true;
+    document.body.append(link);
     link.click();
-    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 30000);
+  }
+
+  async function exportGroupScorecardJpeg() {
+    const players = groupPlayers();
+    if (!players.length) return showToast(`No players are assigned to Group ${selectedGroup}.`, "error");
+    const button = $("#exportScorecardJpegBtn");
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = "Creating JPEG…";
+    try {
+      const jpeg = await X.createScorecardJpeg({
+        course: E.COURSE,
+        settings: state.settings,
+        players,
+        group: selectedGroup,
+        roundName: state.roundName,
+        date: state.date,
+        scoring: E,
+        logoUrl: "berry-creek-logo.jpeg"
+      });
+      downloadBlob(jpeg, "image/jpeg", `berry-creek-group-${selectedGroup.toLowerCase()}-${state.date || "scorecard"}.jpg`);
+      showToast(`Group ${selectedGroup} scorecard exported as a JPEG.`, "success");
+    } catch (error) {
+      showToast(error.message || "The scorecard JPEG could not be created.", "error");
+    } finally {
+      button.textContent = originalLabel;
+      button.disabled = groupPlayers().length === 0;
+    }
   }
 
   function downloadCsv() {
@@ -1074,6 +1108,7 @@
   $("#prevHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 1 ? 18 : selectedHole - 1));
   $("#nextHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 18 ? 1 : selectedHole + 1));
   $("#toggleScorecardBtn").addEventListener("click", () => { scorecardOpen = !scorecardOpen; updateScorecardVisibility(); });
+  $("#exportScorecardJpegBtn").addEventListener("click", exportGroupScorecardJpeg);
   $("#roundName").addEventListener("change", (event) => dispatch({ type: "SET_META", payload: { roundName: event.target.value } }));
   $("#roundDate").addEventListener("change", (event) => dispatch({ type: "SET_META", payload: { date: event.target.value } }));
   $("#allowance").addEventListener("change", (event) => dispatch({ type: "SET_ALLOWANCE", payload: { allowance: Number(event.target.value) } }));

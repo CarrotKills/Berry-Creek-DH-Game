@@ -1,0 +1,310 @@
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === "object" && module.exports) module.exports = api;
+  root.BerryCreekScorecardExport = api;
+})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  "use strict";
+
+  const COLORS = Object.freeze({
+    navy: "#34445d",
+    navyDark: "#27364c",
+    red: "#b51222",
+    ink: "#171717",
+    muted: "#5c6169",
+    line: "#cfd5df",
+    paper: "#ffffff",
+    tee: "#e2e9fb",
+    alternate: "#f5f6f8",
+    canvas: "#f7f6f2"
+  });
+
+  function sum(values) {
+    return values.reduce((total, value) => total + Number(value || 0), 0);
+  }
+
+  function countScores(scores, start, end) {
+    return scores.slice(start, end).filter((score) => Number.isFinite(Number(score)) && Number(score) >= 1).length;
+  }
+
+  function buildScorecardModel({ course, settings, players, group, roundName, date, scoring }) {
+    const roster = Array.isArray(players) ? players : [];
+    const teeKeys = [...new Set(roster.map((player) => player.teeKey || course.defaultTee))];
+    const teeRows = teeKeys.map((teeKey) => {
+      const tee = course.tees[teeKey] || course.tees[course.defaultTee];
+      return {
+        key: teeKey,
+        name: tee.name,
+        yards: tee.yards,
+        front: sum(tee.yards.slice(0, 9)),
+        back: sum(tee.yards.slice(9)),
+        total: sum(tee.yards)
+      };
+    });
+    const strokeSets = [...new Set(roster.map((player) => scoring.teeForPlayer(course, player).strokeSet))];
+    const strokeRows = strokeSets.map((set) => ({
+      name: strokeSets.length === 1 ? "Handicap" : `Hcp (${set === "upper" ? "Upper" : "Lower"})`,
+      indexes: course.strokeIndexes[set]
+    }));
+    const playerRows = roster.map((player, index) => {
+      const tee = scoring.teeForPlayer(course, player);
+      const holes = scoring.holesForPlayer(course, player);
+      const handicap = scoring.playingHandicap(player.ghin, settings, tee);
+      const totals = scoring.playerTotals(player, course, settings);
+      const scores = Array.from({ length: 18 }, (_, holeIndex) => player.scores?.[holeIndex] ?? "");
+      const frontCount = countScores(scores, 0, 9);
+      const backCount = countScores(scores, 9, 18);
+      const totalCount = frontCount + backCount;
+      return {
+        name: String(player.name || "").trim() || `Player ${index + 1}`,
+        teeName: tee.name,
+        handicap,
+        scores,
+        marks: scores.map((score, holeIndex) => scoring.scoreMark(score, course.holes[holeIndex].par)),
+        strokes: holes.map((hole) => Math.max(0, scoring.strokesForHole(handicap, hole.strokeIndex))),
+        frontGross: frontCount ? totals.front.gross : "",
+        backGross: backCount ? totals.back.gross : "",
+        totalGross: totalCount ? totals.total.gross : "",
+        totalNet: totalCount ? totals.total.net : ""
+      };
+    });
+    const pars = course.holes.map((hole) => hole.par);
+    return {
+      courseName: course.name,
+      roundName: String(roundName || "Berry Creek Round"),
+      date: String(date || ""),
+      group: String(group || "A"),
+      pars,
+      frontPar: sum(pars.slice(0, 9)),
+      backPar: sum(pars.slice(9)),
+      totalPar: sum(pars),
+      teeRows,
+      strokeRows,
+      playerRows
+    };
+  }
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Club logo could not be loaded"));
+      image.src = src;
+    });
+  }
+
+  function fitText(ctx, text, maxWidth) {
+    const value = String(text ?? "");
+    if (ctx.measureText(value).width <= maxWidth) return value;
+    let shortened = value;
+    while (shortened.length > 1 && ctx.measureText(`${shortened}…`).width > maxWidth) shortened = shortened.slice(0, -1);
+    return `${shortened}…`;
+  }
+
+  function drawCell(ctx, x, y, width, height, options = {}) {
+    ctx.fillStyle = options.fill || COLORS.paper;
+    ctx.fillRect(x, y, width, height);
+    ctx.strokeStyle = options.line || COLORS.line;
+    ctx.lineWidth = options.lineWidth || 2;
+    ctx.strokeRect(x, y, width, height);
+  }
+
+  function drawCenteredText(ctx, text, x, y, width, height, options = {}) {
+    ctx.fillStyle = options.color || COLORS.ink;
+    ctx.font = options.font || "700 30px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(fitText(ctx, text, width - 16), x + width / 2, y + height / 2 + (options.offsetY || 0));
+  }
+
+  function drawScoreSymbol(ctx, centerX, centerY, mark) {
+    if (!["birdie", "eagle", "bogey", "double-bogey"].includes(mark)) return;
+    ctx.save();
+    ctx.strokeStyle = COLORS.ink;
+    ctx.lineWidth = 3;
+    if (mark === "birdie" || mark === "eagle") {
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, 25, 0, Math.PI * 2);
+      ctx.stroke();
+      if (mark === "eagle") {
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 32, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else {
+      ctx.strokeRect(centerX - 25, centerY - 25, 50, 50);
+      if (mark === "double-bogey") ctx.strokeRect(centerX - 32, centerY - 32, 64, 64);
+    }
+    ctx.restore();
+  }
+
+  function drawPlayerScore(ctx, value, mark, strokes, x, y, width, height) {
+    const centerX = x + width / 2;
+    const centerY = y + height / 2 + 3;
+    drawScoreSymbol(ctx, centerX, centerY, mark);
+    drawCenteredText(ctx, value === "" ? "—" : value, x, y, width, height, {
+      color: value === "" ? "#8b9098" : COLORS.ink,
+      font: "700 31px Arial, sans-serif",
+      offsetY: 3
+    });
+    if (strokes > 0) {
+      const spacing = 13;
+      const startX = centerX - ((strokes - 1) * spacing) / 2;
+      ctx.fillStyle = COLORS.red;
+      for (let dot = 0; dot < strokes; dot += 1) {
+        ctx.beginPath();
+        ctx.arc(startX + dot * spacing, y + 10, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  function formatDate(value) {
+    if (!value) return "";
+    const parsed = new Date(`${value}T12:00:00`);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric", year: "numeric" }).format(parsed);
+  }
+
+  function panelHeight(model) {
+    return 72 + 68 + model.strokeRows.length * 58 + model.teeRows.length * 58 + model.playerRows.length * 86;
+  }
+
+  function drawPanel(ctx, model, startHole, y, dimensions) {
+    const { margin, width, labelWidth, valueWidth } = dimensions;
+    const segment = startHole === 0 ? "OUT" : "IN";
+    const holes = Array.from({ length: 9 }, (_, index) => startHole + index);
+    const rowValues = (holeValues, segmentValue, totalValue = "", netValue = "") => [
+      ...holes.map((holeIndex) => holeValues[holeIndex]), segmentValue, totalValue, netValue
+    ];
+    const drawStandardRow = (label, values, rowY, height, fill, font = "700 28px Arial, sans-serif") => {
+      drawCell(ctx, margin, rowY, labelWidth, height, { fill });
+      ctx.fillStyle = COLORS.ink;
+      ctx.font = "700 27px Arial, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(fitText(ctx, label, labelWidth - 34), margin + 22, rowY + height / 2);
+      values.forEach((value, index) => {
+        const x = margin + labelWidth + index * valueWidth;
+        drawCell(ctx, x, rowY, valueWidth, height, { fill });
+        drawCenteredText(ctx, value, x, rowY, valueWidth, height, { font });
+      });
+    };
+
+    const headings = [...holes.map((holeIndex) => model.pars[holeIndex] ? holeIndex + 1 : ""), segment, "TOT", "NET"];
+    drawCell(ctx, margin, y, labelWidth, 72, { fill: COLORS.navy, line: COLORS.navyDark });
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "800 32px Arial, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Hole", margin + 22, y + 36);
+    headings.forEach((heading, index) => {
+      const x = margin + labelWidth + index * valueWidth;
+      drawCell(ctx, x, y, valueWidth, 72, { fill: COLORS.navy, line: COLORS.navyDark });
+      drawCenteredText(ctx, heading, x, y, valueWidth, 72, { color: "#ffffff", font: "800 32px Arial, sans-serif" });
+    });
+    let rowY = y + 72;
+    const segmentPar = startHole === 0 ? model.frontPar : model.backPar;
+    drawStandardRow("Par", rowValues(model.pars, segmentPar, model.totalPar), rowY, 68, COLORS.paper, "700 30px Arial, sans-serif");
+    rowY += 68;
+    model.strokeRows.forEach((strokeRow) => {
+      drawStandardRow(strokeRow.name, rowValues(strokeRow.indexes, ""), rowY, 58, COLORS.paper, "700 27px Arial, sans-serif");
+      rowY += 58;
+    });
+    model.teeRows.forEach((teeRow) => {
+      const segmentYards = startHole === 0 ? teeRow.front : teeRow.back;
+      drawStandardRow(teeRow.name, rowValues(teeRow.yards, segmentYards, teeRow.total), rowY, 58, COLORS.tee, "700 26px Arial, sans-serif");
+      rowY += 58;
+    });
+    model.playerRows.forEach((player, playerIndex) => {
+      const fill = playerIndex % 2 ? COLORS.alternate : COLORS.paper;
+      drawCell(ctx, margin, rowY, labelWidth, 86, { fill });
+      ctx.fillStyle = COLORS.ink;
+      ctx.font = "700 28px Arial, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(fitText(ctx, player.name, labelWidth - 34), margin + 22, rowY + 31);
+      ctx.fillStyle = COLORS.muted;
+      ctx.font = "500 20px Arial, sans-serif";
+      ctx.fillText(fitText(ctx, `${player.teeName} · Hcp ${player.handicap < 0 ? `+${Math.abs(player.handicap)}` : player.handicap}`, labelWidth - 34), margin + 22, rowY + 61);
+      const segmentGross = startHole === 0 ? player.frontGross : player.backGross;
+      const values = rowValues(player.scores, segmentGross, player.totalGross, player.totalNet);
+      values.forEach((value, index) => {
+        const x = margin + labelWidth + index * valueWidth;
+        drawCell(ctx, x, rowY, valueWidth, 86, { fill });
+        if (index < 9) {
+          const holeIndex = startHole + index;
+          drawPlayerScore(ctx, value, player.marks[holeIndex], player.strokes[holeIndex], x, rowY, valueWidth, 86);
+        } else {
+          drawCenteredText(ctx, value === "" ? "—" : value, x, rowY, valueWidth, 86, { font: "800 30px Arial, sans-serif" });
+        }
+      });
+      rowY += 86;
+    });
+    ctx.strokeStyle = COLORS.navyDark;
+    ctx.lineWidth = 4;
+    ctx.strokeRect(margin, y, width - margin * 2, rowY - y);
+    return rowY;
+  }
+
+  async function createScorecardJpeg(options) {
+    if (typeof document === "undefined") throw new Error("JPEG export requires a web browser");
+    const model = buildScorecardModel(options);
+    if (!model.playerRows.length) throw new Error(`No players are assigned to Group ${model.group}`);
+    const width = 2400;
+    const margin = 90;
+    const labelWidth = 348;
+    const valueWidth = (width - margin * 2 - labelWidth) / 12;
+    const top = 265;
+    const gap = 42;
+    const footerHeight = 130;
+    const onePanelHeight = panelHeight(model);
+    const height = top + onePanelHeight * 2 + gap + footerHeight;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("This browser could not create the scorecard image");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.fillStyle = COLORS.canvas;
+    ctx.fillRect(0, 0, width, height);
+
+    const logo = options.logoUrl ? await loadImage(options.logoUrl).catch(() => null) : null;
+    if (logo) {
+      const logoHeight = 190;
+      const logoWidth = logoHeight * (logo.width / logo.height);
+      ctx.drawImage(logo, margin, 34, logoWidth, logoHeight);
+    }
+    const titleX = logo ? 390 : margin;
+    ctx.fillStyle = COLORS.navyDark;
+    ctx.font = "700 34px Georgia, serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(fitText(ctx, model.courseName.toUpperCase(), width - titleX - margin), titleX, 72);
+    ctx.fillStyle = COLORS.red;
+    ctx.font = "800 58px Georgia, serif";
+    ctx.fillText(fitText(ctx, `GROUP ${model.group} SCORECARD`, width - titleX - margin), titleX, 133);
+    ctx.fillStyle = COLORS.muted;
+    ctx.font = "600 28px Arial, sans-serif";
+    const meta = [model.roundName, formatDate(model.date)].filter(Boolean).join("  ·  ");
+    ctx.fillText(fitText(ctx, meta, width - titleX - margin), titleX, 188);
+    ctx.fillStyle = COLORS.red;
+    ctx.fillRect(margin, 236, width - margin * 2, 7);
+
+    const dimensions = { margin, width, labelWidth, valueWidth };
+    const frontBottom = drawPanel(ctx, model, 0, top, dimensions);
+    const backBottom = drawPanel(ctx, model, 9, frontBottom + gap, dimensions);
+    ctx.fillStyle = COLORS.muted;
+    ctx.font = "600 24px Arial, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Red dots show handicap strokes received.", margin, backBottom + 50);
+    ctx.fillText("Birdie: circle  ·  Eagle or better: double circle  ·  Bogey: square  ·  Double bogey or higher: double square", margin, backBottom + 91);
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The scorecard JPEG could not be created")), "image/jpeg", 0.94);
+    });
+  }
+
+  return { buildScorecardModel, createScorecardJpeg };
+});

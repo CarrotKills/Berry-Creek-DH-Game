@@ -26,7 +26,9 @@ async function playerRequest(path = "", options = {}) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.5.4");
+  assert.equal(config.appVersion, "9.5.5");
+  const scorecardExportAsset = await fetch(`${base}/scorecard-export.js`);
+  assert.equal(scorecardExportAsset.status, 200);
   const sortingAsset = await fetch(`${base}/leaderboard-sort.js`);
   assert.equal(sortingAsset.status, 200);
   const wrongPin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "wrong" }) });
