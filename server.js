@@ -12,7 +12,7 @@ const RoundHistoryDatabase = require("./round-history-database.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.5.2";
+const APP_VERSION = "9.5.3";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -191,7 +191,7 @@ const server = http.createServer(async (req, res) => {
       const scorerAuthorized = scoringTokenMatches(scoringGroup, req.headers["x-scoring-token"]);
 
       if (Round.isAdminAction(action.type) && !adminAuthorized) return sendJson(res, 401, { ok: false, error: "Organizer PIN required" });
-      if (state.settings.locked && action.type !== "SET_LOCKED") return sendJson(res, 423, { ok: false, error: "This round is finalized and locked" });
+      if (state.settings.locked && !["SET_LOCKED", "CLEAR_ROUND"].includes(action.type)) return sendJson(res, 423, { ok: false, error: "This round is finalized and locked" });
       if (Round.isScoringAction(action.type) && !adminOverride && (!scorerAuthorized || !scoringGroupAllowed(action, scoringGroup))) {
         return sendJson(res, 403, { ok: false, error: "A current group scorekeeper link or organizer access is required" });
       }

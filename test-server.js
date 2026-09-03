@@ -26,7 +26,7 @@ async function playerRequest(path = "", options = {}) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.5.2");
+  assert.equal(config.appVersion, "9.5.3");
   const sortingAsset = await fetch(`${base}/leaderboard-sort.js`);
   assert.equal(sortingAsset.status, 200);
   const wrongPin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "wrong" }) });
@@ -91,6 +91,10 @@ async function playerRequest(path = "", options = {}) {
   assert.equal(resetState.players.every((player) => player.scores.every((score) => score === "")), true);
   assert.equal(resetState.auditLog.length > 0, true);
   await reader.cancel();
+  await action("SET_LOCKED", { locked: true });
   await action("CLEAR_ROUND");
+  const newRoundState = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(newRoundState.players.length, 0);
+  assert.equal(newRoundState.settings.locked, false);
   console.log("Concurrent API and live-update tests passed.");
 })().catch((error) => { console.error(error); process.exit(1); });

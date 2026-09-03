@@ -71,6 +71,8 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - Every leaderboard column is sortable in either direction. Use Reset sort to return to the live standings order.
 - Points + credits each earned point once for every other player. Points − shows the corresponding losses from all other players, and Net points shows the difference.
 
-The Reset button can clear only scores and tics while keeping the roster, or clear the entire app for a new event.
+Under Settings, **Start new round** clears the active roster, group assignments, scores, KPs, and tics, then returns the organizer to Players and Groups to build the next event. It remains available after a round is finalized and locked. Saved players and historical saved rounds are not deleted.
+
+The Reset button on the Players tab can also clear only scores and tics while keeping the active roster, or clear the entire active event.
 
 By default, the server saves event data to `data/round.json`, the reusable player roster to `data/players.sqlite`, and historical rounds to `data/rounds.sqlite`. If `PLAYERS_DB_FILE` points to persistent storage, the other two files are placed in that same directory. `DATA_DIR`, `ROUND_FILE`, and `ROUND_HISTORY_DB_FILE` can also override those locations individually. Use Export backup during the round for an additional copy of the event data.

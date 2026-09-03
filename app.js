@@ -3,7 +3,7 @@
   const E = window.BerryCreekScoring;
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
-  const APP_VERSION = "9.5.2";
+  const APP_VERSION = "9.5.3";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -214,11 +214,12 @@
 
   async function dispatch(action, options = {}) {
     const admin = options.admin ?? R.isAdminAction(action.type);
-    if (spectatorMode) return showToast("This leaderboard link is view only.", "error");
-    if (isLocked() && action.type !== "SET_LOCKED") return showToast("The round is finalized and locked.", "error");
+    if (spectatorMode) { showToast("This leaderboard link is view only.", "error"); return false; }
+    if (isLocked() && !["SET_LOCKED", "CLEAR_ROUND"].includes(action.type)) { showToast("The round is finalized and locked.", "error"); return false; }
     if (admin && !adminUnlocked) {
       openAdminDialog();
-      return showToast("Organizer access is required for that change.", "error");
+      showToast("Organizer access is required for that change.", "error");
+      return false;
     }
     const localAction = stampedAction(action, admin || (adminUnlocked && !scorerLinkLocked && R.isScoringAction(action.type)));
     state = R.applyAction(state, localAction);
@@ -229,20 +230,24 @@
       queue.push({ action, admin });
       saveQueue(queue);
       setConnection("offline");
-      return showToast("Saved on this device and waiting to sync.");
+      showToast("Saved on this device and waiting to sync.");
+      return true;
     }
     try {
       await postAction(action, admin);
+      return true;
     } catch (error) {
       if (error.serverRejected) {
         await refreshState().catch(() => {});
         showToast(error.message, "error");
+        return false;
       } else {
         const queue = loadQueue();
         queue.push({ action, admin });
         saveQueue(queue);
         setConnection("reconnecting");
         showToast("Connection lost. The change is waiting to sync.", "error");
+        return true;
       }
     }
   }
@@ -915,9 +920,10 @@
     document.querySelectorAll(".admin-control").forEach((control) => {
       const isRoundLockControl = control.id === "toggleRoundLockBtn";
       const isSaveRoundControl = control.id === "saveRoundBtn";
+      const isNewRoundControl = control.id === "startNewRoundBtn";
       const atPlayerLimit = control.id === "addPlayerBtn" && state.players.length >= R.MAX_PLAYERS;
       const noRoundToSave = isSaveRoundControl && !state.players.length;
-      control.disabled = !adminUnlocked || (isLocked() && !isRoundLockControl && !isSaveRoundControl) || atPlayerLimit || noRoundToSave;
+      control.disabled = !adminUnlocked || (isLocked() && !isRoundLockControl && !isSaveRoundControl && !isNewRoundControl) || atPlayerLimit || noRoundToSave;
     });
     $("#lockStatus").hidden = !isLocked();
     $("#spectatorStatus").hidden = !spectatorMode;
@@ -1090,10 +1096,21 @@
   $("#printBtn").addEventListener("click", () => { preparePrintReport(); window.print(); });
   $("#importInput").addEventListener("change", async (event) => { try { const imported = R.normalizeState(JSON.parse(await event.target.files[0].text())); await dispatch({ type: "REPLACE_ROUND", payload: { state: imported } }); } catch (_) { showToast("That file is not a valid Berry Creek backup.", "error"); } event.target.value = ""; });
   const resetDialog = $("#confirmDialog");
-  $("#resetAppBtn").addEventListener("click", () => resetDialog.showModal());
+  $("#resetAppBtn").addEventListener("click", () => { resetDialog.returnValue = "cancel"; resetDialog.showModal(); });
   resetDialog.addEventListener("close", () => {
     if (resetDialog.returnValue === "scores") { selectedHole = 1; dispatch({ type: "RESET_SCORES" }); }
     if (resetDialog.returnValue === "everything") { selectedHole = 1; selectedGroup = "A"; dispatch({ type: "CLEAR_ROUND" }); }
+  });
+  const newRoundDialog = $("#newRoundDialog");
+  $("#startNewRoundBtn").addEventListener("click", () => { newRoundDialog.returnValue = "cancel"; newRoundDialog.showModal(); });
+  newRoundDialog.addEventListener("close", async () => {
+    if (newRoundDialog.returnValue !== "confirm") return;
+    selectedHole = 1;
+    selectedGroup = "A";
+    savedPlayerGroupSelections.clear();
+    if (!await dispatch({ type: "CLEAR_ROUND" })) return;
+    switchView("setup");
+    showToast("New round ready. Saved players and round history were kept.", "success");
   });
   $("#clearHistoryBtn").addEventListener("click", () => { if (window.confirm("Clear the complete change history?")) dispatch({ type: "CLEAR_AUDIT" }); });
   $("#checkUpdateBtn").addEventListener("click", async () => { await serviceWorkerRegistration?.update(); const current = await checkVersion(); if (current) showToast("This device already has the current version.", "success"); });
