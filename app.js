@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.6.0";
+  const APP_VERSION = "9.6.2";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -26,6 +26,7 @@
     { key: "sandyPars", label: "Sandy par", firstDirection: "desc" },
     { key: "sandyBirdies", label: "Sandy birdie", firstDirection: "desc" },
     { key: "kps", label: "KP", firstDirection: "desc" },
+    { key: "kpFails", label: "KP Fails", firstDirection: "desc" },
     { key: "positive", label: "Points +", firstDirection: "desc" },
     { key: "negative", label: "Points −", firstDirection: "desc" },
     { key: "netPoints", label: "Net points", firstDirection: "desc" }
@@ -533,7 +534,9 @@
     const details = [...new Set(players.map((player) => { const hole = E.holesForPlayer(E.COURSE, player)[selectedHole - 1]; return `${teeOf(player).name}: ${hole.yards} yds · SI ${hole.strokeIndex}`; }))];
     const kpWinnerId = state.settings.kpWinners[String(selectedHole)];
     const kpWinner = state.players.find((player) => player.id === kpWinnerId);
-    const kpStatus = KP_HOLES.includes(selectedHole) ? `<span class="kp-status">KP: ${kpWinner ? esc(nameOf(kpWinner, state.players.indexOf(kpWinner))) : "Open"}</span>` : "";
+    const kpClaimState = kpWinner ? E.kpClaimStatus(kpWinner, E.COURSE, state.settings, selectedHole - 1) : "none";
+    const kpDetail = kpClaimState === "current" ? " · 1 tic" : kpClaimState === "failed" ? " · KP FAIL · 0 tics" : kpClaimState === "pending" ? " · score pending · 0 tics" : "";
+    const kpStatus = KP_HOLES.includes(selectedHole) ? `<span class="kp-status">KP: ${kpWinner ? `${esc(nameOf(kpWinner, state.players.indexOf(kpWinner)))}${kpDetail}` : "Open"}</span>` : "";
     const skin = E.skinResult(state.players, E.COURSE, state.settings, selectedHole - 1);
     const skinWinner = state.players.find((player) => player.id === skin.winnerId);
     const skinText = skin.status === "awarded" ? `Skin: ${esc(nameOf(skinWinner, state.players.indexOf(skinWinner)))}` : skin.status === "tie" ? "Skin: No skin (tie)" : "Skin: Pending";
@@ -635,6 +638,7 @@
     $("#roundLockedNotice").hidden = !isLocked();
     const list = $("#groupScoreList");
     $("#exportScorecardJpegBtn").disabled = players.length === 0;
+    $("#exportScorecardPdfBtn").disabled = players.length === 0;
     const canUndo = state.undoStack.some((entry) => entry.group === selectedGroup);
     $("#undoScoreBtn").disabled = !canScore() || !canUndo;
     const holeComplete = players.length > 0 && players.every((player) => player.scores[selectedHole - 1] !== "");
@@ -654,6 +658,10 @@
       const canMarkSandy = Number(gross) >= 1 && Number(gross) <= hole.par;
       const isKpHole = KP_HOLES.includes(selectedHole);
       const hasKp = state.settings.kpWinners[String(selectedHole)] === player.id;
+      const kpClaimState = E.kpClaimStatus(player, E.COURSE, state.settings, index);
+      const kpNote = kpClaimState === "failed"
+        ? `<span class="prior-kp-note kp-fail-note">KP FAIL · ${hasKp ? "bogey or worse" : "supplanted"} · 0 tics</span>`
+        : kpClaimState === "pending" ? '<span class="prior-kp-note">KP pending score · 0 tics</span>' : "";
       const hasSkin = E.skinResult(state.players, E.COURSE, state.settings, index).winnerId === player.id;
       const disabled = canScore() ? "" : "disabled";
       const syncState = scoreSyncStatus.get(scoreSyncKey(player.id, index));
@@ -662,7 +670,7 @@
         <div class="score-player"><strong>${esc(nameOf(player, state.players.indexOf(player)))}</strong><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${strokes > 0 ? `gets ${strokes}` : strokes < 0 ? `gives ${Math.abs(strokes)}` : "no stroke"}</span></div>
         <div class="score-entry-wrap"><div class="score-stepper"><button type="button" data-delta="-1" ${disabled} aria-label="Decrease score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" ${disabled} aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" ${disabled} aria-label="Increase score">+</button></div>${syncLabel ? `<span class="score-sync score-sync--${syncState}" role="status">${syncLabel}</span>` : ""}</div>
         <div class="net-box"><span>Net</span><strong>${net ?? "—"}</strong></div>
-        <div class="card-tics">${achievement ? `<span class="auto-tic">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${disabled}>Sand save</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${disabled}>KP</label>` : ""}${sandyPar ? '<span class="auto-tic">Sandy par ✓</span>' : ""}${sandyBirdie ? '<span class="auto-tic">Sandy birdie ✓</span>' : ""}</div>
+        <div class="card-tics">${achievement ? `<span class="auto-tic">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${disabled}>Sand save</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${disabled}>KP</label>` : ""}${kpNote}${sandyPar ? '<span class="auto-tic">Sandy par ✓</span>' : ""}${sandyBirdie ? '<span class="auto-tic">Sandy birdie ✓</span>' : ""}</div>
       </article>`;
     }).join("");
     list.querySelectorAll(".group-score-card").forEach((card) => {
@@ -701,13 +709,21 @@
     return mark && mark !== "par" ? ` score-mark score-mark--${mark}` : "";
   }
 
+  function kpScorecardMark(player, holeIndex) {
+    const status = E.kpClaimStatus(player, E.COURSE, state.settings, holeIndex);
+    if (status === "none") return "";
+    if (status === "failed") return '<span class="kp-scorecard-fail" aria-label="KP FAIL; 0 tics" title="KP FAIL; 0 tics">KP FAIL</span>';
+    const label = status === "current" ? "Current qualifying KP; 1 tic" : "Current KP; score pending; 0 tics";
+    return `<span class="kp-scorecard-mark ${status === "current" ? "is-current" : "is-pending"}" aria-label="${label}" title="${label}">KP</span>`;
+  }
+
   function renderGroupScorecard(players) {
     $("#groupScorecardHead").innerHTML = `<tr><th>Player</th>${E.COURSE.holes.map((hole) => `<th>${hole.number}</th>`).join("")}<th>Out</th><th>In</th><th class="running-total-heading">Running total</th><th>Net</th></tr>`;
     $("#groupScorecardBody").innerHTML = players.map((player) => {
       const totals = E.playerTotals(player, E.COURSE, state.settings);
       const completedHoles = player.scores.filter((score) => Number.isFinite(Number(score)) && Number(score) >= 1).length;
       const runningTotal = completedHoles ? totals.total.gross : "—";
-      const cells = player.scores.map((score, index) => `<td><button type="button" class="score-cell ${index + 1 === selectedHole ? "active-hole" : ""}" data-card-hole="${index + 1}"><span class="score-cell-value${scoreMarkClasses(score, index)}">${score || "—"}</span>${handicapDots(player, index)}</button></td>`).join("");
+      const cells = player.scores.map((score, index) => `<td><button type="button" class="score-cell ${index + 1 === selectedHole ? "active-hole" : ""}" data-card-hole="${index + 1}"><span class="score-cell-value${scoreMarkClasses(score, index)}">${score || "—"}</span>${handicapDots(player, index)}${kpScorecardMark(player, index)}</button></td>`).join("");
       return `<tr><td>${esc(nameOf(player, state.players.indexOf(player)))}</td>${cells}<td>${complete(totals.front.gross, totals.front.completed)}</td><td>${complete(totals.back.gross, totals.back.completed)}</td><td class="running-total" aria-label="Running gross total after ${completedHoles} hole${completedHoles === 1 ? "" : "s"}">${runningTotal}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`;
     }).join("");
     document.querySelectorAll("[data-card-hole]").forEach((button) => button.addEventListener("click", () => { selectedHole = Number(button.dataset.cardHole); renderGroupScoring(); }));
@@ -715,7 +731,13 @@
 
   function renderKPs() {
     const canAdminEdit = adminUnlocked && !isLocked();
-    $("#kpPanel").innerHTML = KP_HOLES.map((hole) => `<div class="kp-card"><label>Hole ${hole} KP<select data-kp-hole="${hole}" ${canAdminEdit ? "" : "disabled"}><option value="">No winner</option>${state.players.map((player, index) => `<option value="${player.id}" ${state.settings.kpWinners[String(hole)] === player.id ? "selected" : ""}>${esc(nameOf(player, index))} · ${player.group}</option>`).join("")}</select></label></div>`).join("");
+    $("#kpPanel").innerHTML = KP_HOLES.map((hole) => {
+      const winnerId = state.settings.kpWinners[String(hole)];
+      const player = state.players.find((item) => item.id === winnerId);
+      const status = player ? E.kpClaimStatus(player, E.COURSE, state.settings, hole - 1) : "none";
+      const statusText = status === "current" ? "Qualifying KP · 1 tic" : status === "failed" ? "KP FAIL · 0 tics" : status === "pending" ? "Score pending · 0 tics" : "Open";
+      return `<div class="kp-card"><label>Hole ${hole} KP<select data-kp-hole="${hole}" ${canAdminEdit ? "" : "disabled"}><option value="">No winner</option>${state.players.map((item, index) => `<option value="${item.id}" ${winnerId === item.id ? "selected" : ""}>${esc(nameOf(item, index))} · ${item.group}</option>`).join("")}</select></label><span class="kp-card-status ${status === "failed" ? "is-failed" : ""}">${statusText}</span></div>`;
+    }).join("");
     document.querySelectorAll("[data-kp-hole]").forEach((select) => select.addEventListener("change", (event) => dispatch({ type: "SET_KP", payload: { hole: Number(event.target.dataset.kpHole), playerId: event.target.value } }, { admin: true })));
   }
 
@@ -754,6 +776,7 @@
           sandyPars: tics.sandyPars,
           sandyBirdies: tics.sandyBirdies,
           kps: tics.kps,
+          kpFails: tics.kpFails,
           positive: ledger.positive,
           negative: ledger.negative,
           netPoints: ledger.net
@@ -800,7 +823,7 @@
       const thru = item.sortValues.thru;
       const netClass = ledger.net > 0 ? "is-positive" : ledger.net < 0 ? "is-negative" : "";
       const netText = `${ledger.net > 0 ? "+" : ""}${ledger.net.toFixed(1)}`;
-      return `<tr class="${item.player.id === standingLeaderId && item.totals.total.completed ? "leader-row-leading" : ""}"><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${displayPlayingHandicap(hcp(item.player))}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.front}</td><td>${tics.back}</td><td>${tics.totalNet}</td><td>${tics.sandyPars}</td><td>${tics.sandyBirdies}</td><td>${tics.kps}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
+      return `<tr class="${item.player.id === standingLeaderId && item.totals.total.completed ? "leader-row-leading" : ""}"><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${displayPlayingHandicap(hcp(item.player))}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.front}</td><td>${tics.back}</td><td>${tics.totalNet}</td><td>${tics.sandyPars}</td><td>${tics.sandyBirdies}</td><td>${tics.kps}</td><td class="kp-fails-count">${tics.kpFails}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
     }).join("");
     $("#leaderboardEmpty").hidden = state.players.length > 0;
     $(".leaderboard-wrap").hidden = state.players.length === 0;
@@ -921,9 +944,10 @@
       const tee = E.teeForPlayer(E.COURSE, player);
       const handicap = E.playingHandicap(player.ghin, roundState.settings, tee);
       const totals = E.playerTotals(player, E.COURSE, roundState.settings);
+      const tics = E.ticSummary(player, roundState.players, E.COURSE, roundState.settings);
       const ledger = E.pointsLedger(player, roundState.players, E.COURSE, roundState.settings);
       const netClass = ledger.net > 0 ? "is-positive" : ledger.net < 0 ? "is-negative" : "";
-      return `<tr><td>${esc(player.name.trim() || `Player ${index + 1}`)}</td><td>${player.group}</td><td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${ledger.net > 0 ? "+" : ""}${ledger.net.toFixed(1)}</td></tr>`;
+      return `<tr><td>${esc(player.name.trim() || `Player ${index + 1}`)}</td><td>${player.group}</td><td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td><td>${tics.kps}</td><td class="kp-fails-count">${tics.kpFails}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${ledger.net > 0 ? "+" : ""}${ledger.net.toFixed(1)}</td></tr>`;
     }).join("");
   }
 
@@ -963,7 +987,9 @@
       const groups = R.GROUPS.filter((group) => roundState.players.some((player) => player.group === group));
       $("#savedRoundGroupSelect").innerHTML = groups.map((group) => `<option value="${group}">Group ${group}</option>`).join("");
       $("#exportSavedRoundJpegBtn").disabled = groups.length === 0;
+      $("#exportSavedRoundPdfBtn").disabled = groups.length === 0;
       $("#exportAllSavedRoundJpegsBtn").disabled = groups.length === 0;
+      $("#exportAllSavedRoundPdfBtn").disabled = groups.length === 0;
       $("#savedRoundDialog").showModal();
     } catch (error) {
       showToast(error.message, "error");
@@ -1162,6 +1188,35 @@
     }
   }
 
+  async function exportGroupScorecardPdf() {
+    const players = groupPlayers();
+    if (!players.length) return showToast(`No players are assigned to Group ${selectedGroup}.`, "error");
+    const button = $("#exportScorecardPdfBtn");
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = "Creating PDF…";
+    try {
+      const jpeg = await X.createScorecardJpeg({
+        course: E.COURSE,
+        settings: state.settings,
+        players,
+        group: selectedGroup,
+        roundName: state.roundName,
+        date: state.date,
+        scoring: E,
+        logoUrl: "berry-creek-logo.jpeg"
+      });
+      const pdf = await X.createScorecardPdf(jpeg);
+      downloadBlob(pdf, "application/pdf", `berry-creek-group-${selectedGroup.toLowerCase()}-${state.date || "scorecard"}.pdf`);
+      showToast(`Group ${selectedGroup} scorecard exported as a PDF.`, "success");
+    } catch (error) {
+      showToast(error.message || "The scorecard PDF could not be created.", "error");
+    } finally {
+      button.textContent = originalLabel;
+      button.disabled = groupPlayers().length === 0;
+    }
+  }
+
   function safeFilePart(value) {
     return String(value || "scorecard").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "scorecard";
   }
@@ -1199,6 +1254,27 @@
     }
   }
 
+  async function exportSavedRoundPdf() {
+    if (!activeSavedRound) return;
+    const roundState = R.normalizeState(activeSavedRound.state);
+    const group = $("#savedRoundGroupSelect").value;
+    const button = $("#exportSavedRoundPdfBtn");
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = "Creating PDF…";
+    try {
+      const jpeg = await X.createScorecardJpeg(savedRoundExportOptions(roundState, group));
+      const pdf = await X.createScorecardPdf(jpeg);
+      downloadBlob(pdf, "application/pdf", `${safeFilePart(roundState.roundName)}-group-${group.toLowerCase()}.pdf`);
+      showToast(`Saved Group ${group} scorecard exported as a PDF.`, "success");
+    } catch (error) {
+      showToast(error.message || "The saved scorecard PDF could not be exported.", "error");
+    } finally {
+      button.textContent = originalLabel;
+      button.disabled = !activeSavedRound;
+    }
+  }
+
   async function exportAllSavedRoundJpegs() {
     if (!activeSavedRound) return;
     const roundState = R.normalizeState(activeSavedRound.state);
@@ -1220,6 +1296,32 @@
       showToast(`${groups.length} saved group scorecards exported together.`, "success");
     } catch (error) {
       showToast(error.message || "The saved scorecards could not be exported.", "error");
+    } finally {
+      button.textContent = originalLabel;
+      button.disabled = !activeSavedRound;
+    }
+  }
+
+  async function exportAllSavedRoundPdf() {
+    if (!activeSavedRound) return;
+    const roundState = R.normalizeState(activeSavedRound.state);
+    const groups = R.GROUPS.filter((group) => roundState.players.some((player) => player.group === group));
+    if (!groups.length) return showToast("This saved round has no group scorecards to export.", "error");
+    const button = $("#exportAllSavedRoundPdfBtn");
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    try {
+      const pages = [];
+      for (let index = 0; index < groups.length; index += 1) {
+        const group = groups[index];
+        button.textContent = `Creating ${index + 1} of ${groups.length}…`;
+        pages.push(await X.createScorecardJpeg(savedRoundExportOptions(roundState, group)));
+      }
+      const pdf = await X.createScorecardPdf(pages);
+      downloadBlob(pdf, "application/pdf", `${safeFilePart(roundState.roundName)}-all-scorecards.pdf`);
+      showToast(`${groups.length} saved group scorecards exported as one PDF.`, "success");
+    } catch (error) {
+      showToast(error.message || "The saved scorecards PDF could not be exported.", "error");
     } finally {
       button.textContent = originalLabel;
       button.disabled = !activeSavedRound;
@@ -1259,13 +1361,15 @@
   }
 
   function downloadCsv() {
-    const headers = ["Player", "Group", "GHIN Index", "Tee", "Playing Handicap", ...E.COURSE.holes.map((hole) => `Hole ${hole.number}`), "Gross", "Net", "Birdies", "Eagles or Better", "Skins", "Front Net Tic", "Back Net Tic", "Total Net Tic", "Sandy Pars", "Sandy Birdies", "KP Holes", "Raw Tics", "Weighted Tics", "Achievement Points", "Points Positive", "Points Negative", "Net Points"];
+    const headers = ["Player", "Group", "GHIN Index", "Tee", "Playing Handicap", ...E.COURSE.holes.map((hole) => `Hole ${hole.number}`), "Gross", "Net", "Birdies", "Eagles or Better", "Skins", "Front Net Tic", "Back Net Tic", "Total Net Tic", "Sandy Pars", "Sandy Birdies", "KP Tic Holes", "KP Fail Holes", "KP Marked Holes", "Raw Tics", "Weighted Tics", "Achievement Points", "Points Positive", "Points Negative", "Net Points"];
     const rows = state.players.map((player, index) => {
       const totals = E.playerTotals(player, E.COURSE, state.settings);
       const tics = E.ticSummary(player, state.players, E.COURSE, state.settings);
       const ledger = E.pointsLedger(player, state.players, E.COURSE, state.settings);
-      const kpHoles = KP_HOLES.filter((hole) => state.settings.kpWinners[String(hole)] === player.id).join("; ");
-      return [nameOf(player, index), player.group, displayIndex(player.ghin), teeOf(player).name, displayPlayingHandicap(hcp(player)), ...player.scores, totals.total.completed ? totals.total.gross : "", totals.total.completed ? totals.total.net : "", tics.birdies, tics.eagles, tics.skins, tics.front, tics.back, tics.totalNet, tics.sandyPars, tics.sandyBirdies, kpHoles, tics.total, tics.weightedTics, tics.pointsEarned.toFixed(1), ledger.positive.toFixed(1), ledger.negative.toFixed(1), ledger.net.toFixed(1)].map(csvCell).join(",");
+      const kpHoles = KP_HOLES.filter((hole) => E.kpClaimStatus(player, E.COURSE, state.settings, hole - 1) === "current").join("; ");
+      const kpFailHoles = KP_HOLES.filter((hole) => E.kpClaimStatus(player, E.COURSE, state.settings, hole - 1) === "failed").join("; ");
+      const kpMarkedHoles = KP_HOLES.filter((hole) => (state.settings.kpClaims[String(hole)] || []).includes(player.id)).join("; ");
+      return [nameOf(player, index), player.group, displayIndex(player.ghin), teeOf(player).name, displayPlayingHandicap(hcp(player)), ...player.scores, totals.total.completed ? totals.total.gross : "", totals.total.completed ? totals.total.net : "", tics.birdies, tics.eagles, tics.skins, tics.front, tics.back, tics.totalNet, tics.sandyPars, tics.sandyBirdies, kpHoles, kpFailHoles, kpMarkedHoles, tics.total, tics.weightedTics, tics.pointsEarned.toFixed(1), ledger.positive.toFixed(1), ledger.negative.toFixed(1), ledger.net.toFixed(1)].map(csvCell).join(",");
     });
     downloadBlob([headers.map(csvCell).join(","), ...rows].join("\r\n"), "text/csv;charset=utf-8", `berry-creek-results-${state.date}.csv`);
   }
@@ -1273,7 +1377,9 @@
   function preparePrintReport() {
     const kpRows = KP_HOLES.map((hole) => {
       const player = state.players.find((item) => item.id === state.settings.kpWinners[String(hole)]);
-      return `<tr><td>Hole ${hole}</td><td>${player ? esc(nameOf(player, state.players.indexOf(player))) : "—"}</td></tr>`;
+      const status = player ? E.kpClaimStatus(player, E.COURSE, state.settings, hole - 1) : "none";
+      const detail = status === "current" ? " · 1 tic" : status === "failed" ? " · KP FAIL · 0 tics" : status === "pending" ? " · score pending · 0 tics" : "";
+      return `<tr><td>Hole ${hole}</td><td>${player ? `${esc(nameOf(player, state.players.indexOf(player)))}${detail}` : "—"}</td></tr>`;
     }).join("");
     const skinRows = E.COURSE.holes.map((hole, index) => {
       const result = E.skinResult(state.players, E.COURSE, state.settings, index);
@@ -1281,9 +1387,9 @@
       const resultText = result.status === "awarded" ? esc(nameOf(player, state.players.indexOf(player))) : result.status === "tie" ? "No skin — tie" : "Pending";
       return `<tr><td>${hole.number}</td><td>${resultText}</td></tr>`;
     }).join("");
-    const groupTables = R.GROUPS.filter((group) => groupPlayers(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>Each dot is one handicap stroke received. Circles mark birdies and eagles; squares mark bogeys and worse.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.map((hole) => `<th>${hole.number}</th>`).join("")}<th>Gross</th><th>Net</th></tr></thead><tbody>${groupPlayers(group).map((player, playerIndex) => { const totals = E.playerTotals(player, E.COURSE, state.settings); return `<tr><td>${esc(nameOf(player, playerIndex))}</td>${player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceived(player, holeIndex))}</span></td>`).join("")}<td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
-    const leaders = rankedPlayers().map((item, rank) => `<tr><td>${rank + 1}</td><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${item.player.scores.filter(Boolean).length}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${item.ledger.net.toFixed(1)}</td></tr>`).join("");
-    $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(state.roundName)}</h1><p>${esc(state.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table><thead><tr><th>Place</th><th>Player</th><th>Group</th><th>Thru</th><th>Gross</th><th>Net</th><th>Points +</th><th>Points −</th><th>Net points</th></tr></thead><tbody>${leaders}</tbody></table><div class="print-columns"><section><h2>KPs</h2><table><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
+    const groupTables = R.GROUPS.filter((group) => groupPlayers(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>Each dot is one handicap stroke received. Circles mark birdies and eagles; squares mark bogeys and worse. Filled KP earns 1 tic; outlined KP is pending; red diagonal KP FAIL earns 0 tics.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.map((hole) => `<th>${hole.number}</th>`).join("")}<th>Gross</th><th>Net</th></tr></thead><tbody>${groupPlayers(group).map((player, playerIndex) => { const totals = E.playerTotals(player, E.COURSE, state.settings); return `<tr><td>${esc(nameOf(player, playerIndex))}</td>${player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceived(player, holeIndex))}</span>${kpScorecardMark(player, holeIndex)}</td>`).join("")}<td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
+    const leaders = rankedPlayers().map((item, rank) => `<tr><td>${rank + 1}</td><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${item.player.scores.filter(Boolean).length}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.kps}</td><td>${item.tics.kpFails}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${item.ledger.net.toFixed(1)}</td></tr>`).join("");
+    $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(state.roundName)}</h1><p>${esc(state.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table><thead><tr><th>Place</th><th>Player</th><th>Group</th><th>Thru</th><th>Gross</th><th>Net</th><th>KP</th><th>KP Fails</th><th>Points +</th><th>Points −</th><th>Net points</th></tr></thead><tbody>${leaders}</tbody></table><div class="print-columns"><section><h2>KPs</h2><table><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
   }
 
   async function checkVersion() {
@@ -1331,6 +1437,7 @@
   });
   $("#toggleScorecardBtn").addEventListener("click", () => { scorecardOpen = !scorecardOpen; updateScorecardVisibility(); });
   $("#exportScorecardJpegBtn").addEventListener("click", exportGroupScorecardJpeg);
+  $("#exportScorecardPdfBtn").addEventListener("click", exportGroupScorecardPdf);
   $("#roundName").addEventListener("change", (event) => dispatch({ type: "SET_META", payload: { roundName: event.target.value } }));
   $("#roundDate").addEventListener("change", (event) => dispatch({ type: "SET_META", payload: { date: event.target.value } }));
   $("#allowance").addEventListener("change", (event) => dispatch({ type: "SET_ALLOWANCE", payload: { allowance: Number(event.target.value) } }));
@@ -1353,7 +1460,9 @@
     if (activeSavedRound) downloadBlob(JSON.stringify(activeSavedRound.state, null, 2), "application/json", `berry-creek-${activeSavedRound.date}-saved.json`);
   });
   $("#exportSavedRoundJpegBtn").addEventListener("click", exportSavedRoundJpeg);
+  $("#exportSavedRoundPdfBtn").addEventListener("click", exportSavedRoundPdf);
   $("#exportAllSavedRoundJpegsBtn").addEventListener("click", exportAllSavedRoundJpegs);
+  $("#exportAllSavedRoundPdfBtn").addEventListener("click", exportAllSavedRoundPdf);
   $("#soundToggle").addEventListener("change", (event) => { preferences.sound = event.target.checked; savePreferences(); showToast(preferences.sound ? "Celebration sounds on." : "Celebration sounds muted."); });
   $("#autoAdvanceToggle").addEventListener("change", (event) => { preferences.autoAdvance = event.target.checked; savePreferences(); showToast(preferences.autoAdvance ? "Automatic hole advance is on." : "Automatic hole advance is off."); });
   $("#displayMode").addEventListener("change", (event) => { preferences.display = event.target.value; savePreferences(); document.body.dataset.display = preferences.display; });

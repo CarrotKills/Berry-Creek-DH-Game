@@ -120,6 +120,8 @@ main { width: min(1180px, calc(100% - 2rem)); margin: 1.25rem auto 3rem; }
 .card-tics { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.5rem; padding-top: 0.65rem; border-top: 1px solid var(--line); }
 .card-tics .tic-toggle { color: var(--forest-2); background: var(--gold-soft); }
 .card-tics .kp-toggle:has(input:checked) { color: #fff; background: var(--forest); }
+.prior-kp-note { display: inline-flex; align-items: center; min-height: 44px; padding: 0.55rem 0.8rem; border: 1px solid var(--forest); border-radius: 999px; color: var(--forest); background: var(--paper); font-size: 0.82rem; font-weight: 800; }
+.kp-fail-note { color: #fff; background: var(--forest); }
 .hole-entry { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 1rem; padding: 1.1rem; background: var(--forest); color: #fff; border-radius: 14px; box-shadow: var(--shadow); }
 .hole-meta { display: grid; align-content: center; }
 .hole-meta h3 { margin: 0; font-family: Georgia, serif; font-size: 2rem; font-weight: 500; }
@@ -147,9 +149,14 @@ tbody tr:last-child td { border-bottom: 0; }
 .legend-dot { color: var(--forest); }
 .group-scorecard .running-total-heading { background: var(--forest-2); }
 .group-scorecard .running-total { color: var(--forest-2); background: var(--gold-soft); font-size: 1rem; font-weight: 900; }
-.score-cell { display: inline-flex; flex-direction: column; justify-content: center; align-items: center; border: 0; min-width: 42px; min-height: 46px; padding: 0.25rem 0.35rem; text-align: center; background: transparent; }
+.score-cell { position: relative; display: inline-flex; flex-direction: column; justify-content: center; align-items: center; border: 0; min-width: 42px; min-height: 46px; padding: 0.25rem 0.35rem; text-align: center; background: transparent; }
 .score-cell.active-hole { border-radius: 6px; background: var(--gold-soft); }
 .score-cell-value { display: inline-grid; place-items: center; min-width: 1.55rem; height: 1.55rem; line-height: 1; }
+.kp-scorecard-mark { display: inline-grid; place-items: center; min-width: 1.7rem; min-height: 0.95rem; margin-top: 0.12rem; padding: 0.08rem 0.2rem; border: 1px solid var(--forest); border-radius: 3px; color: var(--forest); background: var(--paper); font-size: 0.52rem; font-weight: 900; line-height: 1; letter-spacing: 0.02em; }
+.kp-scorecard-mark.is-current { color: #fff; background: var(--forest); }
+.kp-scorecard-mark.is-pending { border-width: 2px; }
+.kp-scorecard-fail { position: absolute; top: 50%; left: 50%; z-index: 4; width: 3.1rem; padding: 0.08rem 0.12rem; transform: translate(-50%, -50%) rotate(-28deg); color: var(--forest); background: rgba(255,255,255,0.88); font-size: 0.61rem; font-weight: 1000; line-height: 1; letter-spacing: -0.02em; white-space: nowrap; pointer-events: none; }
+.kp-fails-count { color: var(--forest-2); font-weight: 900; }
 .score-mark { position: relative; border: 2px solid currentColor; }
 .score-mark--birdie, .score-mark--eagle { border-radius: 50%; }
 .score-mark--bogey, .score-mark--double-bogey { border-radius: 2px; }
@@ -164,6 +171,8 @@ tbody tr:last-child td { border-bottom: 0; }
 .kp-panel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.65rem; margin: 1rem 0; }
 .kp-card { padding: 0.85rem; background: var(--paper); border-radius: 10px; }
 .kp-card label { display: block; }
+.kp-card-status { display: block; margin-top: 0.45rem; color: var(--muted); font-size: 0.75rem; font-weight: 800; }
+.kp-card-status.is-failed { color: var(--forest); }
 .leaderboard-sort-bar { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin: 0.7rem 0; color: var(--muted); font-size: 0.82rem; }
 .leaderboard-sort-bar .text-button { flex: 0 0 auto; min-height: 36px; padding: 0.35rem 0.5rem; }
 .leaderboard thead th { padding: 0; }
@@ -363,9 +372,11 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .print-report table { page-break-inside: avoid; }
   .print-report th { color: #fff !important; background: #b51222 !important; }
   .print-report td { color: #000; background: #fff !important; }
+  .print-group td { position: relative; }
   .print-dots { display: block; color: #b51222; font-size: 6pt; letter-spacing: 0.4pt; }
   .print-score-value.score-mark { display: inline-grid; min-width: 14pt; height: 14pt; border-width: 1pt; }
   .print-score-value.score-mark--eagle::after, .print-score-value.score-mark--double-bogey::after { inset: -2.5pt; border-width: 1pt; }
+  .print-group .kp-scorecard-fail { width: 32pt; font-size: 5.5pt; }
   .print-columns { display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; }
   .print-group { break-before: page; }
 }

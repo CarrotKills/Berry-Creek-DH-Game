@@ -36,7 +36,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 2. Add saved golfers to Groups A-F, or use Add player for a one-time entry. The round supports up to 30 players and each group is limited to five.
 3. Open the Settings tab and use Copy link, Share, or QR code for each group. Protected group links open directly to scoring, keep the group selector fixed, and authorize changes only for that fivesome. Previously shared v9.4 and older group links must be replaced.
 4. Each scorekeeper enters all five gross scores for the current hole and marks sand saves and par-3 KPs.
-5. Everyone can view the live Leaderboard. A new KP claim on the same hole automatically replaces the previous holder.
+5. Everyone can view the live Leaderboard. A new KP claim on the same hole automatically replaces the previous holder while retaining the earlier player's scorecard mark.
 6. Use Show group scorecard during play to open or close the group's live-updating scorecard. Its Running total column adds every gross score entered so far.
 7. Finalize and lock the round when scoring is complete. Only the admin can unlock it.
 8. Select Save current round to preserve a historical snapshot before resetting for the next event.
@@ -52,8 +52,8 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - A marked sand save becomes a sandy-par or sandy-birdie tic when the score qualifies.
 - Sand Save is available only after a par-or-better gross score. Changing that score to bogey or worse automatically clears the sand save.
 - Group scorecards use traditional score shapes: birdies are circled, eagles or better are double-circled, bogeys are squared, and double bogeys or worse are double-squared.
-- The selected group's live scorecard can be exported as a high-resolution JPEG styled after the club's physical card, including front/back panels, par, handicap, tee yardages, gross/net totals, handicap dots, and score shapes.
-- KPs can be marked during play on holes 2, 8, 12, and 17. Only one player can hold each KP at a time.
+- The selected group's live scorecard can be exported as a high-resolution JPEG or PDF styled after the club's physical card, including front/back panels, par, handicap, tee yardages, gross/net totals, handicap dots, score shapes, and KP FAIL marks.
+- KPs can be marked during play on holes 2, 8, 12, and 17. The current holder earns the KP tic only after entering par or better. A supplanted claim or a current claim with bogey or worse is marked **KP FAIL** diagonally in red on live, printed, and exported scorecards and receives 0 tics. A blank score is pending and also receives 0 tics. The sortable KP Fails leaderboard column counts failures without changing anyone's points.
 - On a blank score, the first tap of either score arrow enters par. Additional taps then decrease or increase the score in the arrow's direction.
 - Entering a new eagle score plays an original three-second celebration on the scorekeeper's device.
 - Entering a new birdie score plays a short original two-note tweet sound on the scorekeeper's device.
@@ -69,7 +69,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - Every score, KP, sand save, roster edit, reset, import, and lock change is recorded in Change history.
 - Results can be printed or saved as PDF, downloaded as a spreadsheet-compatible CSV, or backed up as JSON.
 - The Settings tab can save durable historical snapshots containing the full roster, scorecards, tics, KPs, and results. Saved rounds can be viewed, downloaded, reused as a clean roster for a new round, or deleted without changing the active round.
-- Saved-round group scorecards can be exported individually as JPEGs or together in one ZIP file.
+- Saved-round group scorecards can be exported individually as JPEGs or PDFs, together as JPEGs in one ZIP file, or together as a multi-page PDF.
 - The read-only live leaderboard link updates in real time but has no scoring or admin capability. Group scoring links use protected, round-specific tokens and must be created while admin controls are unlocked. Starting a new round invalidates the old links.
 - Finalizing a round opens a checklist for missing scores, KPs, unusual scores, and roster-name issues before the admin locks it.
 - Celebration sounds can be muted per device. Normal, outdoor high-contrast, and dark display modes are also device-specific.

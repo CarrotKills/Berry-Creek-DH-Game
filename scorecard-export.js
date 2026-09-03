@@ -61,6 +61,10 @@
         scores,
         marks: scores.map((score, holeIndex) => scoring.scoreMark(score, course.holes[holeIndex].par)),
         strokes: holes.map((hole) => Math.max(0, scoring.strokesForHole(handicap, hole.strokeIndex))),
+        kpStatuses: holes.map((hole) => {
+          const status = scoring.kpClaimStatus(player, course, settings, hole.number - 1);
+          return status === "none" ? "" : status;
+        }),
         frontGross: frontCount ? totals.front.gross : "",
         backGross: backCount ? totals.back.gross : "",
         totalGross: totalCount ? totals.total.gross : "",
@@ -137,7 +141,41 @@
     ctx.restore();
   }
 
-  function drawPlayerScore(ctx, value, mark, strokes, x, y, width, height) {
+  function drawKpBadge(ctx, status, x, y, width, height) {
+    if (!status) return;
+    if (status === "failed") {
+      ctx.save();
+      ctx.translate(x + width / 2, y + height / 2);
+      ctx.rotate(-Math.PI / 7);
+      ctx.fillStyle = "rgba(255,255,255,0.88)";
+      ctx.fillRect(-width * 0.46, -13, width * 0.92, 26);
+      ctx.fillStyle = COLORS.red;
+      ctx.font = "900 18px Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("KP FAIL", 0, 1);
+      ctx.restore();
+      return;
+    }
+    const badgeWidth = 44;
+    const badgeHeight = 21;
+    const badgeX = x + width - badgeWidth - 6;
+    const badgeY = y + height - badgeHeight - 5;
+    ctx.save();
+    ctx.fillStyle = status === "current" ? COLORS.red : COLORS.paper;
+    ctx.strokeStyle = COLORS.red;
+    ctx.lineWidth = status === "current" ? 2 : 3;
+    ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
+    ctx.strokeRect(badgeX, badgeY, badgeWidth, badgeHeight);
+    ctx.fillStyle = status === "current" ? "#ffffff" : COLORS.red;
+    ctx.font = "800 15px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("KP", badgeX + badgeWidth / 2, badgeY + badgeHeight / 2 + 1);
+    ctx.restore();
+  }
+
+  function drawPlayerScore(ctx, value, mark, strokes, kpStatus, x, y, width, height) {
     const centerX = x + width / 2;
     const centerY = y + height / 2 + 3;
     drawScoreSymbol(ctx, centerX, centerY, mark);
@@ -156,6 +194,7 @@
         ctx.fill();
       }
     }
+    drawKpBadge(ctx, kpStatus, x, y, width, height);
   }
 
   function formatDate(value) {
@@ -233,7 +272,7 @@
         drawCell(ctx, x, rowY, valueWidth, 86, { fill });
         if (index < 9) {
           const holeIndex = startHole + index;
-          drawPlayerScore(ctx, value, player.marks[holeIndex], player.strokes[holeIndex], x, rowY, valueWidth, 86);
+          drawPlayerScore(ctx, value, player.marks[holeIndex], player.strokes[holeIndex], player.kpStatuses[holeIndex], x, rowY, valueWidth, 86);
         } else {
           drawCenteredText(ctx, value === "" ? "—" : value, x, rowY, valueWidth, 86, { font: "800 30px Arial, sans-serif" });
         }
@@ -256,7 +295,7 @@
     const valueWidth = (width - margin * 2 - labelWidth) / 12;
     const top = 265;
     const gap = 42;
-    const footerHeight = 130;
+    const footerHeight = 170;
     const onePanelHeight = panelHeight(model);
     const height = top + onePanelHeight * 2 + gap + footerHeight;
     const canvas = document.createElement("canvas");
@@ -300,10 +339,102 @@
     ctx.textBaseline = "middle";
     ctx.fillText("Red dots show handicap strokes received.", margin, backBottom + 50);
     ctx.fillText("Birdie: circle  ·  Eagle or better: double circle  ·  Bogey: square  ·  Double bogey or higher: double square", margin, backBottom + 91);
+    ctx.fillText("Filled KP: current qualifying holder (1 tic)  ·  Outlined KP: score pending (0 tics)  ·  KP FAIL: supplanted or bogey+ (0 tics)", margin, backBottom + 132);
 
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The scorecard JPEG could not be created")), "image/jpeg", 0.94);
     });
+  }
+
+  function concatBytes(parts) {
+    const length = parts.reduce((total, part) => total + part.length, 0);
+    const result = new Uint8Array(length);
+    let offset = 0;
+    for (const part of parts) {
+      result.set(part, offset);
+      offset += part.length;
+    }
+    return result;
+  }
+
+  function jpegDimensions(bytes) {
+    if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) throw new Error("A scorecard image is not a valid JPEG");
+    const startOfFrame = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
+    let offset = 2;
+    while (offset + 8 < bytes.length) {
+      if (bytes[offset] !== 0xff) { offset += 1; continue; }
+      while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+      const marker = bytes[offset];
+      offset += 1;
+      if (marker === 0xd8 || marker === 0xd9) continue;
+      if (marker === 0xda || offset + 1 >= bytes.length) break;
+      const length = (bytes[offset] << 8) | bytes[offset + 1];
+      if (length < 2 || offset + length > bytes.length) break;
+      if (startOfFrame.has(marker)) {
+        return {
+          height: (bytes[offset + 3] << 8) | bytes[offset + 4],
+          width: (bytes[offset + 5] << 8) | bytes[offset + 6]
+        };
+      }
+      offset += length;
+    }
+    throw new Error("The scorecard JPEG dimensions could not be read");
+  }
+
+  async function createScorecardPdf(jpegs) {
+    const sources = Array.isArray(jpegs) ? jpegs : [jpegs];
+    if (!sources.length || sources.some((source) => !source)) throw new Error("There are no scorecards to export as a PDF");
+    const pages = [];
+    for (const source of sources) {
+      const blob = source instanceof Blob ? source : new Blob([source], { type: "image/jpeg" });
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      pages.push({ bytes, ...jpegDimensions(bytes) });
+    }
+
+    const encoder = new TextEncoder();
+    const ascii = (value) => encoder.encode(value);
+    const pageWidth = 792;
+    const pageHeight = 612;
+    const margin = 18;
+    const objectCount = 2 + pages.length * 3;
+    const objects = new Map();
+    const pageIds = pages.map((_, index) => 3 + index * 3);
+    objects.set(1, [ascii("<< /Type /Catalog /Pages 2 0 R >>")]);
+    objects.set(2, [ascii(`<< /Type /Pages /Count ${pages.length} /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] >>`)]);
+
+    pages.forEach((page, index) => {
+      const pageId = pageIds[index];
+      const imageId = pageId + 1;
+      const contentId = pageId + 2;
+      const scale = Math.min((pageWidth - margin * 2) / page.width, (pageHeight - margin * 2) / page.height);
+      const drawWidth = page.width * scale;
+      const drawHeight = page.height * scale;
+      const drawX = (pageWidth - drawWidth) / 2;
+      const drawY = (pageHeight - drawHeight) / 2;
+      const content = ascii(`q\n${drawWidth.toFixed(3)} 0 0 ${drawHeight.toFixed(3)} ${drawX.toFixed(3)} ${drawY.toFixed(3)} cm\n/Im0 Do\nQ\n`);
+      objects.set(pageId, [ascii(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`)]);
+      objects.set(imageId, [
+        ascii(`<< /Type /XObject /Subtype /Image /Width ${page.width} /Height ${page.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Interpolate true /Length ${page.bytes.length} >>\nstream\n`),
+        page.bytes,
+        ascii("\nendstream")
+      ]);
+      objects.set(contentId, [ascii(`<< /Length ${content.length} >>\nstream\n`), content, ascii("endstream")]);
+    });
+
+    const header = concatBytes([ascii("%PDF-1.4\n%"), new Uint8Array([0xe2, 0xe3, 0xcf, 0xd3]), ascii("\n")]);
+    const parts = [header];
+    const offsets = Array(objectCount + 1).fill(0);
+    let byteOffset = header.length;
+    for (let id = 1; id <= objectCount; id += 1) {
+      const object = concatBytes([ascii(`${id} 0 obj\n`), ...objects.get(id), ascii("\nendobj\n")]);
+      offsets[id] = byteOffset;
+      parts.push(object);
+      byteOffset += object.length;
+    }
+    const xrefOffset = byteOffset;
+    const xref = ascii(`xref\n0 ${objectCount + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size ${objectCount + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
+    parts.push(xref);
+    return new Blob(parts, { type: "application/pdf" });
   }
 
   const CRC_TABLE = (() => {
@@ -398,5 +529,5 @@
     return new Blob([...localParts, ...centralParts, end], { type: "application/zip" });
   }
 
-  return { buildScorecardModel, createScorecardJpeg, createZip };
+  return { buildScorecardModel, createScorecardJpeg, createScorecardPdf, createZip };
 });

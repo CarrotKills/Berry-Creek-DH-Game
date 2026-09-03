@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const E = require("./score-engine.js");
 const X = require("./scorecard-export.js");
 
@@ -8,11 +9,11 @@ const player = {
   ghin: 10,
   teeKey: "championship",
   group: "A",
-  scores: [3, 4, 7, ...Array(15).fill("")]
+  scores: [3, 4, 7, ...Array(8).fill(""), 3, ...Array(6).fill("")]
 };
 const model = X.buildScorecardModel({
   course: E.COURSE,
-  settings: { par: 72, allowance: 100 },
+  settings: { par: 72, allowance: 100, kpWinners: { 8: "export-player", 12: "export-player" }, kpClaims: { 2: ["export-player"], 8: ["export-player"], 12: ["export-player"] } },
   players: [player],
   group: "A",
   roundName: "Test Round",
@@ -26,7 +27,10 @@ assert.equal(model.frontPar, 36);
 assert.equal(model.backPar, 36);
 assert.equal(model.totalPar, 72);
 assert.deepEqual(model.playerRows[0].marks.slice(0, 3), ["birdie", "bogey", "double-bogey"]);
-assert.equal(model.playerRows[0].totalGross, 14);
+assert.equal(model.playerRows[0].totalGross, 17);
+assert.equal(model.playerRows[0].kpStatuses[1], "failed");
+assert.equal(model.playerRows[0].kpStatuses[7], "pending");
+assert.equal(model.playerRows[0].kpStatuses[11], "current");
 
 (async () => {
   const zip = await X.createZip([
@@ -38,5 +42,12 @@ assert.equal(model.playerRows[0].totalGross, 14);
   assert.equal(zip.type, "application/zip");
   assert.match(Buffer.from(bytes).toString("latin1"), /group-a\.jpg/);
   assert.match(Buffer.from(bytes).toString("latin1"), /group-b\.jpg/);
-  console.log("Scorecard JPEG model and ZIP export tests passed.");
+  const sampleJpeg = new Blob([fs.readFileSync("berry-creek-logo.jpeg")], { type: "image/jpeg" });
+  const pdf = await X.createScorecardPdf([sampleJpeg, sampleJpeg]);
+  const pdfBytes = Buffer.from(await pdf.arrayBuffer());
+  assert.equal(pdf.type, "application/pdf");
+  assert.equal(pdfBytes.subarray(0, 8).toString("latin1"), "%PDF-1.4");
+  assert.match(pdfBytes.toString("latin1"), /\/Count 2/);
+  assert.match(pdfBytes.toString("latin1"), /%%EOF/);
+  console.log("Scorecard JPEG, PDF, and ZIP export tests passed.");
 })().catch((error) => { console.error(error); process.exit(1); });

@@ -10,6 +10,7 @@
   const MAX_AUDIT_ENTRIES = 250;
   const MAX_UNDO_ENTRIES = 100;
   const GROUPS = ["A", "B", "C", "D", "E", "F"];
+  const KP_HOLES = [2, 8, 12, 17];
   const HOLE_PARS = [4, 3, 5, 4, 4, 4, 5, 3, 4, 4, 5, 3, 5, 4, 4, 4, 3, 4];
   const ADMIN_ACTIONS = new Set(["SET_META", "SET_ALLOWANCE", "ADD_PLAYER", "REMOVE_PLAYER", "UPDATE_PLAYER", "REPLACE_ROUND", "START_FROM_SAVED", "RESET_SCORES", "CLEAR_ROUND", "SET_LOCKED", "CLEAR_AUDIT"]);
   const SCORING_ACTIONS = new Set(["SET_SCORE", "SET_SANDY", "SET_KP", "UNDO_LAST"]);
@@ -20,12 +21,12 @@
 
   function defaultState() {
     return {
-      version: 4,
+      version: 5,
       revision: 0,
       roundId: newRoundId(),
       roundName: "Berry Creek Round",
       date: new Date().toISOString().slice(0, 10),
-      settings: { par: 72, allowance: 100, kpWinners: {}, locked: false },
+      settings: { par: 72, allowance: 100, kpWinners: {}, kpClaims: {}, locked: false },
       players: [],
       auditLog: [],
       groupActivity: {},
@@ -71,6 +72,7 @@
       hole: Number.isInteger(Number(entry?.hole)) ? Number(entry.hole) : 0,
       beforeValue: entry?.beforeValue ?? "",
       beforeSandy: Boolean(entry?.beforeSandy),
+      beforeClaims: Array.isArray(entry?.beforeClaims) ? [...new Set(entry.beforeClaims.map(String).filter(Boolean))] : [],
       afterValue: entry?.afterValue ?? "",
       detail: String(entry?.detail || "scoring change").slice(0, 140)
     };
@@ -84,21 +86,37 @@
     }));
   }
 
+  function normalizeKpClaims(value, winners, validPlayerIds) {
+    const claims = {};
+    KP_HOLES.forEach((hole) => {
+      const key = String(hole);
+      const recorded = Array.isArray(value?.[key]) ? value[key] : [];
+      const current = winners[key] ? [winners[key]] : [];
+      const valid = [...new Set([...recorded, ...current].map(String).filter((playerId) => validPlayerIds.has(playerId)))];
+      if (valid.length) claims[key] = valid;
+    });
+    return claims;
+  }
+
   function normalizeState(value) {
     const base = defaultState();
     if (!value || !Array.isArray(value.players)) return base;
+    const players = value.players.slice(0, MAX_PLAYERS).map(normalizePlayer);
+    const validPlayerIds = new Set(players.map((player) => player.id));
+    const kpWinners = Object.fromEntries(Object.entries(value.settings?.kpWinners || {}).filter(([hole, playerId]) => KP_HOLES.includes(Number(hole)) && validPlayerIds.has(String(playerId))).map(([hole, playerId]) => [String(hole), String(playerId)]));
     return {
       ...base,
       ...value,
-      version: 4,
+      version: 5,
       roundId: String(value.roundId || base.roundId),
       settings: {
         ...base.settings,
         ...(value.settings || {}),
-        kpWinners: { ...(value.settings?.kpWinners || {}) },
+        kpWinners,
+        kpClaims: normalizeKpClaims(value.settings?.kpClaims, kpWinners, validPlayerIds),
         locked: Boolean(value.settings?.locked)
       },
-      players: value.players.slice(0, MAX_PLAYERS).map(normalizePlayer),
+      players,
       auditLog: Array.isArray(value.auditLog) ? value.auditLog.slice(-MAX_AUDIT_ENTRIES).map(normalizeAuditEntry) : [],
       groupActivity: normalizeGroupActivity(value.groupActivity),
       undoStack: Array.isArray(value.undoStack) ? value.undoStack.slice(-MAX_UNDO_ENTRIES).map(normalizeUndoEntry) : []
@@ -189,6 +207,7 @@
       entry = {
         id: `${at}-${state.revision}-kp`, at, group, kind: "kp", hole: Number(p.hole),
         beforeValue: before.settings.kpWinners[String(p.hole)] || "", afterValue: p.playerId || "",
+        beforeClaims: [...(before.settings.kpClaims[String(p.hole)] || [])],
         detail: `Hole ${Number(p.hole)} KP change`
       };
     }
@@ -216,6 +235,9 @@
     } else if (entry.kind === "kp") {
       if (entry.beforeValue && state.players.some((player) => player.id === entry.beforeValue)) state.settings.kpWinners[String(entry.hole)] = entry.beforeValue;
       else delete state.settings.kpWinners[String(entry.hole)];
+      const validClaims = entry.beforeClaims.filter((playerId) => state.players.some((player) => player.id === playerId));
+      if (validClaims.length) state.settings.kpClaims[String(entry.hole)] = validClaims;
+      else delete state.settings.kpClaims[String(entry.hole)];
     }
     state.undoStack.splice(targetIndex, 1);
     p.detail = entry.detail;
@@ -252,7 +274,11 @@
         Object.keys(state.settings.kpWinners).forEach((hole) => {
           if (state.settings.kpWinners[hole] === p.playerId) delete state.settings.kpWinners[hole];
         });
-        state.undoStack = state.undoStack.filter((entry) => entry.playerId !== p.playerId && entry.beforeValue !== p.playerId && entry.afterValue !== p.playerId);
+        Object.keys(state.settings.kpClaims).forEach((hole) => {
+          state.settings.kpClaims[hole] = state.settings.kpClaims[hole].filter((playerId) => playerId !== p.playerId);
+          if (!state.settings.kpClaims[hole].length) delete state.settings.kpClaims[hole];
+        });
+        state.undoStack = state.undoStack.filter((entry) => entry.playerId !== p.playerId && entry.beforeValue !== p.playerId && entry.afterValue !== p.playerId && !entry.beforeClaims.includes(p.playerId));
         break;
       case "UPDATE_PLAYER": {
         const player = state.players.find((item) => item.id === p.playerId);
@@ -266,7 +292,7 @@
           const groupCount = state.players.filter((item) => item.group === p.group && item.id !== p.playerId).length;
           if (groupCount < MAX_GROUP_SIZE) player.group = p.group;
         }
-        if (player.group !== previousGroup) state.undoStack = state.undoStack.filter((entry) => entry.playerId !== p.playerId && entry.beforeValue !== p.playerId && entry.afterValue !== p.playerId);
+        if (player.group !== previousGroup) state.undoStack = state.undoStack.filter((entry) => entry.playerId !== p.playerId && entry.beforeValue !== p.playerId && entry.afterValue !== p.playerId && !entry.beforeClaims.includes(p.playerId));
         break;
       }
       case "SET_SCORE": {
@@ -291,11 +317,22 @@
         break;
       }
       case "SET_KP": {
-        if (![2, 8, 12, 17].includes(Number(p.hole))) { changed = false; break; }
-        const previous = state.settings.kpWinners[String(p.hole)] || "";
-        if (p.playerId && state.players.some((player) => player.id === p.playerId)) state.settings.kpWinners[String(p.hole)] = p.playerId;
-        else delete state.settings.kpWinners[String(p.hole)];
-        if ((state.settings.kpWinners[String(p.hole)] || "") === previous) changed = false;
+        if (!KP_HOLES.includes(Number(p.hole))) { changed = false; break; }
+        const key = String(p.hole);
+        const previous = state.settings.kpWinners[key] || "";
+        const previousClaims = [...(state.settings.kpClaims[key] || [])];
+        const nextPlayerId = p.playerId && state.players.some((player) => player.id === p.playerId) ? String(p.playerId) : "";
+        if (nextPlayerId) {
+          state.settings.kpWinners[key] = nextPlayerId;
+          state.settings.kpClaims[key] = [...new Set([...previousClaims, nextPlayerId])];
+        } else {
+          delete state.settings.kpWinners[key];
+          const remainingClaims = previousClaims.filter((playerId) => playerId !== previous);
+          if (remainingClaims.length) state.settings.kpClaims[key] = remainingClaims;
+          else delete state.settings.kpClaims[key];
+        }
+        const claimsChanged = JSON.stringify(state.settings.kpClaims[key] || []) !== JSON.stringify(previousClaims);
+        if ((state.settings.kpWinners[key] || "") === previous && !claimsChanged) changed = false;
         break;
       }
       case "UNDO_LAST":
@@ -313,6 +350,7 @@
         });
         state.settings.locked = false;
         state.settings.kpWinners = {};
+        state.settings.kpClaims = {};
         state.groupActivity = {};
         state.undoStack = [];
         break;
@@ -323,6 +361,7 @@
           player.sandies = Array(18).fill(false);
         });
         state.settings.kpWinners = {};
+        state.settings.kpClaims = {};
         state.settings.locked = false;
         state.groupActivity = {};
         state.undoStack = [];
@@ -351,6 +390,7 @@
     MAX_AUDIT_ENTRIES,
     MAX_UNDO_ENTRIES,
     GROUPS,
+    KP_HOLES,
     HOLE_PARS,
     ADMIN_ACTIONS,
     SCORING_ACTIONS,

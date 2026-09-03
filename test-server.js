@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const R = require("./round-state.js");
+const E = require("./score-engine.js");
 
 const base = "http://127.0.0.1:8080";
 let scoreTokens = {};
@@ -26,7 +27,7 @@ async function playerRequest(path = "", options = {}) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.6.0");
+  assert.equal(config.appVersion, "9.6.2");
   const scorecardExportAsset = await fetch(`${base}/scorecard-export.js`);
   assert.equal(scorecardExportAsset.status, 200);
   const sortingAsset = await fetch(`${base}/leaderboard-sort.js`);
@@ -81,6 +82,25 @@ async function playerRequest(path = "", options = {}) {
   assert.equal(state.players.length, 2);
   assert.equal(state.players.find((p) => p.id === "live-a").scores[0], 4);
   assert.equal(state.players.find((p) => p.id === "live-b").scores[0], 5);
+  await action("SET_SCORE", { playerId: "live-b", holeIndex: 1, score: 3 }, { group: "B" });
+  await action("SET_KP", { hole: 2, playerId: "live-a" }, { group: "A" });
+  await action("SET_KP", { hole: 2, playerId: "live-b" }, { group: "B" });
+  let kpState = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(kpState.settings.kpWinners["2"], "live-b");
+  assert.deepEqual(kpState.settings.kpClaims["2"], ["live-a", "live-b"]);
+  assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-a"), kpState.players, E.COURSE, kpState.settings).kps, 0);
+  assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-a"), kpState.players, E.COURSE, kpState.settings).kpFails, 1);
+  assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-b"), kpState.players, E.COURSE, kpState.settings).kps, 1);
+  await action("UNDO_LAST", { group: "B" }, { group: "B" });
+  kpState = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(kpState.settings.kpWinners["2"], "live-a");
+  assert.deepEqual(kpState.settings.kpClaims["2"], ["live-a"]);
+  await action("SET_KP", { hole: 2, playerId: "live-b" }, { group: "B" });
+  await action("SET_SCORE", { playerId: "live-b", holeIndex: 1, score: 4 }, { group: "B" });
+  kpState = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-b"), kpState.players, E.COURSE, kpState.settings).kps, 0);
+  assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-b"), kpState.players, E.COURSE, kpState.settings).kpFails, 1);
+  await action("SET_SCORE", { playerId: "live-b", holeIndex: 1, score: 3 }, { group: "B" });
   await action("UNDO_LAST", { group: "A" }, { group: "A" });
   const undoneState = await (await fetch(`${base}/api/state`)).json();
   assert.equal(undoneState.players.find((p) => p.id === "live-a").scores[0], "");
@@ -103,6 +123,7 @@ async function playerRequest(path = "", options = {}) {
   const resetState = await (await fetch(`${base}/api/state`)).json();
   assert.equal(resetState.players.length, 2);
   assert.equal(resetState.players.every((player) => player.scores.every((score) => score === "")), true);
+  assert.deepEqual(resetState.settings.kpClaims, {});
   assert.equal(resetState.auditLog.length > 0, true);
   const rosterTemplate = { ...resetState, roundId: "reused-roster-test-round", players: resetState.players.map((player) => ({ ...player, scores: Array(18).fill(4), sandies: Array(18).fill(true) })) };
   await action("START_FROM_SAVED", { state: rosterTemplate });

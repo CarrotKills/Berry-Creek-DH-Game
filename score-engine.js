@@ -171,6 +171,19 @@
     return { status: "awarded", winnerId: lowPlayers[0].playerId, lowNet };
   }
 
+  function kpClaimStatus(player, course, settings, holeIndex) {
+    const hole = holesForPlayer(course, player)[holeIndex];
+    if (!hole) return "none";
+    const key = String(hole.number);
+    const isCurrent = settings.kpWinners?.[key] === player.id;
+    const claimed = isCurrent || (settings.kpClaims?.[key] || []).includes(player.id);
+    if (!claimed) return "none";
+    if (!isCurrent) return "failed";
+    const gross = Number(player.scores?.[holeIndex]);
+    if (!Number.isFinite(gross) || gross < 1) return "pending";
+    return gross <= hole.par ? "current" : "failed";
+  }
+
   function ticSummary(player, players, course, settings) {
     let birdies = 0;
     let eagles = 0;
@@ -178,6 +191,7 @@
     let sandyPars = 0;
     let sandyBirdies = 0;
     let kps = 0;
+    let kpFails = 0;
     holesForPlayer(course, player).forEach((hole, i) => {
       const gross = Number(player.scores[i]);
       if (gross > 0 && gross <= hole.par - 1) birdies += 1;
@@ -185,7 +199,9 @@
       if (skinResult(players, course, settings, i).winnerId === player.id) skins += 1;
       if (player.sandies[i] && gross === hole.par) sandyPars += 1;
       if (player.sandies[i] && gross > 0 && gross <= hole.par - 1) sandyBirdies += 1;
-      if (settings.kpWinners[String(hole.number)] === player.id) kps += 1;
+      const kpStatus = kpClaimStatus(player, course, settings, i);
+      if (kpStatus === "current") kps += 1;
+      if (kpStatus === "failed") kpFails += 1;
     });
     const frontLeaders = leaders(players, course, settings, "front");
     const backLeaders = leaders(players, course, settings, "back");
@@ -210,6 +226,7 @@
       sandyPars,
       sandyBirdies,
       kps,
+      kpFails,
       total: birdies + skins + front + back + totalNet + sandyPars + sandyBirdies + kps,
       weightedTics,
       pointsEarned: weightedTics * 0.5
@@ -244,6 +261,7 @@
     playerTotals,
     leaders,
     skinResult,
+    kpClaimStatus,
     ticSummary,
     pointsLedger
   };
