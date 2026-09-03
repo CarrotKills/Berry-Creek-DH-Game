@@ -95,6 +95,19 @@
     return Number(gross) >= 1 && Number(gross) === Number(par) - 1;
   }
 
+  function scoreMark(gross, par) {
+    if (gross === "" || gross === null || gross === undefined) return "";
+    const score = Number(gross);
+    const holePar = Number(par);
+    if (!Number.isFinite(score) || score < 1 || !Number.isFinite(holePar)) return "";
+    const relativeToPar = score - holePar;
+    if (relativeToPar <= -2) return "eagle";
+    if (relativeToPar === -1) return "birdie";
+    if (relativeToPar === 1) return "bogey";
+    if (relativeToPar >= 2) return "double-bogey";
+    return "par";
+  }
+
   function segmentTotals(player, course, settings, start, end) {
     let gross = 0;
     let net = 0;
@@ -220,6 +233,7 @@
     netScore,
     isEagle,
     isBirdie,
+    scoreMark,
     segmentTotals,
     playerTotals,
     leaders,

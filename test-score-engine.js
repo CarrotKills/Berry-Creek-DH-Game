@@ -37,6 +37,13 @@ assert.equal(E.isEagle(2, 3), false);
 assert.equal(E.isBirdie(4, 5), true);
 assert.equal(E.isBirdie(3, 5), false);
 assert.equal(E.isBirdie(5, 5), false);
+assert.equal(E.scoreMark(3, 5), "eagle");
+assert.equal(E.scoreMark(4, 5), "birdie");
+assert.equal(E.scoreMark(5, 5), "par");
+assert.equal(E.scoreMark(6, 5), "bogey");
+assert.equal(E.scoreMark(7, 5), "double-bogey");
+assert.equal(E.scoreMark(8, 5), "double-bogey");
+assert.equal(E.scoreMark("", 5), "");
 
 const partialRound = { id: "partial", ghin: 0, teeKey: "championship", scores: [4, 3, 5, ...Array(15).fill("")] };
 const partialTotals = E.playerTotals(partialRound, E.COURSE, settings);

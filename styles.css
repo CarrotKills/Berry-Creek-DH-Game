@@ -142,7 +142,13 @@ tbody tr:last-child td { border-bottom: 0; }
 .group-scorecard .running-total { color: var(--forest-2); background: var(--gold-soft); font-size: 1rem; font-weight: 900; }
 .score-cell { display: inline-flex; flex-direction: column; justify-content: center; align-items: center; border: 0; min-width: 42px; min-height: 46px; padding: 0.25rem 0.35rem; text-align: center; background: transparent; }
 .score-cell.active-hole { border-radius: 6px; background: var(--gold-soft); }
-.score-cell-value { line-height: 1.1; }
+.score-cell-value { display: inline-grid; place-items: center; min-width: 1.55rem; height: 1.55rem; line-height: 1; }
+.score-mark { position: relative; border: 2px solid currentColor; }
+.score-mark--birdie, .score-mark--eagle { border-radius: 50%; }
+.score-mark--bogey, .score-mark--double-bogey { border-radius: 2px; }
+.score-mark--eagle::after, .score-mark--double-bogey::after { content: ""; position: absolute; inset: -5px; border: 2px solid currentColor; pointer-events: none; }
+.score-mark--eagle::after { border-radius: 50%; }
+.score-mark--double-bogey::after { border-radius: 2px; }
 .handicap-dots { display: block; min-height: 0.75rem; color: var(--forest); font-size: 0.55rem; letter-spacing: 0.05em; line-height: 1; }
 .stroke-dot { color: var(--forest-2); font-weight: 900; }
 .under-par { display: inline-grid; place-items: center; min-width: 28px; height: 28px; border: 2px solid var(--forest-2); border-radius: 50%; }
@@ -325,6 +331,8 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .print-report th { color: #fff !important; background: #b51222 !important; }
   .print-report td { color: #000; background: #fff !important; }
   .print-dots { display: block; color: #b51222; font-size: 6pt; letter-spacing: 0.4pt; }
+  .print-score-value.score-mark { display: inline-grid; min-width: 14pt; height: 14pt; border-width: 1pt; }
+  .print-score-value.score-mark--eagle::after, .print-score-value.score-mark--double-bogey::after { inset: -2.5pt; border-width: 1pt; }
   .print-columns { display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; }
   .print-group { break-before: page; }
 }

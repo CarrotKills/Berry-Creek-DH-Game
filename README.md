@@ -51,6 +51,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - Net skins are automatic after every player has a score for the hole. The single lowest handicap-adjusted net score wins; a tie awards no skin.
 - A marked sand save becomes a sandy-par or sandy-birdie tic when the score qualifies.
 - Sand Save is available only after a par-or-better gross score. Changing that score to bogey or worse automatically clears the sand save.
+- Group scorecards use traditional score shapes: birdies are circled, eagles or better are double-circled, bogeys are squared, and double bogeys or worse are double-squared.
 - KPs can be marked during play on holes 2, 8, 12, and 17. Only one player can hold each KP at a time.
 - Entering a new eagle score plays an original three-second celebration on the scorekeeper's device.
 - Entering a new birdie score plays a short original two-note tweet sound on the scorekeeper's device.
