@@ -11,9 +11,10 @@ const player = {
   group: "A",
   scores: [3, 4, 7, ...Array(8).fill(""), 3, ...Array(6).fill("")]
 };
+player.scores[16] = 4;
 const model = X.buildScorecardModel({
   course: E.COURSE,
-  settings: { par: 72, allowance: 100, kpWinners: { 8: "export-player", 12: "export-player" }, kpClaims: { 2: ["export-player"], 8: ["export-player"], 12: ["export-player"] } },
+  settings: { par: 72, allowance: 100, kpWinners: { 8: "export-player", 12: "export-player", 17: "export-player" }, kpClaims: { 2: ["export-player"], 8: ["export-player"], 12: ["export-player"], 17: ["export-player"] } },
   players: [player],
   group: "A",
   roundName: "Test Round",
@@ -27,10 +28,11 @@ assert.equal(model.frontPar, 36);
 assert.equal(model.backPar, 36);
 assert.equal(model.totalPar, 72);
 assert.deepEqual(model.playerRows[0].marks.slice(0, 3), ["birdie", "bogey", "double-bogey"]);
-assert.equal(model.playerRows[0].totalGross, 17);
-assert.equal(model.playerRows[0].kpStatuses[1], "failed");
+assert.equal(model.playerRows[0].totalGross, 21);
+assert.equal(model.playerRows[0].kpStatuses[1], "marked");
 assert.equal(model.playerRows[0].kpStatuses[7], "pending");
-assert.equal(model.playerRows[0].kpStatuses[11], "current");
+assert.equal(model.playerRows[0].kpStatuses[11], "kp");
+assert.equal(model.playerRows[0].kpStatuses[16], "three-putt");
 
 (async () => {
   const zip = await X.createZip([
@@ -63,7 +65,7 @@ assert.equal(model.playerRows[0].kpStatuses[11], "current");
   global.document = { createElement: () => ({ getContext: () => context, toBlob: (callback) => callback(sampleJpeg) }) };
   await X.createScorecardJpeg({
     course: E.COURSE,
-    settings: { par: 72, allowance: 100, kpWinners: { 8: "another-player" }, kpClaims: { 8: ["export-player", "another-player"] } },
+    settings: { par: 72, allowance: 100, kpWinners: { 8: "another-player", 17: "export-player" }, kpClaims: { 8: ["export-player", "another-player"], 17: ["export-player"] } },
     players: [player],
     group: "A",
     roundName: "Overlay Test",
@@ -71,9 +73,13 @@ assert.equal(model.playerRows[0].kpStatuses[11], "current");
     scoring: E
   });
   delete global.document;
-  const failFill = drawCalls.find((call) => call.kind === "fill" && call.value === "KP FAIL");
-  const failStroke = drawCalls.find((call) => call.kind === "stroke" && call.value === "KP FAIL");
-  assert.equal(failFill.alpha, 0.34);
-  assert.equal(failStroke.alpha, 0.72);
+  const markedFill = drawCalls.find((call) => call.kind === "fill" && call.value === "KP MARKED");
+  const markedStroke = drawCalls.find((call) => call.kind === "stroke" && call.value === "KP MARKED");
+  const threePuttFill = drawCalls.find((call) => call.kind === "fill" && call.value === "KP 3-PUTT");
+  const threePuttStroke = drawCalls.find((call) => call.kind === "stroke" && call.value === "KP 3-PUTT");
+  assert.equal(markedFill.alpha, 0.31);
+  assert.equal(markedStroke.alpha, 0.7);
+  assert.equal(threePuttFill.alpha, 0.34);
+  assert.equal(threePuttStroke.alpha, 0.76);
   console.log("Scorecard JPEG, PDF, and ZIP export tests passed.");
 })().catch((error) => { console.error(error); process.exit(1); });

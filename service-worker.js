@@ -1,4 +1,4 @@
-const CACHE = "berry-creek-dh-game-v9-6-3";
+const CACHE = "berry-creek-dh-game-v9-7-0";
 const ASSETS = ["./", "./index.html", "./styles.css", "./score-engine.js", "./round-state.js", "./leaderboard-sort.js", "./scorecard-export.js", "./app.js", "./manifest.webmanifest", "./version.json", "./berry-creek-logo.jpeg", "./app-icon-32.png", "./app-icon-180.png", "./app-icon-192.png", "./app-icon-512.png"];
 self.addEventListener("install", (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS))));
 self.addEventListener("activate", (event) => event.waitUntil(Promise.all([caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))), self.clients.claim()])));

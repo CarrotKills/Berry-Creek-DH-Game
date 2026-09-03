@@ -143,20 +143,21 @@
 
   function drawKpBadge(ctx, status, x, y, width, height) {
     if (!status) return;
-    if (status === "failed") {
+    if (status === "marked" || status === "three-putt") {
+      const stamp = status === "marked" ? "KP MARKED" : "KP 3-PUTT";
       ctx.save();
       ctx.translate(x + width / 2, y + height / 2);
       ctx.rotate(-Math.PI / 7);
       ctx.fillStyle = COLORS.red;
-      ctx.font = "900 18px Arial, sans-serif";
+      ctx.font = "900 15px Arial, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.globalAlpha = 0.34;
-      ctx.fillText("KP FAIL", 0, 1);
-      ctx.globalAlpha = 0.72;
+      ctx.globalAlpha = status === "marked" ? 0.31 : 0.34;
+      ctx.fillText(stamp, 0, 1);
+      ctx.globalAlpha = status === "marked" ? 0.7 : 0.76;
       ctx.strokeStyle = COLORS.red;
       ctx.lineWidth = 0.9;
-      ctx.strokeText("KP FAIL", 0, 1);
+      ctx.strokeText(stamp, 0, 1);
       ctx.restore();
       return;
     }
@@ -165,12 +166,12 @@
     const badgeX = x + width - badgeWidth - 6;
     const badgeY = y + height - badgeHeight - 5;
     ctx.save();
-    ctx.fillStyle = status === "current" ? COLORS.red : COLORS.paper;
+    ctx.fillStyle = status === "kp" ? COLORS.red : COLORS.paper;
     ctx.strokeStyle = COLORS.red;
-    ctx.lineWidth = status === "current" ? 2 : 3;
+    ctx.lineWidth = status === "kp" ? 2 : 3;
     ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
     ctx.strokeRect(badgeX, badgeY, badgeWidth, badgeHeight);
-    ctx.fillStyle = status === "current" ? "#ffffff" : COLORS.red;
+    ctx.fillStyle = status === "kp" ? "#ffffff" : COLORS.red;
     ctx.font = "800 15px Arial, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -342,7 +343,7 @@
     ctx.textBaseline = "middle";
     ctx.fillText("Red dots show handicap strokes received.", margin, backBottom + 50);
     ctx.fillText("Birdie: circle  ·  Eagle or better: double circle  ·  Bogey: square  ·  Double bogey or higher: double square", margin, backBottom + 91);
-    ctx.fillText("Filled KP: current qualifying holder (1 tic)  ·  Outlined KP: score pending (0 tics)  ·  KP FAIL: supplanted or bogey+ (0 tics)", margin, backBottom + 132);
+    ctx.fillText("Filled KP: qualifying holder (1 tic)  ·  KP MARKED: later beaten (0 tics)  ·  KP 3-PUTT: current closest but over par (0 tics)  ·  Outlined KP: pending (0 tics)", margin, backBottom + 132);
 
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The scorecard JPEG could not be created")), "image/jpeg", 0.94);

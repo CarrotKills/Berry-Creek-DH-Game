@@ -121,7 +121,8 @@ main { width: min(1180px, calc(100% - 2rem)); margin: 1.25rem auto 3rem; }
 .card-tics .tic-toggle { color: var(--forest-2); background: var(--gold-soft); }
 .card-tics .kp-toggle:has(input:checked) { color: #fff; background: var(--forest); }
 .prior-kp-note { display: inline-flex; align-items: center; min-height: 44px; padding: 0.55rem 0.8rem; border: 1px solid var(--forest); border-radius: 999px; color: var(--forest); background: var(--paper); font-size: 0.82rem; font-weight: 800; }
-.kp-fail-note { color: #fff; background: var(--forest); }
+.kp-marked-note { color: var(--forest); background: var(--paper); }
+.kp-three-putt-note { color: #fff; background: var(--forest); }
 .hole-entry { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 1rem; padding: 1.1rem; background: var(--forest); color: #fff; border-radius: 14px; box-shadow: var(--shadow); }
 .hole-meta { display: grid; align-content: center; }
 .hole-meta h3 { margin: 0; font-family: Georgia, serif; font-size: 2rem; font-weight: 500; }
@@ -153,10 +154,11 @@ tbody tr:last-child td { border-bottom: 0; }
 .score-cell.active-hole { border-radius: 6px; background: var(--gold-soft); }
 .score-cell-value { display: inline-grid; place-items: center; min-width: 1.55rem; height: 1.55rem; line-height: 1; }
 .kp-scorecard-mark { display: inline-grid; place-items: center; min-width: 1.7rem; min-height: 0.95rem; margin-top: 0.12rem; padding: 0.08rem 0.2rem; border: 1px solid var(--forest); border-radius: 3px; color: var(--forest); background: var(--paper); font-size: 0.52rem; font-weight: 900; line-height: 1; letter-spacing: 0.02em; }
-.kp-scorecard-mark.is-current { color: #fff; background: var(--forest); }
+.kp-scorecard-mark.is-kp { color: #fff; background: var(--forest); }
 .kp-scorecard-mark.is-pending { border-width: 2px; }
-.kp-scorecard-fail { position: absolute; top: 50%; left: 50%; z-index: 4; width: 3.1rem; padding: 0.08rem 0.12rem; transform: translate(-50%, -50%) rotate(-28deg); color: rgba(181,18,34,0.34); background: transparent; -webkit-text-stroke: 0.55px rgba(181,18,34,0.72); font-size: 0.61rem; font-weight: 1000; line-height: 1; letter-spacing: -0.02em; white-space: nowrap; pointer-events: none; }
-.kp-fails-count { color: var(--forest-2); font-weight: 900; }
+.kp-scorecard-stamp { position: absolute; top: 50%; left: 50%; z-index: 4; width: 3.55rem; padding: 0.08rem 0.05rem; transform: translate(-50%, -50%) rotate(-28deg); color: rgba(181,18,34,0.31); background: transparent; -webkit-text-stroke: 0.5px rgba(181,18,34,0.7); font-size: 0.5rem; font-weight: 1000; line-height: 1; letter-spacing: -0.025em; white-space: nowrap; pointer-events: none; }
+.kp-scorecard-stamp.is-three-putt { color: rgba(122,10,25,0.34); -webkit-text-stroke-color: rgba(122,10,25,0.76); }
+.kp-marked-count, .kp-three-putt-count { color: var(--forest-2); font-weight: 900; }
 .score-mark { position: relative; border: 2px solid currentColor; }
 .score-mark--birdie, .score-mark--eagle { border-radius: 50%; }
 .score-mark--bogey, .score-mark--double-bogey { border-radius: 2px; }
@@ -376,7 +378,7 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .print-dots { display: block; color: #b51222; font-size: 6pt; letter-spacing: 0.4pt; }
   .print-score-value.score-mark { display: inline-grid; min-width: 14pt; height: 14pt; border-width: 1pt; }
   .print-score-value.score-mark--eagle::after, .print-score-value.score-mark--double-bogey::after { inset: -2.5pt; border-width: 1pt; }
-  .print-group .kp-scorecard-fail { width: 32pt; font-size: 5.5pt; }
+  .print-group .kp-scorecard-stamp { width: 36pt; font-size: 4.8pt; }
   .print-columns { display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; }
   .print-group { break-before: page; }
 }
