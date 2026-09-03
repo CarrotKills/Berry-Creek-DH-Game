@@ -44,6 +44,10 @@ assert.equal(E.scoreMark(6, 5), "bogey");
 assert.equal(E.scoreMark(7, 5), "double-bogey");
 assert.equal(E.scoreMark(8, 5), "double-bogey");
 assert.equal(E.scoreMark("", 5), "");
+assert.equal(E.steppedScore("", 4, 1), 4);
+assert.equal(E.steppedScore("", 4, -1), 4);
+assert.equal(E.steppedScore(4, 4, 1), 5);
+assert.equal(E.steppedScore(4, 4, -1), 3);
 
 const partialRound = { id: "partial", ghin: 0, teeKey: "championship", scores: [4, 3, 5, ...Array(15).fill("")] };
 const partialTotals = E.playerTotals(partialRound, E.COURSE, settings);

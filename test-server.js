@@ -9,7 +9,7 @@ async function action(type, payload = {}, options = {}) {
     headers["X-Admin-Pin"] = options.pin || "2468";
     headers["X-Admin-Override"] = "1";
   } else if (R.isScoringAction(type) && !options.noToken) {
-    headers["X-Scoring-Token"] = scoreTokens[options.group || "A"] || "";
+    headers["X-Scoring-Token"] = options.token ?? scoreTokens[options.group || "A"] ?? "";
   }
   const response = await fetch(`${base}/api/action`, { method: "POST", headers, body: JSON.stringify({ type, payload }) });
   assert.equal(response.status, options.status || 200);
@@ -26,7 +26,7 @@ async function playerRequest(path = "", options = {}) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.5.5");
+  assert.equal(config.appVersion, "9.6.0");
   const scorecardExportAsset = await fetch(`${base}/scorecard-export.js`);
   assert.equal(scorecardExportAsset.status, 200);
   const sortingAsset = await fetch(`${base}/leaderboard-sort.js`);
@@ -41,6 +41,8 @@ async function playerRequest(path = "", options = {}) {
   assert.equal(tokenResponse.status, 200);
   scoreTokens = (await tokenResponse.json()).tokens;
   assert.equal(Object.keys(scoreTokens).length, 6);
+  const priorRoundState = await (await fetch(`${base}/api/state`)).json();
+  const priorTokens = { ...scoreTokens };
   const unauthorizedRounds = await fetch(`${base}/api/rounds`);
   assert.equal(unauthorizedRounds.status, 401);
   const unauthorizedPlayers = await fetch(`${base}/api/players`);
@@ -54,6 +56,11 @@ async function playerRequest(path = "", options = {}) {
   const emptySaved = await playerRequest();
   assert.equal(emptySaved.players.some((player) => player.id === createdSaved.player.id), false);
   await action("CLEAR_ROUND");
+  const clearedState = await (await fetch(`${base}/api/state`)).json();
+  assert.notEqual(clearedState.roundId, priorRoundState.roundId);
+  const currentTokenResponse = await fetch(`${base}/api/share-tokens`, { headers: { "X-Admin-Pin": "2468" } });
+  scoreTokens = (await currentTokenResponse.json()).tokens;
+  assert.notEqual(scoreTokens.A, priorTokens.A);
   const streamResponse = await fetch(`${base}/api/events`);
   assert.equal(streamResponse.status, 200);
   const reader = streamResponse.body.getReader();
@@ -63,6 +70,7 @@ async function playerRequest(path = "", options = {}) {
     action("ADD_PLAYER", { player: { id: "live-a", name: "Live A", group: "A", teeKey: "championship", ghin: 10 } }),
     action("ADD_PLAYER", { player: { id: "live-b", name: "Live B", group: "B", teeKey: "member", ghin: 18 } })
   ]);
+  await action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4 }, { group: "A", token: priorTokens.A, status: 403 });
   await Promise.all([
     action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4 }, { group: "A" }),
     action("SET_SCORE", { playerId: "live-b", holeIndex: 0, score: 5 }, { group: "B" })
@@ -73,6 +81,10 @@ async function playerRequest(path = "", options = {}) {
   assert.equal(state.players.length, 2);
   assert.equal(state.players.find((p) => p.id === "live-a").scores[0], 4);
   assert.equal(state.players.find((p) => p.id === "live-b").scores[0], 5);
+  await action("UNDO_LAST", { group: "A" }, { group: "A" });
+  const undoneState = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(undoneState.players.find((p) => p.id === "live-a").scores[0], "");
+  await action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4 }, { group: "A" });
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 1, score: 3 }, { group: "A", noToken: true, status: 403 });
   await action("SET_SCORE", { playerId: "live-b", holeIndex: 1, score: 3 }, { group: "A", status: 403 });
   const savedRoundResponse = await fetch(`${base}/api/rounds`, { method: "POST", headers: { "X-Admin-Pin": "2468", "Content-Type": "application/json" }, body: "{}" });
@@ -92,6 +104,16 @@ async function playerRequest(path = "", options = {}) {
   assert.equal(resetState.players.length, 2);
   assert.equal(resetState.players.every((player) => player.scores.every((score) => score === "")), true);
   assert.equal(resetState.auditLog.length > 0, true);
+  const rosterTemplate = { ...resetState, roundId: "reused-roster-test-round", players: resetState.players.map((player) => ({ ...player, scores: Array(18).fill(4), sandies: Array(18).fill(true) })) };
+  await action("START_FROM_SAVED", { state: rosterTemplate });
+  const reusedState = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(reusedState.roundId, "reused-roster-test-round");
+  assert.equal(reusedState.players.length, 2);
+  assert.equal(reusedState.players.every((player) => player.scores.every((score) => score === "")), true);
+  assert.equal(reusedState.players.every((player) => player.sandies.every((value) => value === false)), true);
+  const reusedTokenResponse = await fetch(`${base}/api/share-tokens`, { headers: { "X-Admin-Pin": "2468" } });
+  const reusedTokens = (await reusedTokenResponse.json()).tokens;
+  assert.notEqual(reusedTokens.A, scoreTokens.A);
   await reader.cancel();
   await action("SET_LOCKED", { locked: true });
   await action("CLEAR_ROUND");

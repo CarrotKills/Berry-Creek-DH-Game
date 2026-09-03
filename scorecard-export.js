@@ -306,5 +306,97 @@
     });
   }
 
-  return { buildScorecardModel, createScorecardJpeg };
+  const CRC_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let value = 0; value < 256; value += 1) {
+      let crc = value;
+      for (let bit = 0; bit < 8; bit += 1) crc = (crc & 1) ? (0xedb88320 ^ (crc >>> 1)) : (crc >>> 1);
+      table[value] = crc >>> 0;
+    }
+    return table;
+  })();
+
+  function crc32(bytes) {
+    let crc = 0xffffffff;
+    for (const byte of bytes) crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  function zipDateTime(date = new Date()) {
+    const year = Math.max(1980, date.getFullYear());
+    return {
+      time: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+      date: ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()
+    };
+  }
+
+  function zipHeader(length, writer) {
+    const bytes = new Uint8Array(length);
+    writer(new DataView(bytes.buffer));
+    return bytes;
+  }
+
+  async function createZip(files) {
+    if (!Array.isArray(files) || !files.length) throw new Error("There are no scorecards to export");
+    const encoder = new TextEncoder();
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+    const stamp = zipDateTime();
+    for (const file of files) {
+      const name = encoder.encode(String(file.name || "scorecard.jpg"));
+      const source = file.blob instanceof Blob ? file.blob : new Blob([file.blob]);
+      const data = new Uint8Array(await source.arrayBuffer());
+      const checksum = crc32(data);
+      const local = zipHeader(30, (view) => {
+        view.setUint32(0, 0x04034b50, true);
+        view.setUint16(4, 20, true);
+        view.setUint16(6, 0x0800, true);
+        view.setUint16(8, 0, true);
+        view.setUint16(10, stamp.time, true);
+        view.setUint16(12, stamp.date, true);
+        view.setUint32(14, checksum, true);
+        view.setUint32(18, data.length, true);
+        view.setUint32(22, data.length, true);
+        view.setUint16(26, name.length, true);
+        view.setUint16(28, 0, true);
+      });
+      localParts.push(local, name, data);
+      const central = zipHeader(46, (view) => {
+        view.setUint32(0, 0x02014b50, true);
+        view.setUint16(4, 20, true);
+        view.setUint16(6, 20, true);
+        view.setUint16(8, 0x0800, true);
+        view.setUint16(10, 0, true);
+        view.setUint16(12, stamp.time, true);
+        view.setUint16(14, stamp.date, true);
+        view.setUint32(16, checksum, true);
+        view.setUint32(20, data.length, true);
+        view.setUint32(24, data.length, true);
+        view.setUint16(28, name.length, true);
+        view.setUint16(30, 0, true);
+        view.setUint16(32, 0, true);
+        view.setUint16(34, 0, true);
+        view.setUint16(36, 0, true);
+        view.setUint32(38, 0, true);
+        view.setUint32(42, offset, true);
+      });
+      centralParts.push(central, name);
+      offset += local.length + name.length + data.length;
+    }
+    const centralSize = centralParts.reduce((total, part) => total + part.length, 0);
+    const end = zipHeader(22, (view) => {
+      view.setUint32(0, 0x06054b50, true);
+      view.setUint16(4, 0, true);
+      view.setUint16(6, 0, true);
+      view.setUint16(8, files.length, true);
+      view.setUint16(10, files.length, true);
+      view.setUint32(12, centralSize, true);
+      view.setUint32(16, offset, true);
+      view.setUint16(20, 0, true);
+    });
+    return new Blob([...localParts, ...centralParts, end], { type: "application/zip" });
+  }
+
+  return { buildScorecardModel, createScorecardJpeg, createZip };
 });

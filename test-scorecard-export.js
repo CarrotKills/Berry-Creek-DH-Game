@@ -27,4 +27,16 @@ assert.equal(model.backPar, 36);
 assert.equal(model.totalPar, 72);
 assert.deepEqual(model.playerRows[0].marks.slice(0, 3), ["birdie", "bogey", "double-bogey"]);
 assert.equal(model.playerRows[0].totalGross, 14);
-console.log("Scorecard JPEG model tests passed.");
+
+(async () => {
+  const zip = await X.createZip([
+    { name: "group-a.jpg", blob: new Blob([Uint8Array.from([1, 2, 3])], { type: "image/jpeg" }) },
+    { name: "group-b.jpg", blob: new Blob([Uint8Array.from([4, 5])], { type: "image/jpeg" }) }
+  ]);
+  const bytes = new Uint8Array(await zip.arrayBuffer());
+  assert.deepEqual([...bytes.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
+  assert.equal(zip.type, "application/zip");
+  assert.match(Buffer.from(bytes).toString("latin1"), /group-a\.jpg/);
+  assert.match(Buffer.from(bytes).toString("latin1"), /group-b\.jpg/);
+  console.log("Scorecard JPEG model and ZIP export tests passed.");
+})().catch((error) => { console.error(error); process.exit(1); });

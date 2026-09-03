@@ -108,6 +108,11 @@
     return "par";
   }
 
+  function steppedScore(currentScore, par, direction) {
+    if (currentScore === "" || currentScore === null || currentScore === undefined) return Math.max(1, Math.min(20, Number(par) || 1));
+    return Math.max(1, Math.min(20, Number(currentScore) + (Number(direction) < 0 ? -1 : 1)));
+  }
+
   function segmentTotals(player, course, settings, start, end) {
     let gross = 0;
     let net = 0;
@@ -234,6 +239,7 @@
     isEagle,
     isBirdie,
     scoreMark,
+    steppedScore,
     segmentTotals,
     playerTotals,
     leaders,

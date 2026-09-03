@@ -12,7 +12,7 @@ const RoundHistoryDatabase = require("./round-history-database.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.5.5";
+const APP_VERSION = "9.6.0";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -20,7 +20,7 @@ const DATA_FILE = path.resolve(process.env.ROUND_FILE || path.join(DATA_DIR, "ro
 const PLAYERS_DB_FILE = path.resolve(process.env.PLAYERS_DB_FILE || path.join(DATA_DIR, "players.sqlite"));
 const ROUND_HISTORY_DB_FILE = path.resolve(process.env.ROUND_HISTORY_DB_FILE || path.join(DATA_DIR, "rounds.sqlite"));
 const SHARE_SECRET = String(process.env.SHARE_SECRET || ADMIN_PIN);
-const clients = new Set();
+const clients = new Map();
 const playerDatabase = new PlayerDatabase(PLAYERS_DB_FILE);
 const roundHistoryDatabase = new RoundHistoryDatabase(ROUND_HISTORY_DB_FILE);
 
@@ -38,6 +38,8 @@ function persist() {
   fs.renameSync(temp, DATA_FILE);
 }
 
+persist();
+
 function sendJson(res, status, body) {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
   res.end(JSON.stringify(body));
@@ -45,7 +47,16 @@ function sendJson(res, status, body) {
 
 function broadcast() {
   const data = `event: state\ndata: ${JSON.stringify(state)}\n\n`;
-  clients.forEach((res) => res.write(data));
+  clients.forEach((_, res) => res.write(data));
+}
+
+function presencePayload() {
+  return Object.fromEntries(Round.GROUPS.map((group) => [group, [...clients.values()].filter((client) => client.group === group && client.scorer && scoringTokenMatches(group, client.token)).length]));
+}
+
+function broadcastPresence() {
+  const data = `event: presence\ndata: ${JSON.stringify(presencePayload())}\n\n`;
+  clients.forEach((_, res) => res.write(data));
 }
 
 function readBody(req) {
@@ -70,7 +81,7 @@ function pinMatches(candidate) {
 }
 
 function scoreTokenForGroup(group) {
-  return crypto.createHmac("sha256", SHARE_SECRET).update(`berry-creek-score:${group}`).digest("hex");
+  return crypto.createHmac("sha256", SHARE_SECRET).update(`berry-creek-score:${state.roundId}:${group}`).digest("hex");
 }
 
 function scoringTokenMatches(group, candidate) {
@@ -91,6 +102,7 @@ function scoringGroupAllowed(action, group) {
     const holderId = state.settings.kpWinners[String(p.hole)];
     return !holderId || state.players.some((player) => player.id === holderId && player.group === group);
   }
+  if (action.type === "UNDO_LAST") return p.group === group;
   return true;
 }
 
@@ -114,19 +126,19 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && url.pathname === "/api/admin/check") {
     try {
       const body = await readBody(req);
-      return pinMatches(body.pin) ? sendJson(res, 200, { ok: true }) : sendJson(res, 401, { ok: false, error: "Incorrect organizer PIN" });
+      return pinMatches(body.pin) ? sendJson(res, 200, { ok: true }) : sendJson(res, 401, { ok: false, error: "Incorrect admin PIN" });
     } catch (error) {
       return sendJson(res, 400, { ok: false, error: error.message });
     }
   }
 
   if (req.method === "GET" && url.pathname === "/api/share-tokens") {
-    if (!pinMatches(req.headers["x-admin-pin"])) return sendJson(res, 401, { ok: false, error: "Organizer PIN required" });
+    if (!pinMatches(req.headers["x-admin-pin"])) return sendJson(res, 401, { ok: false, error: "Admin PIN required" });
     return sendJson(res, 200, { tokens: Object.fromEntries(Round.GROUPS.map((group) => [group, scoreTokenForGroup(group)])) });
   }
 
   if (url.pathname === "/api/rounds" || url.pathname.startsWith("/api/rounds/")) {
-    if (!pinMatches(req.headers["x-admin-pin"])) return sendJson(res, 401, { ok: false, error: "Organizer PIN required" });
+    if (!pinMatches(req.headers["x-admin-pin"])) return sendJson(res, 401, { ok: false, error: "Admin PIN required" });
     const roundRoute = url.pathname.match(/^\/api\/rounds\/([^/]+)$/);
     try {
       if (req.method === "GET" && url.pathname === "/api/rounds") return sendJson(res, 200, { rounds: roundHistoryDatabase.list() });
@@ -144,7 +156,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === "/api/players" || url.pathname.startsWith("/api/players/")) {
-    if (!pinMatches(req.headers["x-admin-pin"])) return sendJson(res, 401, { ok: false, error: "Organizer PIN required" });
+    if (!pinMatches(req.headers["x-admin-pin"])) return sendJson(res, 401, { ok: false, error: "Admin PIN required" });
     const playerRoute = url.pathname.match(/^\/api\/players\/([^/]+)$/);
     try {
       if (req.method === "GET" && url.pathname === "/api/players") {
@@ -176,9 +188,17 @@ const server = http.createServer(async (req, res) => {
       Connection: "keep-alive",
       "X-Accel-Buffering": "no"
     });
+    const requestedGroup = String(url.searchParams.get("group") || "").toUpperCase();
+    const token = String(url.searchParams.get("token") || "");
+    const scorer = url.searchParams.get("scorer") === "1" && scoringTokenMatches(requestedGroup, token);
+    clients.set(res, { group: scorer ? requestedGroup : "", scorer, token });
     res.write(`event: state\ndata: ${JSON.stringify(state)}\n\n`);
-    clients.add(res);
-    req.on("close", () => clients.delete(res));
+    res.write(`event: presence\ndata: ${JSON.stringify(presencePayload())}\n\n`);
+    broadcastPresence();
+    req.on("close", () => {
+      clients.delete(res);
+      broadcastPresence();
+    });
     return;
   }
 
@@ -190,10 +210,10 @@ const server = http.createServer(async (req, res) => {
       const scoringGroup = String(req.headers["x-scoring-group"] || "").toUpperCase();
       const scorerAuthorized = scoringTokenMatches(scoringGroup, req.headers["x-scoring-token"]);
 
-      if (Round.isAdminAction(action.type) && !adminAuthorized) return sendJson(res, 401, { ok: false, error: "Organizer PIN required" });
-      if (state.settings.locked && !["SET_LOCKED", "CLEAR_ROUND"].includes(action.type)) return sendJson(res, 423, { ok: false, error: "This round is finalized and locked" });
+      if (Round.isAdminAction(action.type) && !adminAuthorized) return sendJson(res, 401, { ok: false, error: "Admin PIN required" });
+      if (state.settings.locked && !["SET_LOCKED", "CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type)) return sendJson(res, 423, { ok: false, error: "This round is finalized and locked" });
       if (Round.isScoringAction(action.type) && !adminOverride && (!scorerAuthorized || !scoringGroupAllowed(action, scoringGroup))) {
-        return sendJson(res, 403, { ok: false, error: "A current group scorekeeper link or organizer access is required" });
+        return sendJson(res, 403, { ok: false, error: "A current group scorekeeper link or admin access is required" });
       }
 
       const serverAction = {
@@ -201,12 +221,14 @@ const server = http.createServer(async (req, res) => {
         payload: action.payload || {},
         meta: {
           at: new Date().toISOString(),
-          actor: Round.isAdminAction(action.type) || adminOverride ? "Organizer" : `Group ${scoringGroup} scorer`
+          actor: Round.isAdminAction(action.type) || adminOverride ? "Admin" : `Group ${scoringGroup} scorer`,
+          group: scoringGroup
         }
       };
       state = Round.applyAction(state, serverAction);
       persist();
       broadcast();
+      broadcastPresence();
       return sendJson(res, 200, { ok: true, revision: state.revision });
     } catch (error) {
       return sendJson(res, 400, { ok: false, error: error.message });
@@ -228,7 +250,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`Berry Creek DH Game v${APP_VERSION} running at http://localhost:${PORT}`);
-  if (!process.env.ADMIN_PIN) console.log("Organizer PIN is using the default 2468. Set ADMIN_PIN in your host before the event.");
+  if (!process.env.ADMIN_PIN) console.log("Admin PIN is using the default 2468. Set ADMIN_PIN in your host before the event.");
 });
 
 let shuttingDown = false;

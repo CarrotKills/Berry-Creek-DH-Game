@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.5.5";
+  const APP_VERSION = "9.6.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -41,6 +41,7 @@
   let scorecardOpen = false;
   let scorerLinkLocked = params.get("scorer") === "1";
   let scorerToken = params.get("token") || "";
+  const scorerRoundId = params.get("round") || "";
   let celebrationAudioContext;
   let eventSource;
   let serviceWorkerRegistration;
@@ -51,8 +52,13 @@
   let savedRounds = [];
   let shareTokens = {};
   let activeSavedRound = null;
+  let pendingReuseRound = null;
   let savedPlayerSearch = "";
   const savedPlayerGroupSelections = new Map();
+  const scoreSyncStatus = new Map();
+  const scoreSyncTimers = new Map();
+  let groupPresence = {};
+  let autoAdvanceTimer;
   let leaderboardSort = { key: "standing", direction: "asc" };
   let preferences = loadPreferences();
 
@@ -62,8 +68,8 @@
   }
   function saveLocal() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
   function loadPreferences() {
-    try { return { sound: true, display: "normal", ...JSON.parse(localStorage.getItem(PREFS_KEY)) }; }
-    catch (_) { return { sound: true, display: "normal" }; }
+    try { return { sound: true, autoAdvance: false, display: "normal", ...JSON.parse(localStorage.getItem(PREFS_KEY)) }; }
+    catch (_) { return { sound: true, autoAdvance: false, display: "normal" }; }
   }
   function savePreferences() { localStorage.setItem(PREFS_KEY, JSON.stringify(preferences)); }
   function loadQueue() {
@@ -81,7 +87,22 @@
   function complete(value, done) { return done ? String(value) : "—"; }
   function groupPlayers(group = selectedGroup) { return state.players.filter((player) => player.group === group); }
   function isLocked() { return Boolean(state.settings.locked); }
-  function canScore() { return !spectatorMode && !isLocked() && (adminUnlocked || (scorerLinkLocked && Boolean(scorerToken))); }
+  function scorerLinkExpired() { return scorerLinkLocked && (!scorerToken || !scorerRoundId || scorerRoundId !== state.roundId); }
+  function canScore() { return !spectatorMode && !isLocked() && (adminUnlocked || (scorerLinkLocked && !scorerLinkExpired())); }
+  function scoreSyncKey(playerId, holeIndex) { return `${playerId}:${holeIndex}`; }
+
+  function setScoreSyncStatus(playerId, holeIndex, status) {
+    const key = scoreSyncKey(playerId, holeIndex);
+    clearTimeout(scoreSyncTimers.get(key));
+    scoreSyncStatus.set(key, status);
+    if (status === "synced") {
+      scoreSyncTimers.set(key, setTimeout(() => {
+        scoreSyncStatus.delete(key);
+        scoreSyncTimers.delete(key);
+        renderGroupScoring();
+      }, 2600));
+    }
+  }
 
   function showToast(message, kind = "info") {
     const toast = $("#toast");
@@ -104,20 +125,21 @@
     else if (queued) foot.textContent = `${queued} change${queued === 1 ? "" : "s"} waiting to sync.`;
     else foot.textContent = mode === "reconnecting" ? "Trying to restore live scoring…" : "Scores entered offline will sync when the connection returns.";
     renderSavedPlayers();
+    renderGroupProgress();
   }
 
   function stampedAction(action, admin) {
     return {
       type: action.type,
       payload: action.payload || {},
-      meta: { at: new Date().toISOString(), actor: admin ? "Organizer" : `Group ${selectedGroup} scorer` }
+      meta: { at: new Date().toISOString(), actor: admin ? "Admin" : `Group ${selectedGroup} scorer`, group: selectedGroup }
     };
   }
 
   async function postAction(action, admin) {
     const headers = { "Content-Type": "application/json", "X-Scoring-Group": selectedGroup };
-    const organizerOverride = admin || (adminUnlocked && !scorerLinkLocked && R.isScoringAction(action.type));
-    if (organizerOverride) {
+    const adminOverride = admin || (adminUnlocked && !scorerLinkLocked && R.isScoringAction(action.type));
+    if (adminOverride) {
       headers["X-Admin-Pin"] = adminPin;
       headers["X-Admin-Override"] = "1";
     } else if (scorerLinkLocked && scorerToken) {
@@ -133,7 +155,7 @@
   }
 
   async function databaseRequest(path, options = {}) {
-    if (!adminUnlocked) throw new Error("Organizer access is required");
+    if (!adminUnlocked) throw new Error("Admin access is required");
     const headers = { ...(options.headers || {}), "X-Admin-Pin": adminPin };
     if (options.body) headers["Content-Type"] = "application/json";
     const response = await fetch(path, { ...options, headers });
@@ -146,7 +168,7 @@
         sessionStorage.removeItem(ADMIN_PIN_KEY);
         render();
       }
-      throw new Error(body.error || "The organizer request failed");
+      throw new Error(body.error || "The admin request failed");
     }
     return body;
   }
@@ -201,7 +223,7 @@
     }
   }
 
-  async function loadOrganizerData() {
+  async function loadAdminData() {
     await Promise.all([loadSavedPlayers(), loadSavedRounds(), loadShareTokens()]);
   }
 
@@ -216,10 +238,10 @@
   async function dispatch(action, options = {}) {
     const admin = options.admin ?? R.isAdminAction(action.type);
     if (spectatorMode) { showToast("This leaderboard link is view only.", "error"); return false; }
-    if (isLocked() && !["SET_LOCKED", "CLEAR_ROUND"].includes(action.type)) { showToast("The round is finalized and locked.", "error"); return false; }
+    if (isLocked() && !["SET_LOCKED", "CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type)) { showToast("The round is finalized and locked.", "error"); return false; }
     if (admin && !adminUnlocked) {
       openAdminDialog();
-      showToast("Organizer access is required for that change.", "error");
+      showToast("Admin access is required for that change.", "error");
       return false;
     }
     const localAction = stampedAction(action, admin || (adminUnlocked && !scorerLinkLocked && R.isScoringAction(action.type)));
@@ -258,10 +280,14 @@
     if (!queue.length) return;
     let rejected = 0;
     for (const item of queue) {
-      try { await postAction(item.action, item.admin); }
+      try {
+        await postAction(item.action, item.admin);
+        if (item.action.type === "SET_SCORE") setScoreSyncStatus(item.action.payload.playerId, Number(item.action.payload.holeIndex), "synced");
+      }
       catch (error) {
         if (!error.serverRejected) throw error;
         rejected += 1;
+        if (item.action.type === "SET_SCORE") setScoreSyncStatus(item.action.payload.playerId, Number(item.action.payload.holeIndex), "error");
       }
     }
     saveQueue([]);
@@ -276,14 +302,24 @@
       await refreshState();
       setConnection("live");
       await flushQueue();
-      await loadOrganizerData();
+      await loadAdminData();
       eventSource?.close();
-      eventSource = new EventSource("/api/events");
+      const eventUrl = new URL("/api/events", location.origin);
+      if (scorerLinkLocked) {
+        eventUrl.searchParams.set("scorer", "1");
+        eventUrl.searchParams.set("group", selectedGroup);
+        eventUrl.searchParams.set("token", scorerToken);
+      }
+      eventSource = new EventSource(eventUrl);
       eventSource.addEventListener("state", (event) => {
         state = R.normalizeState(JSON.parse(event.data));
         saveLocal();
         setConnection("live");
         render();
+      });
+      eventSource.addEventListener("presence", (event) => {
+        groupPresence = JSON.parse(event.data);
+        renderGroupProgress();
       });
       eventSource.onerror = () => setConnection(navigator.onLine ? "reconnecting" : "offline");
     } catch (_) {
@@ -329,7 +365,7 @@
     search.disabled = !adminUnlocked || connectionMode !== "live";
     search.value = savedPlayerSearch;
     if (!adminUnlocked) {
-      status.textContent = "Unlock organizer controls to view saved players.";
+      status.textContent = "Unlock admin controls to view saved players.";
       return;
     }
     if (connectionMode !== "live") {
@@ -484,9 +520,9 @@
     select.disabled = scorerLinkLocked;
     const notice = $("#scorerLinkNotice");
     notice.hidden = adminUnlocked && !scorerLinkLocked;
-    if (scorerLinkLocked && scorerToken) notice.textContent = `This protected scorekeeper link is assigned to Group ${selectedGroup}.`;
-    else if (scorerLinkLocked) notice.textContent = "This scoring link has expired. Ask the organizer for a new group link.";
-    else notice.textContent = "Unlock organizer controls or open a protected group scorekeeper link to enter scores.";
+    if (scorerLinkLocked && !scorerLinkExpired()) notice.textContent = `This protected scorekeeper link is assigned to Group ${selectedGroup}.`;
+    else if (scorerLinkLocked) notice.textContent = "This scoring link has expired. Ask the admin for the current round's group link.";
+    else notice.textContent = "Unlock admin controls or open a protected group scorekeeper link to enter scores.";
     const holes = $("#holeSelect");
     if (!holes.options.length) holes.innerHTML = E.COURSE.holes.map((hole) => `<option value="${hole.number}">Hole ${hole.number}</option>`).join("");
     holes.value = selectedHole;
@@ -564,11 +600,12 @@
     });
   }
 
-  function setScore(playerId, score) {
-    if (!canScore()) return showToast(isLocked() ? "The round is finalized and locked." : "A current scorekeeper link or organizer access is required.", "error");
+  async function setScore(playerId, score) {
+    if (!canScore()) return showToast(isLocked() ? "The round is finalized and locked." : scorerLinkExpired() ? "This scorekeeper link has expired. Ask the admin for a new link." : "A current scorekeeper link or admin access is required.", "error");
     const player = state.players.find((item) => item.id === playerId);
     const holeIndex = selectedHole - 1;
     const par = E.COURSE.holes[holeIndex].par;
+    const wasComplete = groupPlayers().length > 0 && groupPlayers().every((item) => item.scores[holeIndex] !== "");
     const numeric = score === "" ? "" : Math.max(1, Math.min(20, Number(score) || 1));
     if (numeric !== "" && numeric !== player?.scores[holeIndex] && (numeric <= par - 3 || numeric >= par + 5)) {
       if (!window.confirm(`${nameOf(player, 0)}: confirm a score of ${numeric} on Hole ${selectedHole} (par ${par})?`)) return renderGroupScoring();
@@ -577,7 +614,18 @@
     const isNewBirdie = E.isBirdie(numeric, par) && !E.isBirdie(player?.scores[holeIndex], par);
     if (isNewEagle) playEagleCelebration();
     else if (isNewBirdie) playBirdieTweets();
-    dispatch({ type: "SET_SCORE", payload: { playerId, holeIndex, score: numeric } });
+    setScoreSyncStatus(playerId, holeIndex, connectionMode === "live" ? "saving" : "pending");
+    renderGroupScoring();
+    const accepted = await dispatch({ type: "SET_SCORE", payload: { playerId, holeIndex, score: numeric } });
+    setScoreSyncStatus(playerId, holeIndex, accepted ? (connectionMode === "live" ? "synced" : "pending") : "error");
+    renderGroupScoring();
+    const isComplete = groupPlayers().length > 0 && groupPlayers().every((item) => item.scores[holeIndex] !== "");
+    if (accepted && !wasComplete && isComplete && preferences.autoAdvance && selectedHole < 18) {
+      clearTimeout(autoAdvanceTimer);
+      autoAdvanceTimer = setTimeout(() => {
+        if (selectedHole === holeIndex + 1 && groupPlayers().length && groupPlayers().every((item) => item.scores[holeIndex] !== "")) moveToHole(selectedHole + 1, { skipMissingCheck: true });
+      }, 700);
+    }
   }
 
   function renderGroupScoring() {
@@ -587,6 +635,12 @@
     $("#roundLockedNotice").hidden = !isLocked();
     const list = $("#groupScoreList");
     $("#exportScorecardJpegBtn").disabled = players.length === 0;
+    const canUndo = state.undoStack.some((entry) => entry.group === selectedGroup);
+    $("#undoScoreBtn").disabled = !canScore() || !canUndo;
+    const holeComplete = players.length > 0 && players.every((player) => player.scores[selectedHole - 1] !== "");
+    const advanceButton = $("#advanceHoleBtn");
+    advanceButton.hidden = !holeComplete || selectedHole >= 18;
+    advanceButton.textContent = selectedHole < 18 ? `Continue to Hole ${selectedHole + 1}` : "Round complete";
     list.innerHTML = players.map((player) => {
       const index = selectedHole - 1;
       const hole = E.holesForPlayer(E.COURSE, player)[index];
@@ -602,9 +656,11 @@
       const hasKp = state.settings.kpWinners[String(selectedHole)] === player.id;
       const hasSkin = E.skinResult(state.players, E.COURSE, state.settings, index).winnerId === player.id;
       const disabled = canScore() ? "" : "disabled";
+      const syncState = scoreSyncStatus.get(scoreSyncKey(player.id, index));
+      const syncLabel = { saving: "Saving…", pending: "Waiting to sync", synced: "Saved", error: "Sync problem" }[syncState] || "";
       return `<article class="group-score-card" data-player-id="${player.id}">
         <div class="score-player"><strong>${esc(nameOf(player, state.players.indexOf(player)))}</strong><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${strokes > 0 ? `gets ${strokes}` : strokes < 0 ? `gives ${Math.abs(strokes)}` : "no stroke"}</span></div>
-        <div class="score-stepper"><button type="button" data-delta="-1" ${disabled} aria-label="Decrease score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" ${disabled} aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" ${disabled} aria-label="Increase score">+</button></div>
+        <div class="score-entry-wrap"><div class="score-stepper"><button type="button" data-delta="-1" ${disabled} aria-label="Decrease score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" ${disabled} aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" ${disabled} aria-label="Increase score">+</button></div>${syncLabel ? `<span class="score-sync score-sync--${syncState}" role="status">${syncLabel}</span>` : ""}</div>
         <div class="net-box"><span>Net</span><strong>${net ?? "—"}</strong></div>
         <div class="card-tics">${achievement ? `<span class="auto-tic">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${disabled}>Sand save</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${disabled}>KP</label>` : ""}${sandyPar ? '<span class="auto-tic">Sandy par ✓</span>' : ""}${sandyBirdie ? '<span class="auto-tic">Sandy birdie ✓</span>' : ""}</div>
       </article>`;
@@ -613,7 +669,7 @@
       const player = state.players.find((item) => item.id === card.dataset.playerId);
       const input = card.querySelector('input[type="number"]');
       input?.addEventListener("change", (event) => setScore(player.id, event.target.value));
-      card.querySelectorAll("[data-delta]").forEach((button) => button.addEventListener("click", () => setScore(player.id, Math.max(1, Math.min(20, (Number(player.scores[selectedHole - 1]) || E.COURSE.holes[selectedHole - 1].par) + Number(button.dataset.delta))))));
+      card.querySelectorAll("[data-delta]").forEach((button) => button.addEventListener("click", () => setScore(player.id, E.steppedScore(player.scores[selectedHole - 1], E.COURSE.holes[selectedHole - 1].par, Number(button.dataset.delta)))));
       card.querySelector('[data-kind="sandy"]')?.addEventListener("change", (event) => dispatch({ type: "SET_SANDY", payload: { playerId: player.id, holeIndex: selectedHole - 1, value: event.target.checked } }));
       card.querySelector('[data-kind="kp"]')?.addEventListener("change", (event) => dispatch({ type: "SET_KP", payload: { hole: selectedHole, playerId: event.target.checked ? player.id : "" } }));
     });
@@ -756,6 +812,7 @@
     url.searchParams.set("group", group);
     url.searchParams.set("view", "score");
     url.searchParams.set("scorer", "1");
+    url.searchParams.set("round", state.roundId);
     if (shareTokens[group]) url.searchParams.set("token", shareTokens[group]);
     return url.href;
   }
@@ -798,7 +855,7 @@
 
   function renderGroupSharing(errorMessage = "") {
     if (!adminUnlocked) {
-      $("#groupShareGrid").innerHTML = '<div class="empty-state">Unlock organizer controls to create protected group scoring links.</div>';
+      $("#groupShareGrid").innerHTML = '<div class="empty-state">Unlock admin controls to create protected group scoring links.</div>';
       return;
     }
     if (errorMessage || !R.GROUPS.every((group) => shareTokens[group])) {
@@ -825,7 +882,7 @@
     const list = $("#savedRoundsList");
     if (!status || !list) return;
     if (!adminUnlocked) {
-      status.textContent = "Unlock organizer controls to save or view historical rounds.";
+      status.textContent = "Unlock admin controls to save or view historical rounds.";
       list.replaceChildren();
       return;
     }
@@ -842,7 +899,7 @@
     status.textContent = `${savedRounds.length} saved round${savedRounds.length === 1 ? "" : "s"}`;
     list.innerHTML = savedRounds.length ? savedRounds.map((round) => {
       const savedAt = Number.isNaN(Date.parse(round.savedAt)) ? round.savedAt : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(round.savedAt));
-      return `<article class="saved-round-card"><div><strong>${esc(round.roundName)}</strong><span>${esc(round.date)} · ${round.playerCount} player${round.playerCount === 1 ? "" : "s"} · ${round.completed ? "Complete" : "In progress when saved"}</span><span>Saved ${esc(savedAt)}</span></div><div class="saved-round-actions"><button class="button button-primary" type="button" data-round-action="view" data-round-id="${round.id}">View results</button><button class="button button-quiet" type="button" data-round-action="download" data-round-id="${round.id}">Download</button><button class="button button-quiet" type="button" data-round-action="delete" data-round-id="${round.id}">Delete</button></div></article>`;
+      return `<article class="saved-round-card"><div><strong>${esc(round.roundName)}</strong><span>${esc(round.date)} · ${round.playerCount} player${round.playerCount === 1 ? "" : "s"} · ${round.completed ? "Complete" : "In progress when saved"}</span><span>Saved ${esc(savedAt)}</span></div><div class="saved-round-actions"><button class="button button-primary" type="button" data-round-action="view" data-round-id="${round.id}">View results</button><button class="button button-quiet" type="button" data-round-action="roster" data-round-id="${round.id}">Reuse roster</button><button class="button button-quiet" type="button" data-round-action="download" data-round-id="${round.id}">Download</button><button class="button button-quiet" type="button" data-round-action="delete" data-round-id="${round.id}">Delete</button></div></article>`;
     }).join("") : '<div class="empty-state">No rounds have been saved yet.</div>';
     document.querySelectorAll("[data-round-action]").forEach((button) => button.addEventListener("click", () => handleSavedRoundAction(button.dataset.roundAction, button.dataset.roundId)));
   }
@@ -889,10 +946,24 @@
       if (action === "download") {
         return downloadBlob(JSON.stringify(round.state, null, 2), "application/json", `berry-creek-${round.date}-saved.json`);
       }
+      if (action === "roster") {
+        pendingReuseRound = round;
+        const sourceState = R.normalizeState(round.state);
+        $("#reuseRosterText").textContent = `${sourceState.players.length} players and their Group A–F assignments will be copied into a new round dated today. Scores, KPs, sand saves, tics, and the locked status will not be copied.`;
+        const dialog = $("#reuseRosterDialog");
+        dialog.returnValue = "cancel";
+        dialog.showModal();
+        return;
+      }
       activeSavedRound = round;
+      const roundState = R.normalizeState(round.state);
       $("#savedRoundDialogTitle").textContent = round.roundName;
       $("#savedRoundDialogMeta").textContent = `${round.date} · ${round.playerCount} player${round.playerCount === 1 ? "" : "s"} · ${round.completed ? "Complete round" : "Saved before every score was entered"}`;
-      $("#savedRoundDialogBody").innerHTML = archivedPlayerRows(R.normalizeState(round.state));
+      $("#savedRoundDialogBody").innerHTML = archivedPlayerRows(roundState);
+      const groups = R.GROUPS.filter((group) => roundState.players.some((player) => player.group === group));
+      $("#savedRoundGroupSelect").innerHTML = groups.map((group) => `<option value="${group}">Group ${group}</option>`).join("");
+      $("#exportSavedRoundJpegBtn").disabled = groups.length === 0;
+      $("#exportAllSavedRoundJpegsBtn").disabled = groups.length === 0;
       $("#savedRoundDialog").showModal();
     } catch (error) {
       showToast(error.message, "error");
@@ -907,6 +978,52 @@
     }).join("") : '<div class="empty-state">No changes recorded yet.</div>';
   }
 
+  function renderGroupProgress() {
+    const grid = $("#groupProgressGrid");
+    if (!grid) return;
+    grid.innerHTML = R.GROUPS.map((group) => {
+      const players = groupPlayers(group);
+      const completedHoles = players.length ? E.COURSE.holes.filter((_, holeIndex) => players.every((player) => player.scores[holeIndex] !== "")).length : 0;
+      const currentIndex = players.length ? E.COURSE.holes.findIndex((_, holeIndex) => players.some((player) => player.scores[holeIndex] === "")) : -1;
+      const missing = currentIndex >= 0 ? players.filter((player) => player.scores[currentIndex] === "").length : 0;
+      const activity = state.groupActivity[group];
+      const lastUpdate = activity?.at && !Number.isNaN(Date.parse(activity.at))
+        ? new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(activity.at))
+        : "No scoring activity";
+      const connected = Number(groupPresence[group] || 0);
+      const position = !players.length ? "No players" : completedHoles === 18 ? "Complete" : `Hole ${currentIndex + 1} · ${missing} missing`;
+      return `<article class="group-progress-card ${completedHoles === 18 ? "is-complete" : ""}"><div class="group-progress-heading"><strong>Group ${group}</strong><span class="presence-label ${connected ? "is-connected" : ""}"><span class="status-dot"></span>${connected ? `${connected} connected` : "Not connected"}</span></div><div class="group-progress-meta"><span>${players.length}/5 players</span><span>${position}</span></div><div class="progress-track" aria-label="${completedHoles} of 18 holes complete"><span style="width:${(completedHoles / 18) * 100}%"></span></div><small>${completedHoles}/18 holes · ${esc(lastUpdate)}</small></article>`;
+    }).join("");
+  }
+
+  function finalizationChecklistItems() {
+    const items = [];
+    if (!state.players.length) items.push({ ok: false, text: "No players are assigned to the round." });
+    else items.push({ ok: true, text: `${state.players.length} players are assigned.` });
+    R.GROUPS.forEach((group) => {
+      const players = groupPlayers(group);
+      if (!players.length) return;
+      const missing = players.reduce((total, player) => total + player.scores.filter((score) => score === "").length, 0);
+      items.push({ ok: missing === 0, text: missing ? `Group ${group} has ${missing} missing score${missing === 1 ? "" : "s"}.` : `Group ${group} has all scores entered.` });
+    });
+    const missingKps = KP_HOLES.filter((hole) => !state.settings.kpWinners[String(hole)]);
+    items.push({ ok: missingKps.length === 0, text: missingKps.length ? `KP${missingKps.length === 1 ? " is" : "s are"} unassigned on Hole${missingKps.length === 1 ? "" : "s"} ${missingKps.join(", ")}.` : "All KPs are assigned." });
+    const unusual = state.players.reduce((total, player) => total + player.scores.filter((score, index) => score !== "" && (Number(score) <= E.COURSE.holes[index].par - 3 || Number(score) >= E.COURSE.holes[index].par + 5)).length, 0);
+    items.push({ ok: unusual === 0, text: unusual ? `${unusual} unusual score${unusual === 1 ? " needs" : "s need"} a final review.` : "No unusual scores need review." });
+    const names = state.players.map((player) => player.name.trim().toLowerCase()).filter(Boolean);
+    const namesReady = names.length === state.players.length && new Set(names).size === names.length;
+    items.push({ ok: namesReady, text: namesReady ? "All player names are complete and unique." : "One or more player names are missing or duplicated." });
+    return items;
+  }
+
+  function openFinalizeDialog() {
+    const items = finalizationChecklistItems();
+    $("#finalizeChecklist").innerHTML = items.map((item) => `<li class="${item.ok ? "check-ok" : "check-warning"}"><span aria-hidden="true">${item.ok ? "✓" : "!"}</span>${esc(item.text)}</li>`).join("");
+    const dialog = $("#finalizeDialog");
+    dialog.returnValue = "cancel";
+    dialog.showModal();
+  }
+
   function renderTournament() {
     const locked = isLocked();
     $("#roundStatusText").textContent = locked ? "The round is finalized. Scorecards and results remain available to view." : "The round is open for live scoring.";
@@ -914,7 +1031,9 @@
     $("#toggleRoundLockBtn").classList.toggle("button-danger", !locked);
     $("#toggleRoundLockBtn").classList.toggle("button-primary", locked);
     $("#soundToggle").checked = preferences.sound;
+    $("#autoAdvanceToggle").checked = preferences.autoAdvance;
     $("#displayMode").value = preferences.display;
+    renderGroupProgress();
     renderSpectatorSharing();
     renderGroupSharing();
     renderSavedRounds();
@@ -922,7 +1041,7 @@
   }
 
   function renderAdminState() {
-    $("#organizerBtn").textContent = adminUnlocked ? "Lock organizer controls" : "Organizer unlock";
+    $("#adminBtn").textContent = adminUnlocked ? "Lock admin controls" : "Admin unlock";
     $("#setupLockedNotice").hidden = adminUnlocked;
     document.querySelectorAll(".admin-control").forEach((control) => {
       const isRoundLockControl = control.id === "toggleRoundLockBtn";
@@ -967,9 +1086,10 @@
     });
   }
 
-  function moveToHole(nextHole) {
+  function moveToHole(nextHole, options = {}) {
+    clearTimeout(autoAdvanceTimer);
     const missing = groupPlayers().filter((player) => !player.scores[selectedHole - 1]);
-    if (missing.length && nextHole !== selectedHole && !window.confirm(`Hole ${selectedHole} still has ${missing.length} missing score${missing.length === 1 ? "" : "s"}. Leave this hole anyway?`)) return;
+    if (!options.skipMissingCheck && missing.length && nextHole !== selectedHole && !window.confirm(`Hole ${selectedHole} still has ${missing.length} missing score${missing.length === 1 ? "" : "s"}. Leave this hole anyway?`)) return;
     selectedHole = nextHole;
     renderGroupScoring();
   }
@@ -986,15 +1106,15 @@
     try {
       if (connectionMode === "live") {
         const response = await fetch("/api/admin/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: candidate }) });
-        if (!response.ok) throw new Error("Incorrect organizer PIN");
+        if (!response.ok) throw new Error("Incorrect admin PIN");
       } else if (candidate !== "2468") throw new Error("Connect to the server to verify a custom PIN");
       adminPin = candidate;
       adminUnlocked = true;
       sessionStorage.setItem(ADMIN_PIN_KEY, candidate);
       $("#adminDialog").close();
       render();
-      await loadOrganizerData();
-      showToast("Organizer controls unlocked.", "success");
+      await loadAdminData();
+      showToast("Admin controls unlocked.", "success");
     } catch (error) {
       $("#adminError").textContent = error.message;
       $("#adminError").hidden = false;
@@ -1040,6 +1160,102 @@
       button.textContent = originalLabel;
       button.disabled = groupPlayers().length === 0;
     }
+  }
+
+  function safeFilePart(value) {
+    return String(value || "scorecard").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "scorecard";
+  }
+
+  function savedRoundExportOptions(roundState, group) {
+    return {
+      course: E.COURSE,
+      settings: roundState.settings,
+      players: roundState.players.filter((player) => player.group === group),
+      group,
+      roundName: roundState.roundName,
+      date: roundState.date,
+      scoring: E,
+      logoUrl: "berry-creek-logo.jpeg"
+    };
+  }
+
+  async function exportSavedRoundJpeg() {
+    if (!activeSavedRound) return;
+    const roundState = R.normalizeState(activeSavedRound.state);
+    const group = $("#savedRoundGroupSelect").value;
+    const button = $("#exportSavedRoundJpegBtn");
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = "Creating JPEG…";
+    try {
+      const jpeg = await X.createScorecardJpeg(savedRoundExportOptions(roundState, group));
+      downloadBlob(jpeg, "image/jpeg", `${safeFilePart(roundState.roundName)}-group-${group.toLowerCase()}.jpg`);
+      showToast(`Saved Group ${group} scorecard exported.`, "success");
+    } catch (error) {
+      showToast(error.message || "The saved scorecard could not be exported.", "error");
+    } finally {
+      button.textContent = originalLabel;
+      button.disabled = !activeSavedRound;
+    }
+  }
+
+  async function exportAllSavedRoundJpegs() {
+    if (!activeSavedRound) return;
+    const roundState = R.normalizeState(activeSavedRound.state);
+    const groups = R.GROUPS.filter((group) => roundState.players.some((player) => player.group === group));
+    if (!groups.length) return showToast("This saved round has no group scorecards to export.", "error");
+    const button = $("#exportAllSavedRoundJpegsBtn");
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    try {
+      const files = [];
+      for (let index = 0; index < groups.length; index += 1) {
+        const group = groups[index];
+        button.textContent = `Creating ${index + 1} of ${groups.length}…`;
+        const blob = await X.createScorecardJpeg(savedRoundExportOptions(roundState, group));
+        files.push({ name: `${safeFilePart(roundState.roundName)}-group-${group.toLowerCase()}.jpg`, blob });
+      }
+      const archive = await X.createZip(files);
+      downloadBlob(archive, "application/zip", `${safeFilePart(roundState.roundName)}-scorecards.zip`);
+      showToast(`${groups.length} saved group scorecards exported together.`, "success");
+    } catch (error) {
+      showToast(error.message || "The saved scorecards could not be exported.", "error");
+    } finally {
+      button.textContent = originalLabel;
+      button.disabled = !activeSavedRound;
+    }
+  }
+
+  async function startFromSavedRoster() {
+    if (!pendingReuseRound) return;
+    const source = R.normalizeState(pendingReuseRound.state);
+    const nextState = R.defaultState();
+    nextState.roundName = source.roundName || "Berry Creek Round";
+    nextState.date = new Date().toISOString().slice(0, 10);
+    nextState.settings.allowance = source.settings.allowance;
+    nextState.players = source.players.map((player) => {
+      const saved = player.directoryId ? savedPlayers.find((item) => item.id === player.directoryId) : null;
+      return R.normalizePlayer({
+        id: makeId(),
+        directoryId: saved?.id || player.directoryId,
+        name: saved?.name || player.name,
+        ghin: saved?.ghin ?? player.ghin,
+        teeKey: saved?.teeKey || player.teeKey,
+        group: player.group
+      });
+    });
+    if (!await dispatch({ type: "START_FROM_SAVED", payload: { state: nextState } })) return;
+    pendingReuseRound = null;
+    selectedHole = 1;
+    selectedGroup = "A";
+    shareTokens = {};
+    groupPresence = {};
+    savedPlayerGroupSelections.clear();
+    scoreSyncStatus.clear();
+    await refreshState().catch(() => {});
+    await loadShareTokens();
+    switchView("setup");
+    showToast("New round created from the saved roster. Current saved-player details were used where available.", "success");
   }
 
   function downloadCsv() {
@@ -1103,33 +1319,43 @@
   $("#savedPlayerForm").addEventListener("submit", createSavedPlayer);
   $("#savedPlayerSearch").addEventListener("input", (event) => { savedPlayerSearch = event.target.value; renderSavedPlayers(); });
   $("#resetLeaderboardSortBtn").addEventListener("click", () => { leaderboardSort = { key: "standing", direction: "asc" }; renderLeaderboard(); });
-  $("#activeGroupSelect").addEventListener("change", (event) => { selectedGroup = event.target.value; const url = new URL(location.href); url.searchParams.set("group", selectedGroup); history.replaceState(null, "", url); renderGroupScoring(); });
+  $("#activeGroupSelect").addEventListener("change", (event) => { clearTimeout(autoAdvanceTimer); selectedGroup = event.target.value; const url = new URL(location.href); url.searchParams.set("group", selectedGroup); history.replaceState(null, "", url); renderGroupScoring(); });
   $("#holeSelect").addEventListener("change", (event) => moveToHole(Number(event.target.value)));
   $("#prevHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 1 ? 18 : selectedHole - 1));
   $("#nextHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 18 ? 1 : selectedHole + 1));
+  $("#advanceHoleBtn").addEventListener("click", () => moveToHole(Math.min(18, selectedHole + 1), { skipMissingCheck: true }));
+  $("#undoScoreBtn").addEventListener("click", async () => {
+    const entry = [...state.undoStack].reverse().find((item) => item.group === selectedGroup);
+    if (!entry) return showToast(`Group ${selectedGroup} has no scoring change to undo.`, "error");
+    if (await dispatch({ type: "UNDO_LAST", payload: { group: selectedGroup } })) showToast(`Undid ${entry.detail}.`, "success");
+  });
   $("#toggleScorecardBtn").addEventListener("click", () => { scorecardOpen = !scorecardOpen; updateScorecardVisibility(); });
   $("#exportScorecardJpegBtn").addEventListener("click", exportGroupScorecardJpeg);
   $("#roundName").addEventListener("change", (event) => dispatch({ type: "SET_META", payload: { roundName: event.target.value } }));
   $("#roundDate").addEventListener("change", (event) => dispatch({ type: "SET_META", payload: { date: event.target.value } }));
   $("#allowance").addEventListener("change", (event) => dispatch({ type: "SET_ALLOWANCE", payload: { allowance: Number(event.target.value) } }));
-  $("#organizerBtn").addEventListener("click", () => {
-    if (adminUnlocked) { adminUnlocked = false; adminPin = ""; savedPlayers = []; savedRounds = []; shareTokens = {}; savedPlayerSearch = ""; savedPlayerGroupSelections.clear(); sessionStorage.removeItem(ADMIN_PIN_KEY); render(); showToast("Organizer controls locked."); }
+  $("#adminBtn").addEventListener("click", () => {
+    if (adminUnlocked) { adminUnlocked = false; adminPin = ""; savedPlayers = []; savedRounds = []; shareTokens = {}; savedPlayerSearch = ""; savedPlayerGroupSelections.clear(); sessionStorage.removeItem(ADMIN_PIN_KEY); render(); showToast("Admin controls locked."); }
     else openAdminDialog();
   });
   $("#adminSubmitBtn").addEventListener("click", (event) => { event.preventDefault(); verifyAdmin(); });
   $("#adminPinInput").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); verifyAdmin(); } });
   $("#toggleRoundLockBtn").addEventListener("click", () => {
-    if (!isLocked()) {
-      const incomplete = state.players.reduce((sum, player) => sum + player.scores.filter((score) => !score).length, 0);
-      if (incomplete && !window.confirm(`${incomplete} score${incomplete === 1 ? " is" : "s are"} still missing. Finalize the round anyway?`)) return;
-    }
-    dispatch({ type: "SET_LOCKED", payload: { locked: !isLocked() } });
+    if (isLocked()) dispatch({ type: "SET_LOCKED", payload: { locked: false } });
+    else openFinalizeDialog();
+  });
+  const finalizeDialog = $("#finalizeDialog");
+  finalizeDialog.addEventListener("close", () => {
+    if (finalizeDialog.returnValue === "confirm") dispatch({ type: "SET_LOCKED", payload: { locked: true } });
   });
   $("#saveRoundBtn").addEventListener("click", saveCurrentRound);
   $("#downloadSavedRoundBtn").addEventListener("click", () => {
     if (activeSavedRound) downloadBlob(JSON.stringify(activeSavedRound.state, null, 2), "application/json", `berry-creek-${activeSavedRound.date}-saved.json`);
   });
+  $("#exportSavedRoundJpegBtn").addEventListener("click", exportSavedRoundJpeg);
+  $("#exportAllSavedRoundJpegsBtn").addEventListener("click", exportAllSavedRoundJpegs);
   $("#soundToggle").addEventListener("change", (event) => { preferences.sound = event.target.checked; savePreferences(); showToast(preferences.sound ? "Celebration sounds on." : "Celebration sounds muted."); });
+  $("#autoAdvanceToggle").addEventListener("change", (event) => { preferences.autoAdvance = event.target.checked; savePreferences(); showToast(preferences.autoAdvance ? "Automatic hole advance is on." : "Automatic hole advance is off."); });
   $("#displayMode").addEventListener("change", (event) => { preferences.display = event.target.value; savePreferences(); document.body.dataset.display = preferences.display; });
   $("#exportBtn").addEventListener("click", () => downloadBlob(JSON.stringify(state, null, 2), "application/json", `berry-creek-${state.date}.json`));
   $("#csvBtn").addEventListener("click", downloadCsv);
@@ -1137,9 +1363,18 @@
   $("#importInput").addEventListener("change", async (event) => { try { const imported = R.normalizeState(JSON.parse(await event.target.files[0].text())); await dispatch({ type: "REPLACE_ROUND", payload: { state: imported } }); } catch (_) { showToast("That file is not a valid Berry Creek backup.", "error"); } event.target.value = ""; });
   const resetDialog = $("#confirmDialog");
   $("#resetAppBtn").addEventListener("click", () => { resetDialog.returnValue = "cancel"; resetDialog.showModal(); });
-  resetDialog.addEventListener("close", () => {
+  resetDialog.addEventListener("close", async () => {
     if (resetDialog.returnValue === "scores") { selectedHole = 1; dispatch({ type: "RESET_SCORES" }); }
-    if (resetDialog.returnValue === "everything") { selectedHole = 1; selectedGroup = "A"; dispatch({ type: "CLEAR_ROUND" }); }
+    if (resetDialog.returnValue === "everything") {
+      selectedHole = 1;
+      selectedGroup = "A";
+      if (await dispatch({ type: "CLEAR_ROUND" })) {
+        shareTokens = {};
+        groupPresence = {};
+        await refreshState().catch(() => {});
+        await loadShareTokens();
+      }
+    }
   });
   const newRoundDialog = $("#newRoundDialog");
   $("#startNewRoundBtn").addEventListener("click", () => { newRoundDialog.returnValue = "cancel"; newRoundDialog.showModal(); });
@@ -1149,8 +1384,18 @@
     selectedGroup = "A";
     savedPlayerGroupSelections.clear();
     if (!await dispatch({ type: "CLEAR_ROUND" })) return;
+    shareTokens = {};
+    groupPresence = {};
+    scoreSyncStatus.clear();
+    await refreshState().catch(() => {});
+    await loadShareTokens();
     switchView("setup");
     showToast("New round ready. Saved players and round history were kept.", "success");
+  });
+  const reuseRosterDialog = $("#reuseRosterDialog");
+  reuseRosterDialog.addEventListener("close", () => {
+    if (reuseRosterDialog.returnValue === "confirm") startFromSavedRoster();
+    else pendingReuseRound = null;
   });
   $("#clearHistoryBtn").addEventListener("click", () => { if (window.confirm("Clear the complete change history?")) dispatch({ type: "CLEAR_AUDIT" }); });
   $("#checkUpdateBtn").addEventListener("click", async () => { await serviceWorkerRegistration?.update(); const current = await checkVersion(); if (current) showToast("This device already has the current version.", "success"); });
