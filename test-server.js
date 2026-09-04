@@ -27,7 +27,7 @@ async function playerRequest(path = "", options = {}) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.7.0");
+  assert.equal(config.appVersion, "9.7.1");
   const scorecardExportAsset = await fetch(`${base}/scorecard-export.js`);
   assert.equal(scorecardExportAsset.status, 200);
   const sortingAsset = await fetch(`${base}/leaderboard-sort.js`);
@@ -102,6 +102,7 @@ async function playerRequest(path = "", options = {}) {
   assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-b"), kpState.players, E.COURSE, kpState.settings).kps, 0);
   assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-b"), kpState.players, E.COURSE, kpState.settings).kpMarked, 0);
   assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-b"), kpState.players, E.COURSE, kpState.settings).kpThreePutts, 1);
+  assert.equal(kpState.players.reduce((sum, player) => sum + E.ticSummary(player, kpState.players, E.COURSE, kpState.settings).kps, 0), 0);
   await action("SET_SCORE", { playerId: "live-b", holeIndex: 1, score: 3 }, { group: "B" });
   await action("UNDO_LAST", { group: "A" }, { group: "A" });
   const undoneState = await (await fetch(`${base}/api/state`)).json();

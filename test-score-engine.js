@@ -83,6 +83,16 @@ assert.equal(E.ticSummary(failedCurrent, [alice, failedCurrent], E.COURSE, suppl
 assert.equal(E.ticSummary(failedCurrent, [alice, failedCurrent], E.COURSE, supplantedKpSettings).kpMarked, 0);
 assert.equal(E.ticSummary(failedCurrent, [alice, failedCurrent], E.COURSE, supplantedKpSettings).kpThreePutts, 1);
 assert.equal(E.ticSummary(failedCurrent, [alice, failedCurrent], E.COURSE, supplantedKpSettings).pointsEarned, E.ticSummary(failedCurrent, [alice, failedCurrent], E.COURSE, { ...supplantedKpSettings, kpWinners: {}, kpClaims: {} }).pointsEarned);
+const noAwardPlayers = [alice, failedCurrent];
+assert.equal(noAwardPlayers.reduce((sum, player) => sum + E.ticSummary(player, noAwardPlayers, E.COURSE, supplantedKpSettings).kps, 0), 0);
+const laterQualifying = { ...bob, id: "c", name: "Carol", scores: [...bob.scores] };
+laterQualifying.scores[1] = 3;
+const laterQualifyingSettings = { ...settings, kpWinners: { 2: "c" }, kpClaims: { 2: ["a", "b", "c"] } };
+const laterClaimPlayers = [alice, failedCurrent, laterQualifying];
+assert.equal(E.kpClaimStatus(alice, E.COURSE, laterQualifyingSettings, 1), "marked");
+assert.equal(E.kpClaimStatus(failedCurrent, E.COURSE, laterQualifyingSettings, 1), "marked");
+assert.equal(E.kpClaimStatus(laterQualifying, E.COURSE, laterQualifyingSettings, 1), "kp");
+assert.equal(laterClaimPlayers.reduce((sum, player) => sum + E.ticSummary(player, laterClaimPlayers, E.COURSE, laterQualifyingSettings).kps, 0), 1);
 const pendingCurrent = { ...bob, scores: [...bob.scores] };
 pendingCurrent.scores[1] = "";
 assert.equal(E.kpClaimStatus(pendingCurrent, E.COURSE, supplantedKpSettings, 1), "pending");

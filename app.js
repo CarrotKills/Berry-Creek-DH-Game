@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.7.0";
+  const APP_VERSION = "9.7.1";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -536,7 +536,7 @@
     const kpWinnerId = state.settings.kpWinners[String(selectedHole)];
     const kpWinner = state.players.find((player) => player.id === kpWinnerId);
     const kpClaimState = kpWinner ? E.kpClaimStatus(kpWinner, E.COURSE, state.settings, selectedHole - 1) : "none";
-    const kpDetail = kpClaimState === "kp" ? " · KP · 1 tic" : kpClaimState === "three-putt" ? " · KP 3-Putt · 0 tics" : kpClaimState === "pending" ? " · score pending · 0 tics" : "";
+    const kpDetail = kpClaimState === "kp" ? " · KP · 1 tic" : kpClaimState === "three-putt" ? " · KP 3-Putt · no KP awarded · 0 tics" : kpClaimState === "pending" ? " · score pending · 0 tics" : "";
     const kpStatus = KP_HOLES.includes(selectedHole) ? `<span class="kp-status">KP: ${kpWinner ? `${esc(nameOf(kpWinner, state.players.indexOf(kpWinner)))}${kpDetail}` : "Open"}</span>` : "";
     const skin = E.skinResult(state.players, E.COURSE, state.settings, selectedHole - 1);
     const skinWinner = state.players.find((player) => player.id === skin.winnerId);
@@ -662,7 +662,7 @@
       const kpClaimState = E.kpClaimStatus(player, E.COURSE, state.settings, index);
       const kpNote = kpClaimState === "marked"
         ? '<span class="prior-kp-note kp-marked-note">KP Marked · beaten by later player · 0 tics</span>'
-        : kpClaimState === "three-putt" ? '<span class="prior-kp-note kp-three-putt-note">KP 3-Putt · score over par · 0 tics</span>'
+        : kpClaimState === "three-putt" ? '<span class="prior-kp-note kp-three-putt-note">KP 3-Putt · score over par · no KP awarded · 0 tics</span>'
         : kpClaimState === "pending" ? '<span class="prior-kp-note">KP pending score · 0 tics</span>' : "";
       const hasSkin = E.skinResult(state.players, E.COURSE, state.settings, index).winnerId === player.id;
       const disabled = canScore() ? "" : "disabled";
@@ -738,7 +738,7 @@
       const winnerId = state.settings.kpWinners[String(hole)];
       const player = state.players.find((item) => item.id === winnerId);
       const status = player ? E.kpClaimStatus(player, E.COURSE, state.settings, hole - 1) : "none";
-      const statusText = status === "kp" ? "KP · 1 tic" : status === "three-putt" ? "KP 3-Putt · 0 tics" : status === "pending" ? "Score pending · 0 tics" : "Open";
+      const statusText = status === "kp" ? "KP · 1 tic" : status === "three-putt" ? "KP 3-Putt · no KP awarded · 0 tics" : status === "pending" ? "Score pending · 0 tics" : "Open";
       return `<div class="kp-card"><label>Hole ${hole} KP<select data-kp-hole="${hole}" ${canAdminEdit ? "" : "disabled"}><option value="">No winner</option>${state.players.map((item, index) => `<option value="${item.id}" ${winnerId === item.id ? "selected" : ""}>${esc(nameOf(item, index))} · ${item.group}</option>`).join("")}</select></label><span class="kp-card-status ${status === "three-putt" ? "is-failed" : ""}">${statusText}</span></div>`;
     }).join("");
     document.querySelectorAll("[data-kp-hole]").forEach((select) => select.addEventListener("change", (event) => dispatch({ type: "SET_KP", payload: { hole: Number(event.target.dataset.kpHole), playerId: event.target.value } }, { admin: true })));
@@ -1036,8 +1036,17 @@
       const missing = players.reduce((total, player) => total + player.scores.filter((score) => score === "").length, 0);
       items.push({ ok: missing === 0, text: missing ? `Group ${group} has ${missing} missing score${missing === 1 ? "" : "s"}.` : `Group ${group} has all scores entered.` });
     });
-    const missingKps = KP_HOLES.filter((hole) => !state.settings.kpWinners[String(hole)]);
-    items.push({ ok: missingKps.length === 0, text: missingKps.length ? `KP${missingKps.length === 1 ? " is" : "s are"} unassigned on Hole${missingKps.length === 1 ? "" : "s"} ${missingKps.join(", ")}.` : "All KPs are assigned." });
+    const kpResults = KP_HOLES.map((hole) => {
+      const player = state.players.find((item) => item.id === state.settings.kpWinners[String(hole)]);
+      return { hole, status: player ? E.kpClaimStatus(player, E.COURSE, state.settings, hole - 1) : "none" };
+    });
+    const missingKps = kpResults.filter((result) => result.status === "none").map((result) => result.hole);
+    const pendingKps = kpResults.filter((result) => result.status === "pending").map((result) => result.hole);
+    const noAwardKps = kpResults.filter((result) => result.status === "three-putt").map((result) => result.hole);
+    if (missingKps.length) items.push({ ok: false, text: `KP${missingKps.length === 1 ? " is" : "s are"} unassigned on Hole${missingKps.length === 1 ? "" : "s"} ${missingKps.join(", ")}.` });
+    if (pendingKps.length) items.push({ ok: false, text: `KP score${pendingKps.length === 1 ? " is" : "s are"} pending on Hole${pendingKps.length === 1 ? "" : "s"} ${pendingKps.join(", ")}.` });
+    if (noAwardKps.length) items.push({ ok: true, text: `No KP tic is awarded on Hole${noAwardKps.length === 1 ? "" : "s"} ${noAwardKps.join(", ")} because the latest claim is KP 3-Putt.` });
+    if (!missingKps.length && !pendingKps.length && !noAwardKps.length) items.push({ ok: true, text: "All KPs are assigned and qualifying." });
     const unusual = state.players.reduce((total, player) => total + player.scores.filter((score, index) => score !== "" && (Number(score) <= E.COURSE.holes[index].par - 3 || Number(score) >= E.COURSE.holes[index].par + 5)).length, 0);
     items.push({ ok: unusual === 0, text: unusual ? `${unusual} unusual score${unusual === 1 ? " needs" : "s need"} a final review.` : "No unusual scores need review." });
     const names = state.players.map((player) => player.name.trim().toLowerCase()).filter(Boolean);
@@ -1382,7 +1391,7 @@
     const kpRows = KP_HOLES.map((hole) => {
       const player = state.players.find((item) => item.id === state.settings.kpWinners[String(hole)]);
       const status = player ? E.kpClaimStatus(player, E.COURSE, state.settings, hole - 1) : "none";
-      const detail = status === "kp" ? " · KP · 1 tic" : status === "three-putt" ? " · KP 3-Putt · 0 tics" : status === "pending" ? " · score pending · 0 tics" : "";
+      const detail = status === "kp" ? " · KP · 1 tic" : status === "three-putt" ? " · KP 3-Putt · no KP awarded · 0 tics" : status === "pending" ? " · score pending · 0 tics" : "";
       return `<tr><td>Hole ${hole}</td><td>${player ? `${esc(nameOf(player, state.players.indexOf(player)))}${detail}` : "—"}</td></tr>`;
     }).join("");
     const skinRows = E.COURSE.holes.map((hole, index) => {
@@ -1391,7 +1400,7 @@
       const resultText = result.status === "awarded" ? esc(nameOf(player, state.players.indexOf(player))) : result.status === "tie" ? "No skin — tie" : "Pending";
       return `<tr><td>${hole.number}</td><td>${resultText}</td></tr>`;
     }).join("");
-    const groupTables = R.GROUPS.filter((group) => groupPlayers(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>Each dot is one handicap stroke received. Circles mark birdies and eagles; squares mark bogeys and worse. Filled KP earns 1 tic; transparent KP MARKED and KP 3-PUTT stamps earn 0 tics; outlined KP is pending.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.map((hole) => `<th>${hole.number}</th>`).join("")}<th>Gross</th><th>Net</th></tr></thead><tbody>${groupPlayers(group).map((player, playerIndex) => { const totals = E.playerTotals(player, E.COURSE, state.settings); return `<tr><td>${esc(nameOf(player, playerIndex))}</td>${player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceived(player, holeIndex))}</span>${kpScorecardMark(player, holeIndex)}</td>`).join("")}<td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
+    const groupTables = R.GROUPS.filter((group) => groupPlayers(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>Each dot is one handicap stroke received. Circles mark birdies and eagles; squares mark bogeys and worse. Filled KP earns 1 tic; transparent KP MARKED and KP 3-PUTT stamps earn 0 tics; outlined KP is pending. KP 3-Putt leaves the hole without a KP award unless a later player qualifies.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.map((hole) => `<th>${hole.number}</th>`).join("")}<th>Gross</th><th>Net</th></tr></thead><tbody>${groupPlayers(group).map((player, playerIndex) => { const totals = E.playerTotals(player, E.COURSE, state.settings); return `<tr><td>${esc(nameOf(player, playerIndex))}</td>${player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceived(player, holeIndex))}</span>${kpScorecardMark(player, holeIndex)}</td>`).join("")}<td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
     const leaders = rankedPlayers().map((item, rank) => `<tr><td>${rank + 1}</td><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${item.player.scores.filter(Boolean).length}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.kps}</td><td>${item.tics.kpMarked}</td><td>${item.tics.kpThreePutts}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${item.ledger.net.toFixed(1)}</td></tr>`).join("");
     $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(state.roundName)}</h1><p>${esc(state.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table><thead><tr><th>Place</th><th>Player</th><th>Group</th><th>Thru</th><th>Gross</th><th>Net</th><th>KP</th><th>KP Marked</th><th>KP 3-Putt</th><th>Points +</th><th>Points −</th><th>Net points</th></tr></thead><tbody>${leaders}</tbody></table><div class="print-columns"><section><h2>KPs</h2><table><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
   }

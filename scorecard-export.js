@@ -343,7 +343,7 @@
     ctx.textBaseline = "middle";
     ctx.fillText("Red dots show handicap strokes received.", margin, backBottom + 50);
     ctx.fillText("Birdie: circle  ·  Eagle or better: double circle  ·  Bogey: square  ·  Double bogey or higher: double square", margin, backBottom + 91);
-    ctx.fillText("Filled KP: qualifying holder (1 tic)  ·  KP MARKED: later beaten (0 tics)  ·  KP 3-PUTT: current closest but over par (0 tics)  ·  Outlined KP: pending (0 tics)", margin, backBottom + 132);
+    ctx.fillText("Filled KP: qualifier (1 tic)  ·  KP MARKED: later beaten (0)  ·  KP 3-PUTT: latest closest is over par; no KP awarded until a later qualifier (0)  ·  Outlined KP: pending (0)", margin, backBottom + 132);
 
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The scorecard JPEG could not be created")), "image/jpeg", 0.94);
