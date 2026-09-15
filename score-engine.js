@@ -113,6 +113,14 @@
     return Math.max(1, Math.min(20, Number(currentScore) + (Number(direction) < 0 ? -1 : 1)));
   }
 
+  function isInGame(player) {
+    return player?.inGame !== false;
+  }
+
+  function gamePlayers(players) {
+    return (Array.isArray(players) ? players : []).filter(isInGame);
+  }
+
   function segmentTotals(player, course, settings, start, end) {
     let gross = 0;
     let net = 0;
@@ -147,7 +155,7 @@
   }
 
   function leaders(players, course, settings, segment) {
-    const eligible = players
+    const eligible = gamePlayers(players)
       .map((player) => ({ player, totals: playerTotals(player, course, settings) }))
       .filter((item) => item.totals[segment].completed);
     if (!eligible.length) return [];
@@ -156,9 +164,10 @@
   }
 
   function skinResult(players, course, settings, holeIndex) {
-    if (!players.length || holeIndex < 0 || holeIndex > 17) return { status: "pending", winnerId: null, lowNet: null };
+    const eligiblePlayers = gamePlayers(players);
+    if (!eligiblePlayers.length || holeIndex < 0 || holeIndex > 17) return { status: "pending", winnerId: null, lowNet: null };
     const entries = [];
-    for (const player of players) {
+    for (const player of eligiblePlayers) {
       const gross = Number(player.scores[holeIndex]);
       if (!Number.isFinite(gross) || gross < 1) return { status: "pending", winnerId: null, lowNet: null };
       const hole = holesForPlayer(course, player)[holeIndex];
@@ -172,6 +181,7 @@
   }
 
   function kpClaimStatus(player, course, settings, holeIndex) {
+    if (!isInGame(player)) return "none";
     const hole = holesForPlayer(course, player)[holeIndex];
     if (!hole) return "none";
     const key = String(hole.number);
@@ -185,6 +195,9 @@
   }
 
   function ticSummary(player, players, course, settings) {
+    const empty = { birdies: 0, eagles: 0, skins: 0, front: 0, frontWeight: 0, back: 0, backWeight: 0, totalNet: 0, totalNetWeight: 0, sandyPars: 0, sandyBirdies: 0, kps: 0, kpMarked: 0, kpThreePutts: 0, total: 0, weightedTics: 0, pointsEarned: 0 };
+    if (!isInGame(player)) return empty;
+    const eligiblePlayers = gamePlayers(players);
     let birdies = 0;
     let eagles = 0;
     let skins = 0;
@@ -197,7 +210,7 @@
       const gross = Number(player.scores[i]);
       if (gross > 0 && gross <= hole.par - 1) birdies += 1;
       if (gross > 0 && gross <= hole.par - 2) eagles += 1;
-      if (skinResult(players, course, settings, i).winnerId === player.id) skins += 1;
+      if (skinResult(eligiblePlayers, course, settings, i).winnerId === player.id) skins += 1;
       if (player.sandies[i] && gross === hole.par) sandyPars += 1;
       if (player.sandies[i] && gross > 0 && gross <= hole.par - 1) sandyBirdies += 1;
       const kpStatus = kpClaimStatus(player, course, settings, i);
@@ -205,9 +218,9 @@
       if (kpStatus === "marked") kpMarked += 1;
       if (kpStatus === "three-putt") kpThreePutts += 1;
     });
-    const frontLeaders = leaders(players, course, settings, "front");
-    const backLeaders = leaders(players, course, settings, "back");
-    const totalLeaders = leaders(players, course, settings, "total");
+    const frontLeaders = leaders(eligiblePlayers, course, settings, "front");
+    const backLeaders = leaders(eligiblePlayers, course, settings, "back");
+    const totalLeaders = leaders(eligiblePlayers, course, settings, "total");
     const front = frontLeaders.includes(player.id) ? 1 : 0;
     const back = backLeaders.includes(player.id) ? 1 : 0;
     const totalNet = totalLeaders.includes(player.id) ? 1 : 0;
@@ -237,11 +250,13 @@
   }
 
   function pointsLedger(player, players, course, settings) {
-    const ownPoints = ticSummary(player, players, course, settings).pointsEarned;
-    const positive = ownPoints * Math.max(0, players.length - 1);
-    const losses = players
+    if (!isInGame(player)) return { achievementPoints: 0, positive: 0, negative: 0, net: 0 };
+    const eligiblePlayers = gamePlayers(players);
+    const ownPoints = ticSummary(player, eligiblePlayers, course, settings).pointsEarned;
+    const positive = ownPoints * Math.max(0, eligiblePlayers.length - 1);
+    const losses = eligiblePlayers
       .filter((other) => other.id !== player.id)
-      .reduce((sum, other) => sum + ticSummary(other, players, course, settings).pointsEarned, 0);
+      .reduce((sum, other) => sum + ticSummary(other, eligiblePlayers, course, settings).pointsEarned, 0);
     const negative = losses ? -losses : 0;
     return { achievementPoints: ownPoints, positive, negative, net: positive + negative };
   }
@@ -260,6 +275,8 @@
     isBirdie,
     scoreMark,
     steppedScore,
+    isInGame,
+    gamePlayers,
     segmentTotals,
     playerTotals,
     leaders,

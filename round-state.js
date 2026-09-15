@@ -21,7 +21,7 @@
 
   function defaultState() {
     return {
-      version: 5,
+      version: 6,
       revision: 0,
       roundId: newRoundId(),
       roundName: "Berry Creek Round",
@@ -40,6 +40,8 @@
       directoryId: player.directoryId ? String(player.directoryId) : "",
       name: String(player.name || "").slice(0, 40),
       ghin: Number(player.ghin) || 0,
+      isGuest: Boolean(player.isGuest),
+      inGame: player.inGame !== false,
       teeKey: String(player.teeKey || "championship"),
       group: GROUPS.includes(player.group) ? player.group : "A",
       scores: Array.from({ length: 18 }, (_, i) => player.scores?.[i] ?? ""),
@@ -49,6 +51,15 @@
         return Boolean(player.sandies?.[i]) && gross >= 1 && gross <= HOLE_PARS[i];
       })
     };
+  }
+
+  function activePlayerConflict(players, candidate, ignoredPlayerId = "") {
+    const candidateId = String(candidate?.id || "");
+    const directoryId = String(candidate?.directoryId || "");
+    return (Array.isArray(players) ? players : []).find((player) => {
+      if (player.id === ignoredPlayerId) return false;
+      return (candidateId && player.id === candidateId) || (directoryId && player.directoryId === directoryId);
+    }) || null;
   }
 
   function normalizeAuditEntry(entry) {
@@ -101,13 +112,16 @@
   function normalizeState(value) {
     const base = defaultState();
     if (!value || !Array.isArray(value.players)) return base;
-    const players = value.players.slice(0, MAX_PLAYERS).map(normalizePlayer);
-    const validPlayerIds = new Set(players.map((player) => player.id));
+    const players = [];
+    value.players.slice(0, MAX_PLAYERS).map(normalizePlayer).forEach((player) => {
+      if (!activePlayerConflict(players, player)) players.push(player);
+    });
+    const validPlayerIds = new Set(players.filter((player) => player.inGame).map((player) => player.id));
     const kpWinners = Object.fromEntries(Object.entries(value.settings?.kpWinners || {}).filter(([hole, playerId]) => KP_HOLES.includes(Number(hole)) && validPlayerIds.has(String(playerId))).map(([hole, playerId]) => [String(hole), String(playerId)]));
     return {
       ...base,
       ...value,
-      version: 5,
+      version: 6,
       roundId: String(value.roundId || base.roundId),
       settings: {
         ...base.settings,
@@ -233,9 +247,9 @@
       if (!player || entry.holeIndex < 0 || entry.holeIndex > 17) return false;
       player.sandies[entry.holeIndex] = Boolean(entry.beforeValue);
     } else if (entry.kind === "kp") {
-      if (entry.beforeValue && state.players.some((player) => player.id === entry.beforeValue)) state.settings.kpWinners[String(entry.hole)] = entry.beforeValue;
+      if (entry.beforeValue && state.players.some((player) => player.id === entry.beforeValue && player.inGame)) state.settings.kpWinners[String(entry.hole)] = entry.beforeValue;
       else delete state.settings.kpWinners[String(entry.hole)];
-      const validClaims = entry.beforeClaims.filter((playerId) => state.players.some((player) => player.id === playerId));
+      const validClaims = entry.beforeClaims.filter((playerId) => state.players.some((player) => player.id === playerId && player.inGame));
       if (validClaims.length) state.settings.kpClaims[String(entry.hole)] = validClaims;
       else delete state.settings.kpClaims[String(entry.hole)];
     }
@@ -263,6 +277,7 @@
       case "ADD_PLAYER": {
         if (state.players.length >= MAX_PLAYERS || !p.player?.id) { changed = false; break; }
         const incoming = normalizePlayer(p.player);
+        if (activePlayerConflict(state.players, incoming)) { changed = false; break; }
         const groupCount = state.players.filter((player) => player.group === incoming.group).length;
         if (groupCount < MAX_GROUP_SIZE) state.players.push(incoming);
         else changed = false;
@@ -285,14 +300,29 @@
         if (!player) { changed = false; break; }
         const previousGroup = player.group;
         if (typeof p.name === "string") player.name = p.name.slice(0, 40);
-        if (typeof p.directoryId === "string") player.directoryId = p.directoryId;
+        if (typeof p.directoryId === "string") {
+          const directoryId = String(p.directoryId);
+          if (directoryId && activePlayerConflict(state.players, { ...player, directoryId }, player.id)) { changed = false; break; }
+          player.directoryId = directoryId;
+        }
         if (Number.isFinite(Number(p.ghin))) player.ghin = Math.max(-10, Math.min(54, Number(p.ghin)));
+        if (typeof p.inGame === "boolean") player.inGame = p.inGame;
         if (typeof p.teeKey === "string") player.teeKey = p.teeKey;
         if (GROUPS.includes(p.group)) {
           const groupCount = state.players.filter((item) => item.group === p.group && item.id !== p.playerId).length;
           if (groupCount < MAX_GROUP_SIZE) player.group = p.group;
         }
         if (player.group !== previousGroup) state.undoStack = state.undoStack.filter((entry) => entry.playerId !== p.playerId && entry.beforeValue !== p.playerId && entry.afterValue !== p.playerId && !entry.beforeClaims.includes(p.playerId));
+        if (!player.inGame) {
+          Object.keys(state.settings.kpWinners).forEach((hole) => {
+            if (state.settings.kpWinners[hole] === player.id) delete state.settings.kpWinners[hole];
+          });
+          Object.keys(state.settings.kpClaims).forEach((hole) => {
+            state.settings.kpClaims[hole] = state.settings.kpClaims[hole].filter((playerId) => playerId !== player.id);
+            if (!state.settings.kpClaims[hole].length) delete state.settings.kpClaims[hole];
+          });
+          state.undoStack = state.undoStack.filter((entry) => entry.playerId !== player.id && entry.beforeValue !== player.id && entry.afterValue !== player.id && !entry.beforeClaims.includes(player.id));
+        }
         break;
       }
       case "SET_SCORE": {
@@ -321,7 +351,7 @@
         const key = String(p.hole);
         const previous = state.settings.kpWinners[key] || "";
         const previousClaims = [...(state.settings.kpClaims[key] || [])];
-        const nextPlayerId = p.playerId && state.players.some((player) => player.id === p.playerId) ? String(p.playerId) : "";
+        const nextPlayerId = p.playerId && state.players.some((player) => player.id === p.playerId && player.inGame) ? String(p.playerId) : "";
         if (nextPlayerId) {
           state.settings.kpWinners[key] = nextPlayerId;
           state.settings.kpClaims[key] = [...new Set([...previousClaims, nextPlayerId])];
@@ -396,6 +426,7 @@
     SCORING_ACTIONS,
     defaultState,
     normalizePlayer,
+    activePlayerConflict,
     normalizeState,
     isAdminAction,
     isScoringAction,

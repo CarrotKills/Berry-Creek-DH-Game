@@ -26,6 +26,8 @@ Before an event on Render, add an environment variable named `ADMIN_PIN` with yo
 
 The Players tab includes an admin-only reusable player database. Save each golfer's name, GHIN Index, and preferred tee once, then search the list and add that golfer to any Group A-F for a new round. Editing a saved player's GHIN Index, name, or tee also updates their linked entry in the active round.
 
+The guest-entry form in the database panel creates a one-time, independent player for the active round. A name, Handicap Index, tee, and group are required. Guests are not saved to the reusable roster, may be entered repeatedly in different groups, and display `*G` beside their names on the leaderboard.
+
 Enter and display better-than-scratch indexes using standard golf notation, such as `+4.2`. The app stores the value internally in the direction required for stroke calculations, so existing players previously entered as `-4.2` automatically display as `+4.2` after this update.
 
 Deleting a saved player does not delete that golfer's current-round scores. It only removes the reusable database record.
@@ -33,7 +35,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 ## Event workflow
 
 1. Unlock admin controls and save or update golfers in the player database.
-2. Add saved golfers to Groups A-F, or use Add player for a one-time entry. The round supports up to 30 players and each group is limited to five.
+2. Add saved golfers to Groups A-F, use **Add player** for a one-time entry, or submit **Add guest** for an independent guest entry. The round supports up to 30 players, each group is limited to five, and the same saved player cannot be assigned to more than one active group.
 3. Open the Settings tab and use Copy link, Share, or QR code for each group. Protected group links open directly to scoring, keep the group selector fixed, and authorize changes only for that fivesome. Previously shared v9.4 and older group links must be replaced.
 4. Each scorekeeper enters all five gross scores for the current hole and marks sand saves and par-3 KPs.
 5. Everyone can view the live Leaderboard. A new KP claim on the same hole automatically replaces the previous holder while retaining the earlier player's scorecard mark.
@@ -42,6 +44,9 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 8. Select Save current round to preserve a historical snapshot before resetting for the next event.
 
 ## Handicap and tic rules
+
+- **Guest:** a one-time player with a manually entered Handicap Index. Guests compete normally, display `*G` on the leaderboard, are not saved to the reusable database, and may be entered independently more than once.
+- **Not in the game:** the player's gross and net scores remain on the group scorecard, but the player is excluded from the leaderboard, KPs, skins, tics, segment/overall awards, and points calculations.
 
 - Course Handicap = Handicap Index x (Slope / 113) + (Course Rating - Par), rounded.
 - Playing Handicap = Course Handicap x the event allowance, rounded.

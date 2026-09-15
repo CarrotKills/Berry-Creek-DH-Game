@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.7.1";
+  const APP_VERSION = "9.8.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -82,6 +82,8 @@
   function makeId() { return globalThis.crypto?.randomUUID?.() || `p-${Date.now()}-${Math.random().toString(16).slice(2)}`; }
   function esc(value) { return String(value).replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c])); }
   function nameOf(player, index) { return player.name.trim() || `Player ${index + 1}`; }
+  function playerNameHtml(player, index) { return `${esc(nameOf(player, index))}${player.isGuest ? '<sup class="guest-marker">*G</sup>' : ""}`; }
+  function playerExportName(player, index) { return `${nameOf(player, index)}${player.isGuest ? " *G" : ""}${player.inGame ? "" : " (not in game)"}`; }
   function teeOf(player) { return E.teeForPlayer(E.COURSE, player); }
   function hcp(player) { return E.playingHandicap(player.ghin, state.settings, teeOf(player)); }
   function displayIndex(value) { return E.formatHandicap(value, 1); }
@@ -339,6 +341,32 @@
     dispatch({ type: "ADD_PLAYER", payload: { player } });
     requestAnimationFrame(() => $("#playerList").lastElementChild?.querySelector(".player-name")?.focus());
   }
+
+  function addGuest(event) {
+    event.preventDefault();
+    if (state.players.length >= R.MAX_PLAYERS) return showValidation("Maximum of 30 players reached.");
+    const name = $("#guestPlayerName").value.trim();
+    const handicapText = $("#guestPlayerGhin").value.trim();
+    const group = $("#guestPlayerGroup").value;
+    if (!name) return showToast("Enter the guest's name.", "error");
+    if (!handicapText || !Number.isFinite(Number(handicapText))) return showToast("Enter the guest's Handicap Index, such as 12.4 or +4.2.", "error");
+    if (!R.GROUPS.includes(group) || groupPlayers(group).length >= R.MAX_GROUP_SIZE) return showValidation(`Group ${group} already has five players.`);
+    const player = R.normalizePlayer({
+      id: makeId(),
+      name,
+      ghin: E.parseHandicapInput(handicapText),
+      isGuest: true,
+      inGame: true,
+      teeKey: $("#guestPlayerTee").value,
+      group
+    });
+    dispatch({ type: "ADD_PLAYER", payload: { player } }).then((accepted) => {
+      if (!accepted) return;
+      $("#guestPlayerName").value = "";
+      $("#guestPlayerGhin").value = "";
+      showToast(`${name} added to Group ${group} as an independent guest.`, "success");
+    });
+  }
   function showValidation(message) { const el = $("#playerLimit"); el.textContent = message; el.hidden = false; }
 
   function teeOptions(selected) {
@@ -459,7 +487,7 @@
     if (state.players.length >= R.MAX_PLAYERS) return showValidation("Maximum of 30 players reached.");
     if (!R.GROUPS.includes(group) || groupPlayers(group).length >= R.MAX_GROUP_SIZE) return showValidation(`Group ${group} already has five players.`);
     const player = R.normalizePlayer({ id: makeId(), directoryId: saved.id, name: saved.name, ghin: saved.ghin, teeKey: saved.teeKey, group });
-    await dispatch({ type: "ADD_PLAYER", payload: { player } });
+    if (!await dispatch({ type: "ADD_PLAYER", payload: { player } })) return;
     showToast(`${saved.name} added to Group ${group}.`, "success");
   }
 
@@ -482,7 +510,7 @@
   function renderSetupWarnings() {
     const warnings = [];
     const missing = state.players.filter((player) => !player.name.trim()).length;
-    const names = state.players.map((player) => player.name.trim().toLowerCase()).filter(Boolean);
+    const names = state.players.filter((player) => !player.isGuest).map((player) => player.name.trim().toLowerCase()).filter(Boolean);
     const duplicates = [...new Set(names.filter((name, index) => names.indexOf(name) !== index))];
     if (missing) warnings.push(`${missing} player${missing === 1 ? " is" : "s are"} missing a name.`);
     if (duplicates.length) warnings.push(`Duplicate player name${duplicates.length === 1 ? "" : "s"}: ${duplicates.join(", ")}.`);
@@ -496,22 +524,27 @@
     list.replaceChildren();
     state.players.forEach((player, index) => {
       const row = $("#playerRowTemplate").content.firstElementChild.cloneNode(true);
+      row.classList.toggle("is-not-in-game", !player.inGame);
       row.querySelector(".player-number").textContent = index + 1;
       const name = row.querySelector(".player-name"); name.value = player.name;
       const ghinInput = row.querySelector(".player-ghin"); ghinInput.value = displayIndex(player.ghin);
       const tee = row.querySelector(".player-tee"); tee.innerHTML = teeOptions(player.teeKey);
       const group = row.querySelector(".player-group"); group.innerHTML = groupOptions(player.group, player.id);
+      const typeBadge = row.querySelector(".player-type-badge"); typeBadge.hidden = !player.isGuest;
+      const notInGame = row.querySelector(".player-in-game"); notInGame.checked = !player.inGame;
       row.querySelector(".playing-hcp strong").textContent = displayPlayingHandicap(hcp(player));
       name.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, name: event.target.value } }));
       ghinInput.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, ghin: E.parseHandicapInput(event.target.value) } }));
       tee.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, teeKey: event.target.value } }));
       group.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, group: event.target.value } }));
+      notInGame.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, inGame: !event.target.checked } }));
       row.querySelector(".remove-player").addEventListener("click", () => dispatch({ type: "REMOVE_PLAYER", payload: { playerId: player.id } }));
       list.append(row);
     });
     if (!state.players.length) list.innerHTML = '<div class="empty-state">No players yet. Add up to 30 golfers.</div>';
     $("#playerLimit").hidden = true;
     $("#addPlayerBtn").disabled = state.players.length >= R.MAX_PLAYERS;
+    $("#addGuestBtn").disabled = state.players.length >= R.MAX_PLAYERS;
     $("#groupCounts").innerHTML = R.GROUPS.map((group) => `<span>Group ${group}: <strong>${groupPlayers(group).length}/5</strong></span>`).join("");
     renderSetupWarnings();
   }
@@ -614,8 +647,8 @@
     if (numeric !== "" && numeric !== player?.scores[holeIndex] && (numeric <= par - 3 || numeric >= par + 5)) {
       if (!window.confirm(`${nameOf(player, 0)}: confirm a score of ${numeric} on Hole ${selectedHole} (par ${par})?`)) return renderGroupScoring();
     }
-    const isNewEagle = E.isEagle(numeric, par) && !E.isEagle(player?.scores[holeIndex], par);
-    const isNewBirdie = E.isBirdie(numeric, par) && !E.isBirdie(player?.scores[holeIndex], par);
+    const isNewEagle = E.isInGame(player) && E.isEagle(numeric, par) && !E.isEagle(player?.scores[holeIndex], par);
+    const isNewBirdie = E.isInGame(player) && E.isBirdie(numeric, par) && !E.isBirdie(player?.scores[holeIndex], par);
     if (isNewEagle) playEagleCelebration();
     else if (isNewBirdie) playBirdieTweets();
     setScoreSyncStatus(playerId, holeIndex, connectionMode === "live" ? "saving" : "pending");
@@ -650,14 +683,15 @@
       const index = selectedHole - 1;
       const hole = E.holesForPlayer(E.COURSE, player)[index];
       const gross = player.scores[index];
+      const competitive = E.isInGame(player);
       const strokes = E.strokesForHole(hcp(player), hole.strokeIndex);
       const net = E.netScore(gross, strokes);
       const birdie = Number(gross) > 0 && Number(gross) <= hole.par - 1;
-      const achievement = E.isEagle(gross, hole.par) ? "Eagle" : E.isBirdie(gross, hole.par) ? "Birdie" : Number(gross) > 0 && Number(gross) <= hole.par - 3 ? "Albatross" : "";
-      const sandyPar = player.sandies[index] && Number(gross) === hole.par;
-      const sandyBirdie = player.sandies[index] && birdie;
-      const canMarkSandy = Number(gross) >= 1 && Number(gross) <= hole.par;
-      const isKpHole = KP_HOLES.includes(selectedHole);
+      const achievement = competitive ? (E.isEagle(gross, hole.par) ? "Eagle" : E.isBirdie(gross, hole.par) ? "Birdie" : Number(gross) > 0 && Number(gross) <= hole.par - 3 ? "Albatross" : "") : "";
+      const sandyPar = competitive && player.sandies[index] && Number(gross) === hole.par;
+      const sandyBirdie = competitive && player.sandies[index] && birdie;
+      const canMarkSandy = competitive && Number(gross) >= 1 && Number(gross) <= hole.par;
+      const isKpHole = competitive && KP_HOLES.includes(selectedHole);
       const hasKp = state.settings.kpWinners[String(selectedHole)] === player.id;
       const kpClaimState = E.kpClaimStatus(player, E.COURSE, state.settings, index);
       const kpNote = kpClaimState === "marked"
@@ -668,8 +702,8 @@
       const disabled = canScore() ? "" : "disabled";
       const syncState = scoreSyncStatus.get(scoreSyncKey(player.id, index));
       const syncLabel = { saving: "Saving…", pending: "Waiting to sync", synced: "Saved", error: "Sync problem" }[syncState] || "";
-      return `<article class="group-score-card" data-player-id="${player.id}">
-        <div class="score-player"><strong>${esc(nameOf(player, state.players.indexOf(player)))}</strong><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${strokes > 0 ? `gets ${strokes}` : strokes < 0 ? `gives ${Math.abs(strokes)}` : "no stroke"}</span></div>
+      return `<article class="group-score-card ${competitive ? "" : "is-score-only"}" data-player-id="${player.id}">
+        <div class="score-player"><strong>${playerNameHtml(player, state.players.indexOf(player))}</strong><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${strokes > 0 ? `gets ${strokes}` : strokes < 0 ? `gives ${Math.abs(strokes)}` : "no stroke"}</span>${competitive ? "" : '<span class="score-only-note">Not in the game · score only</span>'}</div>
         <div class="score-entry-wrap"><div class="score-stepper"><button type="button" data-delta="-1" ${disabled} aria-label="Decrease score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" ${disabled} aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" ${disabled} aria-label="Increase score">+</button></div>${syncLabel ? `<span class="score-sync score-sync--${syncState}" role="status">${syncLabel}</span>` : ""}</div>
         <div class="net-box"><span>Net</span><strong>${net ?? "—"}</strong></div>
         <div class="card-tics">${achievement ? `<span class="auto-tic">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${disabled}>Sand save</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${disabled}>KP</label>` : ""}${kpNote}${sandyPar ? '<span class="auto-tic">Sandy par ✓</span>' : ""}${sandyBirdie ? '<span class="auto-tic">Sandy birdie ✓</span>' : ""}</div>
@@ -727,7 +761,7 @@
       const completedHoles = player.scores.filter((score) => Number.isFinite(Number(score)) && Number(score) >= 1).length;
       const runningTotal = completedHoles ? totals.total.gross : "—";
       const cells = player.scores.map((score, index) => `<td><button type="button" class="score-cell ${index + 1 === selectedHole ? "active-hole" : ""}" data-card-hole="${index + 1}"><span class="score-cell-value${scoreMarkClasses(score, index)}">${score || "—"}</span>${handicapDots(player, index)}${kpScorecardMark(player, index)}</button></td>`).join("");
-      return `<tr><td>${esc(nameOf(player, state.players.indexOf(player)))}</td>${cells}<td>${complete(totals.front.gross, totals.front.completed)}</td><td>${complete(totals.back.gross, totals.back.completed)}</td><td class="running-total" aria-label="Running gross total after ${completedHoles} hole${completedHoles === 1 ? "" : "s"}">${runningTotal}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`;
+      return `<tr class="${E.isInGame(player) ? "" : "score-only-row"}"><td>${playerNameHtml(player, state.players.indexOf(player))}${E.isInGame(player) ? "" : '<small>Not in game · score only</small>'}</td>${cells}<td>${complete(totals.front.gross, totals.front.completed)}</td><td>${complete(totals.back.gross, totals.back.completed)}</td><td class="running-total" aria-label="Running gross total after ${completedHoles} hole${completedHoles === 1 ? "" : "s"}">${runningTotal}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`;
     }).join("");
     document.querySelectorAll("[data-card-hole]").forEach((button) => button.addEventListener("click", () => { selectedHole = Number(button.dataset.cardHole); renderGroupScoring(); }));
   }
@@ -739,7 +773,7 @@
       const player = state.players.find((item) => item.id === winnerId);
       const status = player ? E.kpClaimStatus(player, E.COURSE, state.settings, hole - 1) : "none";
       const statusText = status === "kp" ? "KP · 1 tic" : status === "three-putt" ? "KP 3-Putt · no KP awarded · 0 tics" : status === "pending" ? "Score pending · 0 tics" : "Open";
-      return `<div class="kp-card"><label>Hole ${hole} KP<select data-kp-hole="${hole}" ${canAdminEdit ? "" : "disabled"}><option value="">No winner</option>${state.players.map((item, index) => `<option value="${item.id}" ${winnerId === item.id ? "selected" : ""}>${esc(nameOf(item, index))} · ${item.group}</option>`).join("")}</select></label><span class="kp-card-status ${status === "three-putt" ? "is-failed" : ""}">${statusText}</span></div>`;
+      return `<div class="kp-card"><label>Hole ${hole} KP<select data-kp-hole="${hole}" ${canAdminEdit ? "" : "disabled"}><option value="">No winner</option>${E.gamePlayers(state.players).map((item) => `<option value="${item.id}" ${winnerId === item.id ? "selected" : ""}>${esc(nameOf(item, state.players.indexOf(item)))}${item.isGuest ? " *G" : ""} · ${item.group}</option>`).join("")}</select></label><span class="kp-card-status ${status === "three-putt" ? "is-failed" : ""}">${statusText}</span></div>`;
     }).join("");
     document.querySelectorAll("[data-kp-hole]").forEach((select) => select.addEventListener("change", (event) => dispatch({ type: "SET_KP", payload: { hole: Number(event.target.dataset.kpHole), playerId: event.target.value } }, { admin: true })));
   }
@@ -753,7 +787,8 @@
   }
 
   function leaderboardItems() {
-    return state.players.map((player, index) => {
+    return E.gamePlayers(state.players).map((player) => {
+      const index = state.players.indexOf(player);
       const totals = E.playerTotals(player, E.COURSE, state.settings);
       const tics = E.ticSummary(player, state.players, E.COURSE, state.settings);
       const ledger = E.pointsLedger(player, state.players, E.COURSE, state.settings);
@@ -827,10 +862,10 @@
       const thru = item.sortValues.thru;
       const netClass = ledger.net > 0 ? "is-positive" : ledger.net < 0 ? "is-negative" : "";
       const netText = `${ledger.net > 0 ? "+" : ""}${ledger.net.toFixed(1)}`;
-      return `<tr class="${item.player.id === standingLeaderId && item.totals.total.completed ? "leader-row-leading" : ""}"><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${displayPlayingHandicap(hcp(item.player))}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.front}</td><td>${tics.back}</td><td>${tics.totalNet}</td><td>${tics.sandyPars}</td><td>${tics.sandyBirdies}</td><td>${tics.kps}</td><td class="kp-marked-count">${tics.kpMarked}</td><td class="kp-three-putt-count">${tics.kpThreePutts}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
+      return `<tr class="${item.player.id === standingLeaderId && item.totals.total.completed ? "leader-row-leading" : ""}"><td>${playerNameHtml(item.player, item.index)}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${displayPlayingHandicap(hcp(item.player))}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.front}</td><td>${tics.back}</td><td>${tics.totalNet}</td><td>${tics.sandyPars}</td><td>${tics.sandyBirdies}</td><td>${tics.kps}</td><td class="kp-marked-count">${tics.kpMarked}</td><td class="kp-three-putt-count">${tics.kpThreePutts}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
     }).join("");
-    $("#leaderboardEmpty").hidden = state.players.length > 0;
-    $(".leaderboard-wrap").hidden = state.players.length === 0;
+    $("#leaderboardEmpty").hidden = players.length > 0;
+    $(".leaderboard-wrap").hidden = players.length === 0;
   }
 
   function groupScoringUrl(group) {
@@ -944,14 +979,15 @@
   }
 
   function archivedPlayerRows(roundState) {
-    return roundState.players.map((player, index) => {
+    return E.gamePlayers(roundState.players).map((player) => {
+      const index = roundState.players.indexOf(player);
       const tee = E.teeForPlayer(E.COURSE, player);
       const handicap = E.playingHandicap(player.ghin, roundState.settings, tee);
       const totals = E.playerTotals(player, E.COURSE, roundState.settings);
       const tics = E.ticSummary(player, roundState.players, E.COURSE, roundState.settings);
       const ledger = E.pointsLedger(player, roundState.players, E.COURSE, roundState.settings);
       const netClass = ledger.net > 0 ? "is-positive" : ledger.net < 0 ? "is-negative" : "";
-      return `<tr><td>${esc(player.name.trim() || `Player ${index + 1}`)}</td><td>${player.group}</td><td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td><td>${tics.kps}</td><td class="kp-marked-count">${tics.kpMarked}</td><td class="kp-three-putt-count">${tics.kpThreePutts}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${ledger.net > 0 ? "+" : ""}${ledger.net.toFixed(1)}</td></tr>`;
+      return `<tr><td>${playerNameHtml(player, index)}</td><td>${player.group}</td><td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td><td>${tics.kps}</td><td class="kp-marked-count">${tics.kpMarked}</td><td class="kp-three-putt-count">${tics.kpThreePutts}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${ledger.net > 0 ? "+" : ""}${ledger.net.toFixed(1)}</td></tr>`;
     }).join("");
   }
 
@@ -1029,7 +1065,11 @@
   function finalizationChecklistItems() {
     const items = [];
     if (!state.players.length) items.push({ ok: false, text: "No players are assigned to the round." });
-    else items.push({ ok: true, text: `${state.players.length} players are assigned.` });
+    else {
+      const competitiveCount = E.gamePlayers(state.players).length;
+      const scoreOnlyCount = state.players.length - competitiveCount;
+      items.push({ ok: competitiveCount > 0, text: `${state.players.length} players are assigned: ${competitiveCount} in the game${scoreOnlyCount ? ` and ${scoreOnlyCount} score only` : ""}.` });
+    }
     R.GROUPS.forEach((group) => {
       const players = groupPlayers(group);
       if (!players.length) return;
@@ -1049,9 +1089,10 @@
     if (!missingKps.length && !pendingKps.length && !noAwardKps.length) items.push({ ok: true, text: "All KPs are assigned and qualifying." });
     const unusual = state.players.reduce((total, player) => total + player.scores.filter((score, index) => score !== "" && (Number(score) <= E.COURSE.holes[index].par - 3 || Number(score) >= E.COURSE.holes[index].par + 5)).length, 0);
     items.push({ ok: unusual === 0, text: unusual ? `${unusual} unusual score${unusual === 1 ? " needs" : "s need"} a final review.` : "No unusual scores need review." });
-    const names = state.players.map((player) => player.name.trim().toLowerCase()).filter(Boolean);
-    const namesReady = names.length === state.players.length && new Set(names).size === names.length;
-    items.push({ ok: namesReady, text: namesReady ? "All player names are complete and unique." : "One or more player names are missing or duplicated." });
+    const namedPlayers = state.players.filter((player) => player.name.trim());
+    const reusableNames = state.players.filter((player) => !player.isGuest).map((player) => player.name.trim().toLowerCase()).filter(Boolean);
+    const namesReady = namedPlayers.length === state.players.length && new Set(reusableNames).size === reusableNames.length;
+    items.push({ ok: namesReady, text: namesReady ? "All player names are complete; repeated guest names are allowed." : "One or more player names are missing, or a non-guest name is duplicated." });
     return items;
   }
 
@@ -1086,7 +1127,7 @@
       const isRoundLockControl = control.id === "toggleRoundLockBtn";
       const isSaveRoundControl = control.id === "saveRoundBtn";
       const isNewRoundControl = control.id === "startNewRoundBtn";
-      const atPlayerLimit = control.id === "addPlayerBtn" && state.players.length >= R.MAX_PLAYERS;
+      const atPlayerLimit = ["addPlayerBtn", "addGuestBtn"].includes(control.id) && state.players.length >= R.MAX_PLAYERS;
       const noRoundToSave = isSaveRoundControl && !state.players.length;
       control.disabled = !adminUnlocked || (isLocked() && !isRoundLockControl && !isSaveRoundControl && !isNewRoundControl) || atPlayerLimit || noRoundToSave;
     });
@@ -1103,6 +1144,13 @@
     const savedPlayerTee = $("#savedPlayerTee");
     const selectedSavedTee = savedPlayerTee.value || E.COURSE.defaultTee;
     savedPlayerTee.innerHTML = teeOptions(selectedSavedTee);
+    const guestPlayerTee = $("#guestPlayerTee");
+    const selectedGuestTee = guestPlayerTee.value || E.COURSE.defaultTee;
+    guestPlayerTee.innerHTML = teeOptions(selectedGuestTee);
+    const guestPlayerGroup = $("#guestPlayerGroup");
+    let selectedGuestGroup = R.GROUPS.includes(guestPlayerGroup.value) ? guestPlayerGroup.value : nextAvailableGroup();
+    if (groupPlayers(selectedGuestGroup).length >= R.MAX_GROUP_SIZE) selectedGuestGroup = nextAvailableGroup();
+    guestPlayerGroup.innerHTML = savedGroupOptions(selectedGuestGroup);
     renderPlayers();
     renderSavedPlayers();
     renderGroupScoring();
@@ -1355,6 +1403,8 @@
         directoryId: saved?.id || player.directoryId,
         name: saved?.name || player.name,
         ghin: saved?.ghin ?? player.ghin,
+        isGuest: saved ? false : player.isGuest,
+        inGame: player.inGame,
         teeKey: saved?.teeKey || player.teeKey,
         group: player.group
       });
@@ -1374,7 +1424,7 @@
   }
 
   function downloadCsv() {
-    const headers = ["Player", "Group", "GHIN Index", "Tee", "Playing Handicap", ...E.COURSE.holes.map((hole) => `Hole ${hole.number}`), "Gross", "Net", "Birdies", "Eagles or Better", "Skins", "Front Net Tic", "Back Net Tic", "Total Net Tic", "Sandy Pars", "Sandy Birdies", "KP Holes", "KP Marked Holes", "KP 3-Putt Holes", "Raw Tics", "Weighted Tics", "Achievement Points", "Points Positive", "Points Negative", "Net Points"];
+    const headers = ["Player", "Guest", "In Game", "Group", "GHIN Index", "Tee", "Playing Handicap", ...E.COURSE.holes.map((hole) => `Hole ${hole.number}`), "Gross", "Net", "Birdies", "Eagles or Better", "Skins", "Front Net Tic", "Back Net Tic", "Total Net Tic", "Sandy Pars", "Sandy Birdies", "KP Holes", "KP Marked Holes", "KP 3-Putt Holes", "Raw Tics", "Weighted Tics", "Achievement Points", "Points Positive", "Points Negative", "Net Points"];
     const rows = state.players.map((player, index) => {
       const totals = E.playerTotals(player, E.COURSE, state.settings);
       const tics = E.ticSummary(player, state.players, E.COURSE, state.settings);
@@ -1382,7 +1432,7 @@
       const kpHoles = KP_HOLES.filter((hole) => E.kpClaimStatus(player, E.COURSE, state.settings, hole - 1) === "kp").join("; ");
       const kpMarkedHoles = KP_HOLES.filter((hole) => E.kpClaimStatus(player, E.COURSE, state.settings, hole - 1) === "marked").join("; ");
       const kpThreePuttHoles = KP_HOLES.filter((hole) => E.kpClaimStatus(player, E.COURSE, state.settings, hole - 1) === "three-putt").join("; ");
-      return [nameOf(player, index), player.group, displayIndex(player.ghin), teeOf(player).name, displayPlayingHandicap(hcp(player)), ...player.scores, totals.total.completed ? totals.total.gross : "", totals.total.completed ? totals.total.net : "", tics.birdies, tics.eagles, tics.skins, tics.front, tics.back, tics.totalNet, tics.sandyPars, tics.sandyBirdies, kpHoles, kpMarkedHoles, kpThreePuttHoles, tics.total, tics.weightedTics, tics.pointsEarned.toFixed(1), ledger.positive.toFixed(1), ledger.negative.toFixed(1), ledger.net.toFixed(1)].map(csvCell).join(",");
+      return [nameOf(player, index), player.isGuest ? "Yes" : "No", player.inGame ? "Yes" : "No", player.group, displayIndex(player.ghin), teeOf(player).name, displayPlayingHandicap(hcp(player)), ...player.scores, totals.total.completed ? totals.total.gross : "", totals.total.completed ? totals.total.net : "", tics.birdies, tics.eagles, tics.skins, tics.front, tics.back, tics.totalNet, tics.sandyPars, tics.sandyBirdies, kpHoles, kpMarkedHoles, kpThreePuttHoles, tics.total, tics.weightedTics, tics.pointsEarned.toFixed(1), ledger.positive.toFixed(1), ledger.negative.toFixed(1), ledger.net.toFixed(1)].map(csvCell).join(",");
     });
     downloadBlob([headers.map(csvCell).join(","), ...rows].join("\r\n"), "text/csv;charset=utf-8", `berry-creek-results-${state.date}.csv`);
   }
@@ -1400,8 +1450,8 @@
       const resultText = result.status === "awarded" ? esc(nameOf(player, state.players.indexOf(player))) : result.status === "tie" ? "No skin — tie" : "Pending";
       return `<tr><td>${hole.number}</td><td>${resultText}</td></tr>`;
     }).join("");
-    const groupTables = R.GROUPS.filter((group) => groupPlayers(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>Each dot is one handicap stroke received. Circles mark birdies and eagles; squares mark bogeys and worse. Filled KP earns 1 tic; transparent KP MARKED and KP 3-PUTT stamps earn 0 tics; outlined KP is pending. KP 3-Putt leaves the hole without a KP award unless a later player qualifies.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.map((hole) => `<th>${hole.number}</th>`).join("")}<th>Gross</th><th>Net</th></tr></thead><tbody>${groupPlayers(group).map((player, playerIndex) => { const totals = E.playerTotals(player, E.COURSE, state.settings); return `<tr><td>${esc(nameOf(player, playerIndex))}</td>${player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceived(player, holeIndex))}</span>${kpScorecardMark(player, holeIndex)}</td>`).join("")}<td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
-    const leaders = rankedPlayers().map((item, rank) => `<tr><td>${rank + 1}</td><td>${esc(nameOf(item.player, item.index))}</td><td>${item.player.group}</td><td>${item.player.scores.filter(Boolean).length}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.kps}</td><td>${item.tics.kpMarked}</td><td>${item.tics.kpThreePutts}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${item.ledger.net.toFixed(1)}</td></tr>`).join("");
+    const groupTables = R.GROUPS.filter((group) => groupPlayers(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>Each dot is one handicap stroke received. Circles mark birdies and eagles; squares mark bogeys and worse. Filled KP earns 1 tic; transparent KP MARKED and KP 3-PUTT stamps earn 0 tics; outlined KP is pending. KP 3-Putt leaves the hole without a KP award unless a later player qualifies.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.map((hole) => `<th>${hole.number}</th>`).join("")}<th>Gross</th><th>Net</th></tr></thead><tbody>${groupPlayers(group).map((player) => { const totals = E.playerTotals(player, E.COURSE, state.settings); return `<tr class="${player.inGame ? "" : "score-only-row"}"><td>${esc(playerExportName(player, state.players.indexOf(player)))}</td>${player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceived(player, holeIndex))}</span>${kpScorecardMark(player, holeIndex)}</td>`).join("")}<td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
+    const leaders = rankedPlayers().map((item, rank) => `<tr><td>${rank + 1}</td><td>${playerNameHtml(item.player, item.index)}</td><td>${item.player.group}</td><td>${item.player.scores.filter(Boolean).length}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.kps}</td><td>${item.tics.kpMarked}</td><td>${item.tics.kpThreePutts}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${item.ledger.net.toFixed(1)}</td></tr>`).join("");
     $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(state.roundName)}</h1><p>${esc(state.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table><thead><tr><th>Place</th><th>Player</th><th>Group</th><th>Thru</th><th>Gross</th><th>Net</th><th>KP</th><th>KP Marked</th><th>KP 3-Putt</th><th>Points +</th><th>Points −</th><th>Net points</th></tr></thead><tbody>${leaders}</tbody></table><div class="print-columns"><section><h2>KPs</h2><table><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
   }
 
@@ -1436,6 +1486,7 @@
   document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => switchView(tab.dataset.view)));
   $("#addPlayerBtn").addEventListener("click", addPlayer);
   $("#savedPlayerForm").addEventListener("submit", createSavedPlayer);
+  $("#guestPlayerForm").addEventListener("submit", addGuest);
   $("#savedPlayerSearch").addEventListener("input", (event) => { savedPlayerSearch = event.target.value; renderSavedPlayers(); });
   $("#resetLeaderboardSortBtn").addEventListener("click", () => { leaderboardSort = { key: "standing", direction: "asc" }; renderLeaderboard(); });
   $("#activeGroupSelect").addEventListener("change", (event) => { clearTimeout(autoAdvanceTimer); selectedGroup = event.target.value; const url = new URL(location.href); url.searchParams.set("group", selectedGroup); history.replaceState(null, "", url); renderGroupScoring(); });

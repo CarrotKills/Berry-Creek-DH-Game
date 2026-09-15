@@ -33,6 +33,14 @@ assert.equal(model.playerRows[0].kpStatuses[1], "marked");
 assert.equal(model.playerRows[0].kpStatuses[7], "pending");
 assert.equal(model.playerRows[0].kpStatuses[11], "kp");
 assert.equal(model.playerRows[0].kpStatuses[16], "three-putt");
+const guestModel = X.buildScorecardModel({
+  course: E.COURSE,
+  settings: { par: 72, allowance: 100, kpWinners: {}, kpClaims: {} },
+  players: [{ ...player, id: "guest-export", name: "Guest Player", isGuest: true, inGame: false }],
+  group: "A",
+  scoring: E
+});
+assert.equal(guestModel.playerRows[0].name, "Guest Player *G (not in game)");
 
 (async () => {
   const zip = await X.createZip([

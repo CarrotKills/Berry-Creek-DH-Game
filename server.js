@@ -12,7 +12,7 @@ const RoundHistoryDatabase = require("./round-history-database.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.7.1";
+const APP_VERSION = "9.8.0";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -104,6 +104,17 @@ function scoringGroupAllowed(action, group) {
   }
   if (action.type === "UNDO_LAST") return p.group === group;
   return true;
+}
+
+function duplicateActivePlayer(action) {
+  const p = action?.payload || {};
+  if (action?.type === "ADD_PLAYER") return Round.activePlayerConflict(state.players, p.player);
+  if (action?.type === "UPDATE_PLAYER" && typeof p.directoryId === "string") {
+    const player = state.players.find((item) => item.id === p.playerId);
+    if (!player) return null;
+    return Round.activePlayerConflict(state.players, { ...player, directoryId: p.directoryId }, player.id);
+  }
+  return null;
 }
 
 const mime = {
@@ -212,6 +223,8 @@ const server = http.createServer(async (req, res) => {
 
       if (Round.isAdminAction(action.type) && !adminAuthorized) return sendJson(res, 401, { ok: false, error: "Admin PIN required" });
       if (state.settings.locked && !["SET_LOCKED", "CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type)) return sendJson(res, 423, { ok: false, error: "This round is finalized and locked" });
+      const duplicatePlayer = duplicateActivePlayer(action);
+      if (duplicatePlayer) return sendJson(res, 409, { ok: false, error: `${duplicatePlayer.name.trim() || "That player"} is already active in Group ${duplicatePlayer.group}` });
       if (Round.isScoringAction(action.type) && !adminOverride && (!scorerAuthorized || !scoringGroupAllowed(action, scoringGroup))) {
         return sendJson(res, 403, { ok: false, error: "A current group scorekeeper link or admin access is required" });
       }

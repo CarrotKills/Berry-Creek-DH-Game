@@ -55,7 +55,7 @@
       const backCount = countScores(scores, 9, 18);
       const totalCount = frontCount + backCount;
       return {
-        name: String(player.name || "").trim() || `Player ${index + 1}`,
+        name: `${String(player.name || "").trim() || `Player ${index + 1}`}${player.isGuest ? " *G" : ""}${player.inGame === false ? " (not in game)" : ""}`,
         teeName: tee.name,
         handicap,
         scores,

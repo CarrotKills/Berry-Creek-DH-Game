@@ -27,7 +27,7 @@ async function playerRequest(path = "", options = {}) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.7.1");
+  assert.equal(config.appVersion, "9.8.0");
   const scorecardExportAsset = await fetch(`${base}/scorecard-export.js`);
   assert.equal(scorecardExportAsset.status, 200);
   const sortingAsset = await fetch(`${base}/leaderboard-sort.js`);
@@ -49,6 +49,7 @@ async function playerRequest(path = "", options = {}) {
   const unauthorizedPlayers = await fetch(`${base}/api/players`);
   assert.equal(unauthorizedPlayers.status, 401);
   const createdSaved = await playerRequest("", { method: "POST", status: 201, body: { name: "Saved Golfer", ghin: 15.2, teeKey: "championship" } });
+  assert.equal(createdSaved.player.ghin, 15.2);
   const listedSaved = await playerRequest();
   assert.equal(listedSaved.players.some((player) => player.id === createdSaved.player.id), true);
   const updatedSaved = await playerRequest(`/${createdSaved.player.id}`, { method: "PUT", body: { ghin: 13.7 } });
@@ -68,9 +69,13 @@ async function playerRequest(path = "", options = {}) {
   await reader.read();
 
   await Promise.all([
-    action("ADD_PLAYER", { player: { id: "live-a", name: "Live A", group: "A", teeKey: "championship", ghin: 10 } }),
+    action("ADD_PLAYER", { player: { id: "live-a", directoryId: "saved-live-a", name: "Live A", group: "A", teeKey: "championship", ghin: 10 } }),
     action("ADD_PLAYER", { player: { id: "live-b", name: "Live B", group: "B", teeKey: "member", ghin: 18 } })
   ]);
+  await action("ADD_PLAYER", { player: { id: "live-a-duplicate", directoryId: "saved-live-a", name: "Live A duplicate", group: "C" } }, { status: 409 });
+  const uniqueActiveState = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(uniqueActiveState.players.length, 2);
+  assert.equal(uniqueActiveState.players.some((player) => player.id === "live-a-duplicate"), false);
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4 }, { group: "A", token: priorTokens.A, status: 403 });
   await Promise.all([
     action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4 }, { group: "A" }),
