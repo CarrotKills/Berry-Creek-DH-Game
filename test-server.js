@@ -4,10 +4,11 @@ const E = require("./score-engine.js");
 
 const base = "http://127.0.0.1:8080";
 let scoreTokens = {};
+let adminPin = "2468";
 async function action(type, payload = {}, options = {}) {
   const headers = { "Content-Type": "application/json", "X-Scoring-Group": options.group || "A" };
   if (R.isAdminAction(type) || options.admin) {
-    headers["X-Admin-Pin"] = options.pin || "2468";
+    headers["X-Admin-Pin"] = options.pin || adminPin;
     headers["X-Admin-Override"] = "1";
   } else if (R.isScoringAction(type) && !options.noToken) {
     headers["X-Scoring-Token"] = options.token ?? scoreTokens[options.group || "A"] ?? "";
@@ -18,16 +19,25 @@ async function action(type, payload = {}, options = {}) {
 }
 
 async function playerRequest(path = "", options = {}) {
-  const headers = { ...(options.headers || {}), "X-Admin-Pin": options.pin || "2468" };
+  const headers = { ...(options.headers || {}), "X-Admin-Pin": options.pin || adminPin };
   if (options.body) headers["Content-Type"] = "application/json";
   const response = await fetch(`${base}/api/players${path}`, { method: options.method || "GET", headers, body: options.body ? JSON.stringify(options.body) : undefined });
   assert.equal(response.status, options.status || 200);
   return response.json();
 }
 
+async function adminRequest(path = "", options = {}) {
+  const headers = { ...(options.headers || {}), "X-Admin-Pin": options.pin || adminPin };
+  if (options.body) headers["Content-Type"] = "application/json";
+  const response = await fetch(`${base}/api/admins${path}`, { method: options.method || "GET", headers, body: options.body ? JSON.stringify(options.body) : undefined });
+  assert.equal(response.status, options.status || 200);
+  return response.json();
+}
+
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.9.0");
+  assert.equal(config.appVersion, "9.10.0");
+  assert.equal(config.adminSetupRequired, true);
   const scorecardExportAsset = await fetch(`${base}/scorecard-export.js`);
   assert.equal(scorecardExportAsset.status, 200);
   const sortingAsset = await fetch(`${base}/leaderboard-sort.js`);
@@ -36,9 +46,40 @@ async function playerRequest(path = "", options = {}) {
   assert.equal(wrongPin.status, 401);
   const rightPin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "2468" }) });
   assert.equal(rightPin.status, 200);
+  assert.equal((await rightPin.json()).admin.bootstrap, true);
+  const firstAdmin = await adminRequest("", { method: "POST", status: 201, pin: "2468", body: { name: "Alice Admin", pin: "1357" } });
+  assert.equal(firstAdmin.admin.name, "Alice Admin");
+  adminPin = "1357";
+  const disabledSetupPin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "2468" }) });
+  assert.equal(disabledSetupPin.status, 401);
+  const aliceLogin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: adminPin }) });
+  assert.equal(aliceLogin.status, 200);
+  assert.equal((await aliceLogin.json()).admin.name, "Alice Admin");
+  const adminList = await adminRequest();
+  assert.equal(adminList.admins.length, 1);
+  assert.equal(Object.hasOwn(adminList.admins[0], "pin_hash"), false);
+  await adminRequest("", { method: "POST", status: 403, body: { name: "Direct Admin", pin: "8642" } });
+  const inviteResponse = await fetch(`${base}/api/admin-invitations`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ hours: 24 }) });
+  assert.equal(inviteResponse.status, 201);
+  const invitation = (await inviteResponse.json()).invitation;
+  const acceptInvite = await fetch(`${base}/api/admin-invitations/accept`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: invitation.token, name: "Bob Admin", pin: "8642" }) });
+  assert.equal(acceptInvite.status, 201);
+  const reuseInvite = await fetch(`${base}/api/admin-invitations/accept`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: invitation.token, name: "Reuse", pin: "1111" }) });
+  assert.equal(reuseInvite.status, 410);
+  const bobLogin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "8642" }) });
+  assert.equal(bobLogin.status, 200);
+  const bob = (await bobLogin.json()).admin;
+  await action("SET_META", { roundName: "Named admin audit test" }, { pin: "8642" });
+  const namedAuditState = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(namedAuditState.auditLog.at(-1).actor, "Bob Admin");
+  await adminRequest(`/${bob.id}`, { method: "PUT", status: 403, body: { pin: "9999" } });
+  await adminRequest(`/${bob.id}`, { method: "DELETE" });
+  const removedBobLogin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "8642" }) });
+  assert.equal(removedBobLogin.status, 401);
+  await adminRequest(`/${firstAdmin.admin.id}`, { method: "DELETE", status: 400 });
   const unauthorizedTokens = await fetch(`${base}/api/share-tokens`);
   assert.equal(unauthorizedTokens.status, 401);
-  const tokenResponse = await fetch(`${base}/api/share-tokens`, { headers: { "X-Admin-Pin": "2468" } });
+  const tokenResponse = await fetch(`${base}/api/share-tokens`, { headers: { "X-Admin-Pin": adminPin } });
   assert.equal(tokenResponse.status, 200);
   scoreTokens = (await tokenResponse.json()).tokens;
   assert.equal(Object.keys(scoreTokens).length, 6);
@@ -58,17 +99,18 @@ async function playerRequest(path = "", options = {}) {
   assert.equal(listedSaved.players.some((player) => player.id === createdSaved.player.id), true);
   const updatedSaved = await playerRequest(`/${createdSaved.player.id}`, { method: "PUT", body: { ghin: 13.7 } });
   assert.equal(updatedSaved.player.ghin, 13.7);
-  const completeBackupResponse = await fetch(`${base}/api/system-backup`, { headers: { "X-Admin-Pin": "2468" } });
+  const completeBackupResponse = await fetch(`${base}/api/system-backup`, { headers: { "X-Admin-Pin": adminPin } });
   assert.equal(completeBackupResponse.status, 200);
   const completeBackup = await completeBackupResponse.json();
   assert.equal(completeBackup.format, "berry-creek-complete-backup");
   assert.equal(completeBackup.savedPlayers.some((player) => player.id === createdSaved.player.id), true);
-  const snapshotResponse = await fetch(`${base}/api/system-backup/snapshot`, { method: "POST", headers: { "X-Admin-Pin": "2468", "Content-Type": "application/json" }, body: "{}" });
+  const snapshotResponse = await fetch(`${base}/api/system-backup/snapshot`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: "{}" });
   assert.equal(snapshotResponse.status, 201);
-  const readiness = await (await fetch(`${base}/api/readiness`, { headers: { "X-Admin-Pin": "2468" } })).json();
+  const readiness = await (await fetch(`${base}/api/readiness`, { headers: { "X-Admin-Pin": adminPin } })).json();
   assert.equal(Array.isArray(readiness.checks), true);
   assert.equal(readiness.checks.some((check) => check.key === "backup" && check.ok), true);
-  const restoredBackup = await fetch(`${base}/api/system-backup/restore`, { method: "POST", headers: { "X-Admin-Pin": "2468", "Content-Type": "application/json" }, body: JSON.stringify({ backup: completeBackup }) });
+  assert.equal(readiness.checks.some((check) => check.key === "pin" && check.ok), true);
+  const restoredBackup = await fetch(`${base}/api/system-backup/restore`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ backup: completeBackup }) });
   assert.equal(restoredBackup.status, 200);
   assert.equal((await restoredBackup.json()).savedPlayerCount, 1);
   await playerRequest(`/${createdSaved.player.id}`, { method: "DELETE" });
@@ -77,7 +119,7 @@ async function playerRequest(path = "", options = {}) {
   await action("CLEAR_ROUND");
   const clearedState = await (await fetch(`${base}/api/state`)).json();
   assert.notEqual(clearedState.roundId, priorRoundState.roundId);
-  const currentTokenResponse = await fetch(`${base}/api/share-tokens`, { headers: { "X-Admin-Pin": "2468" } });
+  const currentTokenResponse = await fetch(`${base}/api/share-tokens`, { headers: { "X-Admin-Pin": adminPin } });
   scoreTokens = (await currentTokenResponse.json()).tokens;
   assert.notEqual(scoreTokens.A, priorTokens.A);
   const streamResponse = await fetch(`${base}/api/events`);
@@ -138,22 +180,22 @@ async function playerRequest(path = "", options = {}) {
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4, expectedScore: 5 }, { group: "A" });
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 1, score: 3 }, { group: "A", noToken: true, status: 403 });
   await action("SET_SCORE", { playerId: "live-b", holeIndex: 1, score: 3 }, { group: "A", status: 403 });
-  const savedRoundResponse = await fetch(`${base}/api/rounds`, { method: "POST", headers: { "X-Admin-Pin": "2468", "Content-Type": "application/json" }, body: "{}" });
+  const savedRoundResponse = await fetch(`${base}/api/rounds`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: "{}" });
   assert.equal(savedRoundResponse.status, 201);
   const savedRound = (await savedRoundResponse.json()).round;
-  const savedRounds = await (await fetch(`${base}/api/rounds`, { headers: { "X-Admin-Pin": "2468" } })).json();
+  const savedRounds = await (await fetch(`${base}/api/rounds`, { headers: { "X-Admin-Pin": adminPin } })).json();
   assert.equal(savedRounds.rounds.some((round) => round.id === savedRound.id), true);
-  const savedRoundDetail = await (await fetch(`${base}/api/rounds/${savedRound.id}`, { headers: { "X-Admin-Pin": "2468" } })).json();
+  const savedRoundDetail = await (await fetch(`${base}/api/rounds/${savedRound.id}`, { headers: { "X-Admin-Pin": adminPin } })).json();
   assert.equal(savedRoundDetail.round.state.players.length, 2);
-  const historyBackup = await (await fetch(`${base}/api/system-backup`, { headers: { "X-Admin-Pin": "2468" } })).json();
+  const historyBackup = await (await fetch(`${base}/api/system-backup`, { headers: { "X-Admin-Pin": adminPin } })).json();
   assert.equal(historyBackup.savedRounds.some((round) => round.id === savedRound.id), true);
-  const deletedRound = await fetch(`${base}/api/rounds/${savedRound.id}`, { method: "DELETE", headers: { "X-Admin-Pin": "2468" } });
+  const deletedRound = await fetch(`${base}/api/rounds/${savedRound.id}`, { method: "DELETE", headers: { "X-Admin-Pin": adminPin } });
   assert.equal(deletedRound.status, 200);
-  const restoredHistory = await fetch(`${base}/api/system-backup/restore`, { method: "POST", headers: { "X-Admin-Pin": "2468", "Content-Type": "application/json" }, body: JSON.stringify(historyBackup) });
+  const restoredHistory = await fetch(`${base}/api/system-backup/restore`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify(historyBackup) });
   assert.equal(restoredHistory.status, 200);
-  const restoredRounds = await (await fetch(`${base}/api/rounds`, { headers: { "X-Admin-Pin": "2468" } })).json();
+  const restoredRounds = await (await fetch(`${base}/api/rounds`, { headers: { "X-Admin-Pin": adminPin } })).json();
   assert.equal(restoredRounds.rounds.some((round) => round.id === savedRound.id), true);
-  await fetch(`${base}/api/rounds/${savedRound.id}`, { method: "DELETE", headers: { "X-Admin-Pin": "2468" } });
+  await fetch(`${base}/api/rounds/${savedRound.id}`, { method: "DELETE", headers: { "X-Admin-Pin": adminPin } });
   await action("SET_LOCKED", { locked: true });
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 1, score: 3 }, { group: "A", status: 423 });
   await action("SET_LOCKED", { locked: false });
@@ -170,7 +212,7 @@ async function playerRequest(path = "", options = {}) {
   assert.equal(reusedState.players.length, 2);
   assert.equal(reusedState.players.every((player) => player.scores.every((score) => score === "")), true);
   assert.equal(reusedState.players.every((player) => player.sandies.every((value) => value === false)), true);
-  const reusedTokenResponse = await fetch(`${base}/api/share-tokens`, { headers: { "X-Admin-Pin": "2468" } });
+  const reusedTokenResponse = await fetch(`${base}/api/share-tokens`, { headers: { "X-Admin-Pin": adminPin } });
   const reusedTokens = (await reusedTokenResponse.json()).tokens;
   assert.notEqual(reusedTokens.A, scoreTokens.A);
   await reader.cancel();

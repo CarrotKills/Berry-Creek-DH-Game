@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.9.0";
+  const APP_VERSION = "9.10.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -50,6 +50,9 @@
   let toastTimer;
   let adminPin = sessionStorage.getItem(ADMIN_PIN_KEY) || "";
   let adminUnlocked = Boolean(adminPin);
+  let currentAdmin = null;
+  let admins = [];
+  let adminInviteLink = "";
   let savedPlayers = [];
   let savedRounds = [];
   let shareTokens = {};
@@ -97,6 +100,19 @@
   function canScore() { return !spectatorMode && !isLocked() && (adminUnlocked || (scorerLinkLocked && !scorerLinkExpired())); }
   function scoreSyncKey(playerId, holeIndex) { return `${playerId}:${holeIndex}`; }
 
+  function lockAdminControls() {
+    adminUnlocked = false;
+    adminPin = "";
+    currentAdmin = null;
+    admins = [];
+    adminInviteLink = "";
+    savedPlayers = [];
+    savedRounds = [];
+    shareTokens = {};
+    readinessData = null;
+    sessionStorage.removeItem(ADMIN_PIN_KEY);
+  }
+
   function setScoreSyncStatus(playerId, holeIndex, status) {
     const key = scoreSyncKey(playerId, holeIndex);
     clearTimeout(scoreSyncTimers.get(key));
@@ -138,7 +154,7 @@
     return {
       type: action.type,
       payload: action.payload || {},
-      meta: { at: new Date().toISOString(), actor: admin ? "Admin" : `Group ${selectedGroup} scorer`, group: selectedGroup }
+      meta: { at: new Date().toISOString(), actor: admin ? (currentAdmin?.name || "Admin") : `Group ${selectedGroup} scorer`, group: selectedGroup }
     };
   }
 
@@ -170,10 +186,7 @@
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
       if (response.status === 401) {
-        adminUnlocked = false;
-        adminPin = "";
-        savedPlayers = [];
-        sessionStorage.removeItem(ADMIN_PIN_KEY);
+        lockAdminControls();
         render();
       }
       throw new Error(body.error || "The admin request failed");
@@ -250,8 +263,27 @@
     }
   }
 
+  async function loadAdmins() {
+    if (!adminUnlocked || connectionMode !== "live") {
+      admins = [];
+      currentAdmin = null;
+      renderAdminManagement();
+      return;
+    }
+    try {
+      const body = await databaseRequest("/api/admins", { cache: "no-store" });
+      admins = Array.isArray(body.admins) ? body.admins : [];
+      currentAdmin = body.currentAdmin || currentAdmin;
+      renderAdminManagement();
+      renderAdminState();
+    } catch (error) {
+      admins = [];
+      renderAdminManagement(error.message);
+    }
+  }
+
   async function loadAdminData() {
-    await Promise.all([loadSavedPlayers(), loadSavedRounds(), loadShareTokens(), loadReadiness()]);
+    await Promise.all([loadSavedPlayers(), loadSavedRounds(), loadShareTokens(), loadReadiness(), loadAdmins()]);
   }
 
   async function refreshState() {
@@ -1199,6 +1231,161 @@
     }).join("");
   }
 
+  function renderAdminManagement(errorMessage = "") {
+    const status = $("#adminManagementStatus");
+    const list = $("#adminList");
+    const setupForm = $("#bootstrapAdminForm");
+    const inviteControls = $("#adminInviteControls");
+    const inviteResult = $("#adminInviteResult");
+    if (!status || !list) return;
+    if (!adminUnlocked) {
+      status.textContent = "Unlock admin controls to manage administrators.";
+      setupForm.hidden = true;
+      inviteControls.hidden = true;
+      list.innerHTML = "";
+      return;
+    }
+    if (errorMessage) {
+      status.textContent = errorMessage;
+      setupForm.hidden = true;
+      inviteControls.hidden = true;
+      list.innerHTML = "";
+      return;
+    }
+    const setupRequired = Boolean(currentAdmin?.bootstrap);
+    status.textContent = setupRequired ? "Create the first named admin. The setup PIN will stop working immediately afterward." : `Signed in as ${currentAdmin?.name || "Admin"}. Each admin action is recorded under that name.`;
+    setupForm.hidden = !setupRequired;
+    inviteControls.hidden = setupRequired;
+    inviteResult.hidden = !adminInviteLink;
+    if (adminInviteLink) $("#adminInviteUrl").value = adminInviteLink;
+    if (setupRequired) {
+      list.innerHTML = '<div class="empty-state">No named admins have been created yet.</div>';
+      return;
+    }
+    list.innerHTML = admins.length ? admins.map((admin) => {
+      const isCurrent = admin.id === currentAdmin?.id;
+      const lastLogin = admin.lastLoginAt ? `Last signed in ${new Date(admin.lastLoginAt).toLocaleString()}` : "Has not signed in yet";
+      return `<article class="admin-row ${isCurrent ? "is-current" : ""}" data-admin-id="${esc(admin.id)}"><label>Name<input class="admin-account-name admin-control" data-allow-locked="true" type="text" maxlength="40" value="${esc(admin.name)}"><span class="admin-last-login">${esc(lastLogin)}${isCurrent ? " · Your account" : ""}</span></label>${isCurrent ? '<label>New private PIN<input class="admin-account-pin admin-control" data-allow-locked="true" type="password" inputmode="numeric" minlength="4" maxlength="10" pattern="[0-9]{4,10}" autocomplete="new-password" placeholder="Leave blank to keep"></label>' : '<div class="admin-row-meta"><strong>PIN remains private</strong><span>Only this admin can change it.</span></div>'}<div class="admin-row-actions"><button class="button button-primary admin-control" data-allow-locked="true" data-admin-action="update" type="button">Save changes</button>${isCurrent ? "" : '<button class="button button-danger admin-control" data-allow-locked="true" data-admin-action="remove" type="button">Remove</button>'}</div></article>`;
+    }).join("") : '<div class="empty-state">No named admins found.</div>';
+    document.querySelectorAll("[data-admin-action='update']").forEach((button) => button.addEventListener("click", () => updateAdminAccount(button.closest(".admin-row"))));
+    document.querySelectorAll("[data-admin-action='remove']").forEach((button) => button.addEventListener("click", () => removeAdminAccount(button.closest(".admin-row"))));
+  }
+
+  async function createFirstAdmin(event) {
+    event.preventDefault();
+    const name = $("#bootstrapAdminName").value.trim();
+    const pin = $("#bootstrapAdminPin").value.trim();
+    try {
+      const body = await databaseRequest("/api/admins", { method: "POST", body: JSON.stringify({ name, pin }) });
+      adminPin = pin;
+      currentAdmin = body.admin;
+      adminUnlocked = true;
+      sessionStorage.setItem(ADMIN_PIN_KEY, pin);
+      $("#bootstrapAdminForm").reset();
+      await loadAdminData();
+      showToast(`${body.admin.name} is now the first named admin. The setup PIN is disabled.`, "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  async function createAdminInvitation() {
+    if (location.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(location.hostname)) return showToast("Open the hosted HTTPS app before creating a private admin link.", "error");
+    try {
+      const body = await databaseRequest("/api/admin-invitations", { method: "POST", body: JSON.stringify({ hours: 24 }) });
+      const url = new URL(location.origin + location.pathname);
+      url.hash = `admin-invite=${body.invitation.token}`;
+      adminInviteLink = url.toString();
+      $("#adminInviteExpiry").textContent = `Single-use link · Expires ${new Date(body.invitation.expiresAt).toLocaleString()}`;
+      renderAdminManagement();
+      renderAdminState();
+      showToast("Private admin setup link created.", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  async function updateAdminAccount(row) {
+    const id = row?.dataset.adminId;
+    const name = row?.querySelector(".admin-account-name")?.value.trim();
+    const pin = row?.querySelector(".admin-account-pin")?.value.trim() || "";
+    try {
+      const body = await databaseRequest(`/api/admins/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ name, ...(pin ? { pin } : {}) }) });
+      if (id === currentAdmin?.id) {
+        currentAdmin = body.admin;
+        if (pin) {
+          adminPin = pin;
+          sessionStorage.setItem(ADMIN_PIN_KEY, pin);
+        }
+      }
+      await loadAdmins();
+      showToast(`${body.admin.name}'s admin account was updated.`, "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  async function removeAdminAccount(row) {
+    const id = row?.dataset.adminId;
+    const admin = admins.find((item) => item.id === id);
+    if (!admin || !window.confirm(`Remove ${admin.name}'s admin access? Their prior actions will remain identified in Change History.`)) return;
+    try {
+      await databaseRequest(`/api/admins/${encodeURIComponent(id)}`, { method: "DELETE" });
+      admins = admins.filter((item) => item.id !== id);
+      renderAdminManagement();
+      renderAdminState();
+      showToast(`${admin.name}'s admin access was removed.`, "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    }
+  }
+
+  function adminInvitationToken() {
+    const match = location.hash.match(/^#admin-invite=([A-Za-z0-9_-]{40,60})$/);
+    return match ? match[1] : "";
+  }
+
+  function openAdminInvitation() {
+    if (!adminInvitationToken()) return;
+    $("#adminInviteError").hidden = true;
+    $("#adminInviteDialog").showModal();
+  }
+
+  async function acceptAdminInvitation(event) {
+    event.preventDefault();
+    const token = adminInvitationToken();
+    const name = $("#invitedAdminName").value.trim();
+    const pin = $("#invitedAdminPin").value.trim();
+    const confirmation = $("#invitedAdminPinConfirm").value.trim();
+    const errorBox = $("#adminInviteError");
+    if (pin !== confirmation) {
+      errorBox.textContent = "The PIN entries do not match.";
+      errorBox.hidden = false;
+      return;
+    }
+    try {
+      const response = await fetch("/api/admin-invitations/accept", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, name, pin }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "The invitation could not be accepted");
+      adminPin = pin;
+      adminUnlocked = true;
+      currentAdmin = body.admin;
+      sessionStorage.setItem(ADMIN_PIN_KEY, pin);
+      const cleanUrl = new URL(location.href);
+      cleanUrl.hash = "";
+      history.replaceState(null, "", cleanUrl);
+      $("#adminInviteDialog").close();
+      $("#acceptAdminInviteForm").reset();
+      render();
+      await loadAdminData();
+      switchView("tournament");
+      showToast(`Admin access created for ${body.admin.name}.`, "success");
+    } catch (error) {
+      errorBox.textContent = error.message;
+      errorBox.hidden = false;
+    }
+  }
+
   function renderTournament() {
     const locked = isLocked();
     $("#roundStatusText").textContent = locked ? "The round is finalized. Scorecards and results remain available to view." : "The round is open for live scoring.";
@@ -1214,16 +1401,17 @@
     renderSavedRounds();
     renderAudit();
     renderReadiness();
+    renderAdminManagement();
   }
 
   function renderAdminState() {
-    $("#adminBtn").textContent = adminUnlocked ? "Lock admin controls" : "Admin unlock";
+    $("#adminBtn").textContent = adminUnlocked ? `Lock ${currentAdmin?.name || "admin"}` : "Admin unlock";
     $("#setupLockedNotice").hidden = adminUnlocked;
     document.querySelectorAll(".admin-control").forEach((control) => {
       const isRoundLockControl = control.id === "toggleRoundLockBtn";
       const isSaveRoundControl = control.id === "saveRoundBtn";
       const isNewRoundControl = control.id === "startNewRoundBtn";
-      const availableWhenLocked = ["toggleRoundLockBtn", "saveRoundBtn", "startNewRoundBtn", "completeBackupBtn", "completeRestoreInput", "createSnapshotBtn", "refreshReadinessBtn"].includes(control.id);
+      const availableWhenLocked = control.dataset.allowLocked === "true" || ["toggleRoundLockBtn", "saveRoundBtn", "startNewRoundBtn", "completeBackupBtn", "completeRestoreInput", "createSnapshotBtn", "refreshReadinessBtn"].includes(control.id);
       const atPlayerLimit = ["addPlayerBtn", "addGuestBtn"].includes(control.id) && state.players.length >= R.MAX_PLAYERS;
       const noRoundToSave = isSaveRoundControl && !state.players.length;
       control.disabled = !adminUnlocked || (isLocked() && !availableWhenLocked) || atPlayerLimit || noRoundToSave;
@@ -1288,17 +1476,18 @@
   async function verifyAdmin() {
     const candidate = $("#adminPinInput").value;
     try {
-      if (connectionMode === "live") {
-        const response = await fetch("/api/admin/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: candidate }) });
-        if (!response.ok) throw new Error("Incorrect admin PIN");
-      } else if (candidate !== "2468") throw new Error("Connect to the server to verify a custom PIN");
+      if (connectionMode !== "live") throw new Error("Connect to the server to verify an admin PIN");
+      const response = await fetch("/api/admin/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: candidate }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Incorrect admin PIN");
       adminPin = candidate;
       adminUnlocked = true;
+      currentAdmin = body.admin;
       sessionStorage.setItem(ADMIN_PIN_KEY, candidate);
       $("#adminDialog").close();
       render();
       await loadAdminData();
-      showToast("Admin controls unlocked.", "success");
+      showToast(body.setupRequired ? "Setup access unlocked. Create the first named admin in Settings." : `Signed in as ${body.admin.name}.`, "success");
     } catch (error) {
       $("#adminError").textContent = error.message;
       $("#adminError").hidden = false;
@@ -1658,7 +1847,7 @@
   $("#roundDate").addEventListener("change", (event) => dispatch({ type: "SET_META", payload: { date: event.target.value } }));
   $("#allowance").addEventListener("change", (event) => dispatch({ type: "SET_ALLOWANCE", payload: { allowance: Number(event.target.value) } }));
   $("#adminBtn").addEventListener("click", () => {
-    if (adminUnlocked) { adminUnlocked = false; adminPin = ""; savedPlayers = []; savedRounds = []; shareTokens = {}; readinessData = null; savedPlayerSearch = ""; savedPlayerGroupSelections.clear(); sessionStorage.removeItem(ADMIN_PIN_KEY); render(); showToast("Admin controls locked."); }
+    if (adminUnlocked) { const name = currentAdmin?.name || "Admin"; lockAdminControls(); savedPlayerSearch = ""; savedPlayerGroupSelections.clear(); render(); showToast(`${name} signed out.`); }
     else openAdminDialog();
   });
   $("#adminSubmitBtn").addEventListener("click", (event) => { event.preventDefault(); verifyAdmin(); });
@@ -1686,6 +1875,16 @@
   $("#completeRestoreInput").addEventListener("change", async (event) => { const [file] = event.target.files; if (file) await restoreCompleteBackup(file); event.target.value = ""; });
   $("#createSnapshotBtn").addEventListener("click", createServerSnapshot);
   $("#refreshReadinessBtn").addEventListener("click", loadReadiness);
+  $("#bootstrapAdminForm").addEventListener("submit", createFirstAdmin);
+  $("#createAdminInviteBtn").addEventListener("click", createAdminInvitation);
+  $("#copyAdminInviteBtn").addEventListener("click", async () => { if (adminInviteLink) { await copyText(adminInviteLink); showToast("Private admin setup link copied.", "success"); } });
+  $("#shareAdminInviteBtn").addEventListener("click", async () => {
+    if (!adminInviteLink) return;
+    if (navigator.share) await navigator.share({ title: "Berry Creek admin setup", text: "Create your private Berry Creek DH Game admin access. This single-use link expires after 24 hours.", url: adminInviteLink }).catch(() => {});
+    else { await copyText(adminInviteLink); showToast("Private admin setup link copied.", "success"); }
+  });
+  $("#acceptAdminInviteForm").addEventListener("submit", acceptAdminInvitation);
+  $("#cancelAdminInviteBtn").addEventListener("click", () => $("#adminInviteDialog").close());
   $("#exportBtn").addEventListener("click", () => downloadBlob(JSON.stringify(state, null, 2), "application/json", `berry-creek-${state.date}.json`));
   $("#csvBtn").addEventListener("click", downloadCsv);
   $("#printBtn").addEventListener("click", () => { preparePrintReport(); window.print(); });
@@ -1737,6 +1936,7 @@
   $("#appVersion").textContent = `Version ${APP_VERSION}`;
   $("#footerVersionBtn").textContent = `App v${APP_VERSION}`;
   render();
+  openAdminInvitation();
   const initialView = spectatorMode ? "leaderboard" : params.get("view");
   if (["setup", "score", "leaderboard", "tournament"].includes(initialView)) switchView(initialView);
   connect();

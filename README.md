@@ -16,11 +16,15 @@ Open `http://localhost:8080`. Other scorekeepers on the same Wi-Fi network can o
 
 For a hosted event, deploy this folder to any service that runs a persistent Node.js process and provides persistent disk storage. Set `PORT` if the host requires it. On Render, attach a persistent disk at `/var/data`, then set `PLAYERS_DB_FILE` to `/var/data/players.sqlite`. The app automatically stores the active round and historical-round database beside that file so all three survive redeploys and restarts.
 
-## Admin PIN
+## Named admin PINs
 
-Admin-only controls protect the roster, handicaps, reset/import tools, and final round lock. The default PIN is `2468`.
+Admin-only controls protect the roster, handicaps, reset/import tools, and final round lock. Each admin has a name and a unique private PIN. Change History records the name of the admin responsible for every administrative action.
 
-Before an event on Render, add an environment variable named `ADMIN_PIN` with your own private PIN and redeploy. Scorekeepers do not need the PIN; their group links allow scoring only for the assigned fivesome.
+On the first launch after upgrading, the existing `ADMIN_PIN` environment value remains available only as a setup PIN. Sign in with it, open **Settings → Admin access**, and create the first named administrator. The setup PIN is disabled as soon as that account is created.
+
+Additional administrators create their own credentials privately. A signed-in admin selects **Create private setup link** and sends the single-use link to the new administrator. The link expires after 24 hours. The recipient enters their own name and PIN over the hosted HTTPS connection; the inviting admin never sees the PIN. PINs must contain 4–10 digits, are hashed before storage, are never returned by the server, and can be changed only by the admin who owns them.
+
+Scorekeepers do not need an admin PIN; their group links allow scoring only for the assigned fivesome.
 
 ## Saved player database
 
@@ -74,6 +78,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - The Group progress dashboard shows players, completed holes, missing scores, last scoring activity, and connected scorekeepers for every group.
 - Missing names, duplicate names, incomplete holes, and unusually high or low scores produce warnings.
 - Every score, KP, sand save, roster edit, reset, import, and lock change is recorded in Change history.
+- Named admin actions—including player-database changes, saved-round changes, backups, and account management—are attributed to the signed-in administrator.
 - Results can be printed or saved as PDF, downloaded as a spreadsheet-compatible CSV, or backed up as JSON.
 - The Settings tab can save durable historical snapshots containing the full roster, scorecards, tics, KPs, and results. Saved rounds can be viewed, downloaded, reused as a clean roster for a new round, or deleted without changing the active round.
 - Saved-round group scorecards can be exported individually as JPEGs or PDFs, together as JPEGs in one ZIP file, or together as a multi-page PDF.
@@ -93,4 +98,4 @@ Under Settings, **Start new round** clears the active roster, group assignments,
 
 The Reset button on the Players tab can also clear only scores and tics while keeping the active roster, or clear the entire active event.
 
-By default, the server saves event data to `data/round.json`, the reusable player roster to `data/players.sqlite`, historical rounds to `data/rounds.sqlite`, and automatic recovery snapshots to `data/backups`. If `PLAYERS_DB_FILE` points to persistent storage, the other files are placed in that same directory. `DATA_DIR`, `ROUND_FILE`, `ROUND_HISTORY_DB_FILE`, and `BACKUP_DIR` can override those locations. The server keeps the 25 newest snapshots and automatically creates one before a round reset, score reset, active-round import, saved-roster reuse, complete restore, or saved player/round deletion.
+By default, the server saves event data to `data/round.json`, the reusable player roster to `data/players.sqlite`, historical rounds to `data/rounds.sqlite`, named admin credentials to `data/admins.sqlite`, and automatic recovery snapshots to `data/backups`. If `PLAYERS_DB_FILE` points to persistent storage, the other files are placed in that same directory. `DATA_DIR`, `ROUND_FILE`, `ROUND_HISTORY_DB_FILE`, `ADMIN_DB_FILE`, and `BACKUP_DIR` can override those locations. Keep `admins.sqlite` on persistent storage so named admin access survives redeploys. For security, downloadable complete backups intentionally exclude admin PIN hashes. The server keeps the 25 newest round-data snapshots and automatically creates one before a round reset, score reset, active-round import, saved-roster reuse, complete restore, or saved player/round deletion.
