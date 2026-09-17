@@ -27,7 +27,7 @@ async function playerRequest(path = "", options = {}) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.8.0");
+  assert.equal(config.appVersion, "9.9.0");
   const scorecardExportAsset = await fetch(`${base}/scorecard-export.js`);
   assert.equal(scorecardExportAsset.status, 200);
   const sortingAsset = await fetch(`${base}/leaderboard-sort.js`);
@@ -48,12 +48,29 @@ async function playerRequest(path = "", options = {}) {
   assert.equal(unauthorizedRounds.status, 401);
   const unauthorizedPlayers = await fetch(`${base}/api/players`);
   assert.equal(unauthorizedPlayers.status, 401);
+  const unauthorizedBackup = await fetch(`${base}/api/system-backup`);
+  assert.equal(unauthorizedBackup.status, 401);
+  const unauthorizedReadiness = await fetch(`${base}/api/readiness`);
+  assert.equal(unauthorizedReadiness.status, 401);
   const createdSaved = await playerRequest("", { method: "POST", status: 201, body: { name: "Saved Golfer", ghin: 15.2, teeKey: "championship" } });
   assert.equal(createdSaved.player.ghin, 15.2);
   const listedSaved = await playerRequest();
   assert.equal(listedSaved.players.some((player) => player.id === createdSaved.player.id), true);
   const updatedSaved = await playerRequest(`/${createdSaved.player.id}`, { method: "PUT", body: { ghin: 13.7 } });
   assert.equal(updatedSaved.player.ghin, 13.7);
+  const completeBackupResponse = await fetch(`${base}/api/system-backup`, { headers: { "X-Admin-Pin": "2468" } });
+  assert.equal(completeBackupResponse.status, 200);
+  const completeBackup = await completeBackupResponse.json();
+  assert.equal(completeBackup.format, "berry-creek-complete-backup");
+  assert.equal(completeBackup.savedPlayers.some((player) => player.id === createdSaved.player.id), true);
+  const snapshotResponse = await fetch(`${base}/api/system-backup/snapshot`, { method: "POST", headers: { "X-Admin-Pin": "2468", "Content-Type": "application/json" }, body: "{}" });
+  assert.equal(snapshotResponse.status, 201);
+  const readiness = await (await fetch(`${base}/api/readiness`, { headers: { "X-Admin-Pin": "2468" } })).json();
+  assert.equal(Array.isArray(readiness.checks), true);
+  assert.equal(readiness.checks.some((check) => check.key === "backup" && check.ok), true);
+  const restoredBackup = await fetch(`${base}/api/system-backup/restore`, { method: "POST", headers: { "X-Admin-Pin": "2468", "Content-Type": "application/json" }, body: JSON.stringify({ backup: completeBackup }) });
+  assert.equal(restoredBackup.status, 200);
+  assert.equal((await restoredBackup.json()).savedPlayerCount, 1);
   await playerRequest(`/${createdSaved.player.id}`, { method: "DELETE" });
   const emptySaved = await playerRequest();
   assert.equal(emptySaved.players.some((player) => player.id === createdSaved.player.id), false);
@@ -78,8 +95,8 @@ async function playerRequest(path = "", options = {}) {
   assert.equal(uniqueActiveState.players.some((player) => player.id === "live-a-duplicate"), false);
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4 }, { group: "A", token: priorTokens.A, status: 403 });
   await Promise.all([
-    action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4 }, { group: "A" }),
-    action("SET_SCORE", { playerId: "live-b", holeIndex: 0, score: 5 }, { group: "B" })
+    action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4, expectedScore: "" }, { group: "A" }),
+    action("SET_SCORE", { playerId: "live-b", holeIndex: 0, score: 5, expectedScore: "" }, { group: "B" })
   ]);
   const update = new TextDecoder().decode((await reader.read()).value);
   assert.match(update, /event: state/);
@@ -113,6 +130,12 @@ async function playerRequest(path = "", options = {}) {
   const undoneState = await (await fetch(`${base}/api/state`)).json();
   assert.equal(undoneState.players.find((p) => p.id === "live-a").scores[0], "");
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4 }, { group: "A" });
+  const conflictResponse = await action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 5, expectedScore: "" }, { group: "A", status: 409 });
+  const conflict = await conflictResponse.json();
+  assert.equal(conflict.code, "SCORE_CONFLICT");
+  assert.equal(conflict.conflict.currentScore, 4);
+  await action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 5, expectedScore: "", force: true }, { group: "A" });
+  await action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4, expectedScore: 5 }, { group: "A" });
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 1, score: 3 }, { group: "A", noToken: true, status: 403 });
   await action("SET_SCORE", { playerId: "live-b", holeIndex: 1, score: 3 }, { group: "A", status: 403 });
   const savedRoundResponse = await fetch(`${base}/api/rounds`, { method: "POST", headers: { "X-Admin-Pin": "2468", "Content-Type": "application/json" }, body: "{}" });
@@ -122,8 +145,15 @@ async function playerRequest(path = "", options = {}) {
   assert.equal(savedRounds.rounds.some((round) => round.id === savedRound.id), true);
   const savedRoundDetail = await (await fetch(`${base}/api/rounds/${savedRound.id}`, { headers: { "X-Admin-Pin": "2468" } })).json();
   assert.equal(savedRoundDetail.round.state.players.length, 2);
+  const historyBackup = await (await fetch(`${base}/api/system-backup`, { headers: { "X-Admin-Pin": "2468" } })).json();
+  assert.equal(historyBackup.savedRounds.some((round) => round.id === savedRound.id), true);
   const deletedRound = await fetch(`${base}/api/rounds/${savedRound.id}`, { method: "DELETE", headers: { "X-Admin-Pin": "2468" } });
   assert.equal(deletedRound.status, 200);
+  const restoredHistory = await fetch(`${base}/api/system-backup/restore`, { method: "POST", headers: { "X-Admin-Pin": "2468", "Content-Type": "application/json" }, body: JSON.stringify(historyBackup) });
+  assert.equal(restoredHistory.status, 200);
+  const restoredRounds = await (await fetch(`${base}/api/rounds`, { headers: { "X-Admin-Pin": "2468" } })).json();
+  assert.equal(restoredRounds.rounds.some((round) => round.id === savedRound.id), true);
+  await fetch(`${base}/api/rounds/${savedRound.id}`, { method: "DELETE", headers: { "X-Admin-Pin": "2468" } });
   await action("SET_LOCKED", { locked: true });
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 1, score: 3 }, { group: "A", status: 423 });
   await action("SET_LOCKED", { locked: false });

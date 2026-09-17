@@ -51,7 +51,7 @@
           <button id="savePlayerBtn" class="button button-primary admin-control" type="submit">Save player</button>
         </form>
         <section class="guest-entry-panel" aria-labelledby="guestEntryTitle">
-          <div><p class="kicker">One-time player</p><h4 id="guestEntryTitle">Add guest</h4><p class="helper">Each submission creates an independent guest. The same guest name may be added again to another group.</p></div>
+          <div><p class="kicker">One-time player</p><h4 id="guestEntryTitle">Add guest</h4><p class="helper">Each submission creates an independent guest.</p></div>
           <form id="guestPlayerForm" class="guest-player-form">
             <label>Name<input id="guestPlayerName" class="admin-control" type="text" maxlength="40" autocomplete="off" placeholder="Guest name" required></label>
             <label>Handicap Index<input id="guestPlayerGhin" class="admin-control" type="text" maxlength="6" inputmode="decimal" placeholder="12.4 or +4.2" required></label>
@@ -97,10 +97,13 @@
       <div class="control-grid">
         <article class="control-card"><h3>Round status</h3><p id="roundStatusText">The round is open for scoring.</p><button id="toggleRoundLockBtn" class="button button-danger admin-control" type="button">Finalize and lock round</button></article>
         <article class="control-card"><h3>Device preferences</h3><label class="switch-row"><input id="soundToggle" type="checkbox" checked> Birdie and eagle sounds</label><label class="switch-row"><input id="autoAdvanceToggle" type="checkbox"> Automatically advance completed holes</label><label>Display mode<select id="displayMode"><option value="normal">Normal</option><option value="outdoor">Outdoor high contrast</option><option value="dark">Dark</option></select></label></article>
-        <article class="control-card"><h3>App version</h3><p><strong id="appVersion">Version 9.8.0</strong><br><span id="versionStatus">Checking for updates…</span></p><button id="checkUpdateBtn" class="button button-quiet" type="button">Check for updates</button></article>
-        <article class="control-card"><h3>Results and backups</h3><div class="tool-row"><button id="exportBtn" class="button button-quiet" type="button">Export backup</button><label class="button button-quiet file-button admin-only-label">Import backup<input id="importInput" class="admin-control" type="file" accept="application/json"></label></div></article>
+        <article class="control-card"><h3>App version</h3><p><strong id="appVersion">Version 9.9.0</strong><br><span id="versionStatus">Checking for updates…</span></p><button id="checkUpdateBtn" class="button button-quiet" type="button">Check for updates</button></article>
+        <article class="control-card"><h3>Complete backups</h3><p>Download or restore the active round, saved-player database, and all historical rounds in one file.</p><div class="tool-row"><button id="completeBackupBtn" class="button button-primary admin-control" type="button">Download complete backup</button><label class="button button-quiet file-button admin-only-label">Restore complete backup<input id="completeRestoreInput" class="admin-control" type="file" accept="application/json"></label></div></article>
+        <article class="control-card"><h3>Active round file</h3><p>Use these smaller files when you only need the current event.</p><div class="tool-row"><button id="exportBtn" class="button button-quiet" type="button">Export active round</button><label class="button button-quiet file-button admin-only-label">Import active round<input id="importInput" class="admin-control" type="file" accept="application/json"></label></div></article>
         <article class="control-card"><h3>Start a new round</h3><p>Clear the active roster, groups, scores, KPs, and tics while keeping saved players and historical rounds.</p><button id="startNewRoundBtn" class="button button-danger admin-control" type="button">Start new round</button></article>
       </div>
+
+      <section class="tournament-panel" aria-labelledby="readinessTitle"><div class="panel-heading"><div><p class="kicker">Before players tee off</p><h3 id="readinessTitle">Event readiness</h3></div><div class="section-actions"><button id="createSnapshotBtn" class="button button-primary admin-control" type="button">Create server snapshot</button><button id="refreshReadinessBtn" class="button button-quiet admin-control" type="button">Run checks</button></div></div><p id="readinessStatus" class="helper" aria-live="polite">Unlock admin controls to run the readiness checks.</p><ul id="readinessList" class="readiness-list"></ul></section>
 
       <section class="tournament-panel" aria-labelledby="groupProgressTitle"><div class="panel-heading"><div><p class="kicker">Live event status</p><h3 id="groupProgressTitle">Group progress</h3></div></div><p class="helper">See which groups are connected, where they are in the round, and whether scores are missing.</p><div id="groupProgressGrid" class="group-progress-grid" aria-live="polite"></div></section>
 
@@ -115,7 +118,7 @@
   </main>
 
   <section id="printReport" class="print-report" aria-hidden="true"></section>
-  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Connecting to shared scoring…</span><button id="footerVersionBtn" class="text-button" type="button">App v9.8.0</button></footer>
+  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Connecting to shared scoring…</span><button id="footerVersionBtn" class="text-button" type="button">App v9.9.0</button></footer>
 
   <dialog id="adminDialog"><form method="dialog"><h2>Admin access</h2><p>Enter the admin PIN to change the roster, settings, or round status.</p><label>Admin PIN<input id="adminPinInput" type="password" inputmode="numeric" autocomplete="current-password" maxlength="20"></label><p id="adminError" class="validation" role="alert" hidden></p><div class="dialog-actions"><button class="button button-quiet" value="cancel">Cancel</button><button id="adminSubmitBtn" class="button button-primary" value="unlock">Unlock</button></div></form></dialog>
   <dialog id="confirmDialog"><form method="dialog"><h2>Reset the app?</h2><p>Choose whether to keep the player list or clear the entire event.</p><div class="dialog-actions reset-actions"><button class="button button-quiet" value="cancel">Cancel</button><button class="button button-quiet" value="scores">Reset scores only</button><button class="button button-danger" value="everything">Reset everything</button></div></form></dialog>

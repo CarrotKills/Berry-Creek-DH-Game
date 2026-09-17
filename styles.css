@@ -271,6 +271,14 @@ dialog::backdrop { background: rgba(10, 24, 17, 0.55); }
 .finalize-checklist .check-ok span { background: #176c31; }
 .finalize-checklist .check-warning { color: #7a4a00; background: #fff1cf; }
 .finalize-checklist .check-warning span { background: #a36700; }
+.readiness-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 0.6rem; margin: 0.8rem 0 0; padding: 0; list-style: none; }
+.readiness-list li { display: grid; grid-template-columns: 1.7rem minmax(0, 1fr); gap: 0.55rem; align-items: start; padding: 0.7rem; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+.readiness-list .readiness-icon { display: grid; place-items: center; width: 1.45rem; height: 1.45rem; border-radius: 50%; color: #fff; background: var(--danger); font-weight: 900; }
+.readiness-list .is-ready .readiness-icon { background: #176c31; }
+.readiness-list .is-warning .readiness-icon { background: #a36700; }
+.readiness-list strong, .readiness-list small { display: block; }
+.readiness-list strong { color: var(--ink); font-size: 0.88rem; }
+.readiness-list small { margin-top: 0.2rem; color: var(--muted); line-height: 1.35; }
 .archived-leaderboard th:first-child, .archived-leaderboard td:first-child { position: sticky; left: 0; z-index: 2; text-align: left; }
 .archived-leaderboard th:first-child { background: var(--forest); }
 .archived-leaderboard td:first-child { background: var(--paper); font-weight: 800; }

@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.8.0";
+  const APP_VERSION = "9.9.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -60,6 +60,8 @@
   const scoreSyncStatus = new Map();
   const scoreSyncTimers = new Map();
   let groupPresence = {};
+  let readinessData = null;
+  let readinessLoading = false;
   let autoAdvanceTimer;
   let leaderboardSort = { key: "standing", direction: "asc" };
   let preferences = loadPreferences();
@@ -154,6 +156,8 @@
       const body = await response.json().catch(() => ({}));
       const error = new Error(body.error || "The change was not accepted");
       error.serverRejected = true;
+      error.code = body.code || "";
+      error.conflict = body.conflict || null;
       throw error;
     }
   }
@@ -227,8 +231,27 @@
     }
   }
 
+  async function loadReadiness() {
+    if (!adminUnlocked || connectionMode !== "live") {
+      readinessData = null;
+      readinessLoading = false;
+      renderReadiness();
+      return;
+    }
+    readinessLoading = true;
+    renderReadiness();
+    try {
+      readinessData = await databaseRequest("/api/readiness", { cache: "no-store" });
+    } catch (error) {
+      readinessData = { error: error.message };
+    } finally {
+      readinessLoading = false;
+      renderReadiness();
+    }
+  }
+
   async function loadAdminData() {
-    await Promise.all([loadSavedPlayers(), loadSavedRounds(), loadShareTokens()]);
+    await Promise.all([loadSavedPlayers(), loadSavedRounds(), loadShareTokens(), loadReadiness()]);
   }
 
   async function refreshState() {
@@ -237,6 +260,27 @@
     state = R.normalizeState(await response.json());
     saveLocal();
     render();
+  }
+
+  function scoreConflictLabel(value) { return value === "" || value === null || value === undefined ? "blank" : String(value); }
+
+  async function resolveScoreConflict(action, admin, error) {
+    const conflict = error.conflict || {};
+    await refreshState();
+    const player = state.players.find((item) => item.id === conflict.playerId);
+    const playerName = conflict.playerName?.trim() || player?.name?.trim() || "This player";
+    const currentScore = conflict.currentScore ?? player?.scores?.[Number(conflict.holeIndex)] ?? "";
+    const attemptedScore = conflict.attemptedScore ?? action.payload?.score ?? "";
+    const overwrite = window.confirm(`${playerName}'s Hole ${Number(conflict.holeIndex) + 1} score is now ${scoreConflictLabel(currentScore)} from another device. Replace it with ${scoreConflictLabel(attemptedScore)}?\n\nChoose Cancel to keep the score already on the server.`);
+    if (!overwrite) {
+      showToast(`Kept ${playerName}'s server score of ${scoreConflictLabel(currentScore)}.`, "success");
+      return true;
+    }
+    const forcedAction = { ...action, payload: { ...(action.payload || {}), expectedScore: currentScore, force: true } };
+    await postAction(forcedAction, admin);
+    await refreshState();
+    showToast(`${playerName}'s Hole ${Number(conflict.holeIndex) + 1} score was replaced.`, "success");
+    return true;
   }
 
   async function dispatch(action, options = {}) {
@@ -265,6 +309,10 @@
       return true;
     } catch (error) {
       if (error.serverRejected) {
+        if (error.code === "SCORE_CONFLICT") {
+          try { return await resolveScoreConflict(action, admin, error); }
+          catch (resolutionError) { showToast(resolutionError.message, "error"); return false; }
+        }
         await refreshState().catch(() => {});
         showToast(error.message, "error");
         return false;
@@ -290,6 +338,13 @@
       }
       catch (error) {
         if (!error.serverRejected) throw error;
+        if (error.code === "SCORE_CONFLICT") {
+          try {
+            await resolveScoreConflict(item.action, item.admin, error);
+            if (item.action.type === "SET_SCORE") setScoreSyncStatus(item.action.payload.playerId, Number(item.action.payload.holeIndex), "synced");
+            continue;
+          } catch (_) {}
+        }
         rejected += 1;
         if (item.action.type === "SET_SCORE") setScoreSyncStatus(item.action.payload.playerId, Number(item.action.payload.holeIndex), "error");
       }
@@ -642,6 +697,7 @@
     const player = state.players.find((item) => item.id === playerId);
     const holeIndex = selectedHole - 1;
     const par = E.COURSE.holes[holeIndex].par;
+    const expectedScore = player?.scores?.[holeIndex] ?? "";
     const wasComplete = groupPlayers().length > 0 && groupPlayers().every((item) => item.scores[holeIndex] !== "");
     const numeric = score === "" ? "" : Math.max(1, Math.min(20, Number(score) || 1));
     if (numeric !== "" && numeric !== player?.scores[holeIndex] && (numeric <= par - 3 || numeric >= par + 5)) {
@@ -653,7 +709,7 @@
     else if (isNewBirdie) playBirdieTweets();
     setScoreSyncStatus(playerId, holeIndex, connectionMode === "live" ? "saving" : "pending");
     renderGroupScoring();
-    const accepted = await dispatch({ type: "SET_SCORE", payload: { playerId, holeIndex, score: numeric } });
+    const accepted = await dispatch({ type: "SET_SCORE", payload: { playerId, holeIndex, score: numeric, expectedScore } });
     setScoreSyncStatus(playerId, holeIndex, accepted ? (connectionMode === "live" ? "synced" : "pending") : "error");
     renderGroupScoring();
     const isComplete = groupPlayers().length > 0 && groupPlayers().every((item) => item.scores[holeIndex] !== "");
@@ -1104,6 +1160,45 @@
     dialog.showModal();
   }
 
+  function renderReadiness() {
+    const status = $("#readinessStatus");
+    const list = $("#readinessList");
+    if (!status || !list) return;
+    if (!adminUnlocked) {
+      status.textContent = "Unlock admin controls to run the readiness checks.";
+      list.innerHTML = "";
+      return;
+    }
+    if (connectionMode !== "live") {
+      status.textContent = "Connect to the server to run readiness checks.";
+      list.innerHTML = "";
+      return;
+    }
+    if (readinessLoading) {
+      status.textContent = "Running readiness checks…";
+      return;
+    }
+    if (readinessData?.error) {
+      status.textContent = readinessData.error;
+      list.innerHTML = "";
+      return;
+    }
+    const checks = Array.isArray(readinessData?.checks) ? readinessData.checks : [];
+    if (!checks.length) {
+      status.textContent = "Select Run checks to verify the server and event setup.";
+      list.innerHTML = "";
+      return;
+    }
+    const labels = { ready: "Ready for play", attention: "Usable, with items to review", "not-ready": "Not ready for live scoring" };
+    const checkedAt = new Date(readinessData.checkedAt).toLocaleString();
+    status.textContent = `${labels[readinessData.status] || "Checks complete"} · Checked ${checkedAt}`;
+    list.innerHTML = checks.map((check) => {
+      const stateClass = check.ok ? "is-ready" : check.severity === "warning" ? "is-warning" : "is-error";
+      const icon = check.ok ? "✓" : "!";
+      return `<li class="${stateClass}"><span class="readiness-icon" aria-hidden="true">${icon}</span><div><strong>${esc(check.label)}</strong><small>${esc(check.detail)}</small></div></li>`;
+    }).join("");
+  }
+
   function renderTournament() {
     const locked = isLocked();
     $("#roundStatusText").textContent = locked ? "The round is finalized. Scorecards and results remain available to view." : "The round is open for live scoring.";
@@ -1118,6 +1213,7 @@
     renderGroupSharing();
     renderSavedRounds();
     renderAudit();
+    renderReadiness();
   }
 
   function renderAdminState() {
@@ -1127,9 +1223,10 @@
       const isRoundLockControl = control.id === "toggleRoundLockBtn";
       const isSaveRoundControl = control.id === "saveRoundBtn";
       const isNewRoundControl = control.id === "startNewRoundBtn";
+      const availableWhenLocked = ["toggleRoundLockBtn", "saveRoundBtn", "startNewRoundBtn", "completeBackupBtn", "completeRestoreInput", "createSnapshotBtn", "refreshReadinessBtn"].includes(control.id);
       const atPlayerLimit = ["addPlayerBtn", "addGuestBtn"].includes(control.id) && state.players.length >= R.MAX_PLAYERS;
       const noRoundToSave = isSaveRoundControl && !state.players.length;
-      control.disabled = !adminUnlocked || (isLocked() && !isRoundLockControl && !isSaveRoundControl && !isNewRoundControl) || atPlayerLimit || noRoundToSave;
+      control.disabled = !adminUnlocked || (isLocked() && !availableWhenLocked) || atPlayerLimit || noRoundToSave;
     });
     $("#lockStatus").hidden = !isLocked();
     $("#spectatorStatus").hidden = !spectatorMode;
@@ -1219,6 +1316,61 @@
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 30000);
+  }
+
+  async function downloadCompleteBackup() {
+    const button = $("#completeBackupBtn");
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Preparing backup…";
+    try {
+      const backup = await databaseRequest("/api/system-backup", { cache: "no-store" });
+      downloadBlob(JSON.stringify(backup, null, 2), "application/json", `berry-creek-complete-${state.date}.json`);
+      showToast("Complete backup downloaded.", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      button.textContent = original;
+      renderAdminState();
+    }
+  }
+
+  async function restoreCompleteBackup(file) {
+    try {
+      const backup = JSON.parse(await file.text());
+      if (backup?.format !== "berry-creek-complete-backup") throw new Error("That file is not a Berry Creek complete backup.");
+      if (!window.confirm("Restore this complete backup? This replaces the active round, saved-player database, and saved-round history. A server snapshot of the current data will be created first.")) return;
+      const body = await databaseRequest("/api/system-backup/restore", { method: "POST", body: JSON.stringify({ backup }) });
+      saveQueue([]);
+      state = R.normalizeState(body.activeRound);
+      saveLocal();
+      selectedGroup = "A";
+      selectedHole = 1;
+      shareTokens = {};
+      groupPresence = {};
+      await refreshState();
+      await loadAdminData();
+      showToast(`Complete backup restored: ${body.savedPlayerCount} saved players and ${body.savedRoundCount} saved rounds.`, "success");
+    } catch (error) {
+      showToast(error.message || "That complete backup could not be restored.", "error");
+    }
+  }
+
+  async function createServerSnapshot() {
+    const button = $("#createSnapshotBtn");
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Creating…";
+    try {
+      await databaseRequest("/api/system-backup/snapshot", { method: "POST", body: "{}" });
+      await loadReadiness();
+      showToast("Server snapshot created.", "success");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      button.textContent = original;
+      renderAdminState();
+    }
   }
 
   async function exportGroupScorecardJpeg() {
@@ -1506,7 +1658,7 @@
   $("#roundDate").addEventListener("change", (event) => dispatch({ type: "SET_META", payload: { date: event.target.value } }));
   $("#allowance").addEventListener("change", (event) => dispatch({ type: "SET_ALLOWANCE", payload: { allowance: Number(event.target.value) } }));
   $("#adminBtn").addEventListener("click", () => {
-    if (adminUnlocked) { adminUnlocked = false; adminPin = ""; savedPlayers = []; savedRounds = []; shareTokens = {}; savedPlayerSearch = ""; savedPlayerGroupSelections.clear(); sessionStorage.removeItem(ADMIN_PIN_KEY); render(); showToast("Admin controls locked."); }
+    if (adminUnlocked) { adminUnlocked = false; adminPin = ""; savedPlayers = []; savedRounds = []; shareTokens = {}; readinessData = null; savedPlayerSearch = ""; savedPlayerGroupSelections.clear(); sessionStorage.removeItem(ADMIN_PIN_KEY); render(); showToast("Admin controls locked."); }
     else openAdminDialog();
   });
   $("#adminSubmitBtn").addEventListener("click", (event) => { event.preventDefault(); verifyAdmin(); });
@@ -1530,6 +1682,10 @@
   $("#soundToggle").addEventListener("change", (event) => { preferences.sound = event.target.checked; savePreferences(); showToast(preferences.sound ? "Celebration sounds on." : "Celebration sounds muted."); });
   $("#autoAdvanceToggle").addEventListener("change", (event) => { preferences.autoAdvance = event.target.checked; savePreferences(); showToast(preferences.autoAdvance ? "Automatic hole advance is on." : "Automatic hole advance is off."); });
   $("#displayMode").addEventListener("change", (event) => { preferences.display = event.target.value; savePreferences(); document.body.dataset.display = preferences.display; });
+  $("#completeBackupBtn").addEventListener("click", downloadCompleteBackup);
+  $("#completeRestoreInput").addEventListener("change", async (event) => { const [file] = event.target.files; if (file) await restoreCompleteBackup(file); event.target.value = ""; });
+  $("#createSnapshotBtn").addEventListener("click", createServerSnapshot);
+  $("#refreshReadinessBtn").addEventListener("click", loadReadiness);
   $("#exportBtn").addEventListener("click", () => downloadBlob(JSON.stringify(state, null, 2), "application/json", `berry-creek-${state.date}.json`));
   $("#csvBtn").addEventListener("click", downloadCsv);
   $("#printBtn").addEventListener("click", () => { preparePrintReport(); window.print(); });

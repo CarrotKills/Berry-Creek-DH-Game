@@ -42,6 +42,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 6. Use Show group scorecard during play to open or close the group's live-updating scorecard. Its Running total column adds every gross score entered so far.
 7. Finalize and lock the round when scoring is complete. Only the admin can unlock it.
 8. Select Save current round to preserve a historical snapshot before resetting for the next event.
+9. Before play, open Event readiness in Settings, run the checks, and create a current server snapshot.
 
 ## Handicap and tic rules
 
@@ -67,6 +68,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 
 - The connection badge shows Live, Reconnecting, or Offline. Offline score changes are queued on the device and sent when the connection returns.
 - Each score briefly shows Saving, Saved, Waiting to sync, or Sync problem so the scorekeeper can verify that entry.
+- Score updates include the score the device last saw. If another device changed the same player and hole first, the scorekeeper must choose whether to keep the server score or replace it, preventing silent overwrites.
 - Each group has an Undo last button that safely reverses its most recent score, sand-save, or KP change.
 - Once every score on a hole is entered, a large Continue to next hole button appears. Automatic advance can also be enabled per device.
 - The Group progress dashboard shows players, completed holes, missing scores, last scoring activity, and connected scorekeepers for every group.
@@ -79,6 +81,8 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - Finalizing a round opens a checklist for missing scores, KPs, unusual scores, and roster-name issues before the admin locks it.
 - Celebration sounds can be muted per device. Normal, outdoor high-contrast, and dark display modes are also device-specific.
 - The visible app version and Check for updates button make cached versions easier to identify and replace.
+- Event readiness checks storage write access, persistent-disk configuration, the admin PIN, backup freshness, roster setup, database access, and secure hosting.
+- Complete backup files contain the active event, reusable player database, and every saved historical round. A restore first creates a server-side recovery snapshot of the current data.
 - Group QR images require an internet connection; Copy link remains available if the QR image service is unavailable.
 - Live and printed scorecards show one dot for every handicap stroke a player receives on each hole.
 - The leaderboard uses non-cash points: ordinary tics are 0.5 point; eagles and unique front/back/overall net wins are 1 point; tied net wins are 0.5 point.
@@ -89,4 +93,4 @@ Under Settings, **Start new round** clears the active roster, group assignments,
 
 The Reset button on the Players tab can also clear only scores and tics while keeping the active roster, or clear the entire active event.
 
-By default, the server saves event data to `data/round.json`, the reusable player roster to `data/players.sqlite`, and historical rounds to `data/rounds.sqlite`. If `PLAYERS_DB_FILE` points to persistent storage, the other two files are placed in that same directory. `DATA_DIR`, `ROUND_FILE`, and `ROUND_HISTORY_DB_FILE` can also override those locations individually. Use Export backup during the round for an additional copy of the event data.
+By default, the server saves event data to `data/round.json`, the reusable player roster to `data/players.sqlite`, historical rounds to `data/rounds.sqlite`, and automatic recovery snapshots to `data/backups`. If `PLAYERS_DB_FILE` points to persistent storage, the other files are placed in that same directory. `DATA_DIR`, `ROUND_FILE`, `ROUND_HISTORY_DB_FILE`, and `BACKUP_DIR` can override those locations. The server keeps the 25 newest snapshots and automatically creates one before a round reset, score reset, active-round import, saved-roster reuse, complete restore, or saved player/round deletion.

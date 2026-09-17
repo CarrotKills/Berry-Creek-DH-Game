@@ -25,6 +25,18 @@ function fromRow(row) {
   } : null;
 }
 
+function normalizeStored(value) {
+  const player = normalizeInput(value);
+  const id = String(value?.id || crypto.randomUUID()).slice(0, 100);
+  const now = new Date().toISOString();
+  return {
+    ...player,
+    id,
+    createdAt: String(value?.createdAt || now).slice(0, 40),
+    updatedAt: String(value?.updatedAt || value?.createdAt || now).slice(0, 40)
+  };
+}
+
 class PlayerDatabase {
   constructor(filePath) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -73,6 +85,26 @@ class PlayerDatabase {
     if (!current) throw new Error("Saved player not found");
     this.deleteStatement.run(String(id));
     return current;
+  }
+
+  replaceAll(values) {
+    if (!Array.isArray(values)) throw new Error("Saved players must be an array");
+    const players = values.map(normalizeStored);
+    const ids = new Set();
+    players.forEach((player) => {
+      if (ids.has(player.id)) throw new Error("The backup contains duplicate saved-player IDs");
+      ids.add(player.id);
+    });
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.exec("DELETE FROM players");
+      players.forEach((player) => this.insertStatement.run(player.id, player.name, player.ghin, player.teeKey, player.createdAt, player.updatedAt));
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return this.list();
   }
 
   close() { this.db.close(); }

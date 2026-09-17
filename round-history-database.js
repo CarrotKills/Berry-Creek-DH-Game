@@ -85,6 +85,51 @@ class RoundHistoryDatabase {
     });
   }
 
+  exportAll() {
+    return this.list().map((round) => this.find(round.id));
+  }
+
+  replaceAll(values) {
+    if (!Array.isArray(values)) throw new Error("Saved rounds must be an array");
+    const ids = new Set();
+    const rounds = values.map((value) => {
+      if (!value?.state || !Array.isArray(value.state.players)) throw new Error("A saved round in the backup is invalid");
+      const id = String(value.id || crypto.randomUUID()).slice(0, 100);
+      if (ids.has(id)) throw new Error("The backup contains duplicate saved-round IDs");
+      ids.add(id);
+      const savedAt = String(value.savedAt || new Date().toISOString()).slice(0, 40);
+      return {
+        id,
+        roundName: String(value.roundName || value.state.roundName || "Berry Creek Round").slice(0, 60),
+        date: String(value.date || value.state.date || savedAt.slice(0, 10)).slice(0, 10),
+        playerCount: Array.isArray(value.state.players) ? value.state.players.length : Number(value.playerCount) || 0,
+        completed: Boolean(value.completed),
+        locked: Boolean(value.locked ?? value.state.settings?.locked),
+        savedAt,
+        state: value.state
+      };
+    });
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.exec("DELETE FROM saved_rounds");
+      rounds.forEach((round) => this.insertStatement.run(
+        round.id,
+        round.roundName,
+        round.date,
+        round.playerCount,
+        round.completed ? 1 : 0,
+        round.locked ? 1 : 0,
+        round.savedAt,
+        JSON.stringify(round.state)
+      ));
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return this.list();
+  }
+
   close() { this.db.close(); }
 }
 
