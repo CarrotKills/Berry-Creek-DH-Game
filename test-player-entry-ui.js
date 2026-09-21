@@ -24,5 +24,9 @@ assert.match(app, /class="saved-ghin-plus plus-handicap-toggle"/);
 assert.match(app, /function togglePlusHandicapInput\(input, button\)/);
 assert.match(app, /togglePlusHandicapInput\(ghinInput, plusHandicap\)/);
 assert.match(app, /togglePlusHandicapInput\(ghin, plusHandicap\)/);
+assert.match(html, /id="updateIndexesBtn"[^>]*>Update Indexes</);
+assert.match(html, /id="indexUpdateStatus"[^>]*aria-live="polite"/);
+assert.match(app, /Are you sure you want to update, the roster is outdated\./);
+assert.match(app, /\/api\/players\/update-indexes/);
 
 console.log("Player-entry UI tests passed.");

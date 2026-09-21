@@ -9,11 +9,12 @@ const Round = require("./round-state.js");
 const AdminDatabase = require("./admin-database.js");
 const PlayerDatabase = require("./player-database.js");
 const RoundHistoryDatabase = require("./round-history-database.js");
+const IndexSheet = require("./index-sheet.js");
 
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.10.5";
+const APP_VERSION = "9.10.6";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -27,6 +28,8 @@ const BACKUP_FORMAT_VERSION = 1;
 const SNAPSHOT_LIMIT = 25;
 const DESTRUCTIVE_ACTIONS = new Set(["CLEAR_ROUND", "REPLACE_ROUND", "START_FROM_SAVED", "RESET_SCORES"]);
 const SHARE_SECRET = String(process.env.SHARE_SECRET || ADMIN_PIN);
+const INDEX_SHEET_CSV_URL = String(process.env.INDEX_SHEET_URL || "https://docs.google.com/spreadsheets/d/e/2PACX-1vSZyzvxEBnr9IugRMC6aptHh1ZJ3mugb4boxRmu7NS7TL-kn7BY3hAgmtSHh-7ZoyvuFtLmUEL5v3f9/pub?output=csv");
+const INDEX_SHEET_MAX_BYTES = 2 * 1024 * 1024;
 const clients = new Map();
 const adminLoginAttempts = new Map();
 const adminAuthCache = new Map();
@@ -209,6 +212,40 @@ function readinessPayload(req) {
 
 function normalizedScore(value) {
   return value === "" || value === null || value === undefined ? "" : Number(value);
+}
+
+function centralDate() {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function requestError(message, statusCode) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+async function fetchIndexUpdatePlan() {
+  let response;
+  try {
+    response = await fetch(INDEX_SHEET_CSV_URL, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(15_000),
+      headers: { Accept: "text/csv,text/plain;q=0.9,*/*;q=0.5", "User-Agent": `Berry-Creek-DH-Game/${APP_VERSION}` }
+    });
+  } catch (error) {
+    throw requestError(`The published index sheet could not be reached: ${error.message}`, 502);
+  }
+  if (!response.ok) throw requestError(`The published index sheet returned HTTP ${response.status}`, 502);
+  const csv = await response.text();
+  if (Buffer.byteLength(csv, "utf8") > INDEX_SHEET_MAX_BYTES) throw requestError("The published index sheet is too large to import", 422);
+  try {
+    const parsed = IndexSheet.parseIndexSheet(csv);
+    return { parsed, plan: IndexSheet.buildIndexUpdatePlan(playerDatabase.list(), parsed) };
+  } catch (error) {
+    throw requestError(`The published index sheet could not be read: ${error.message}`, 422);
+  }
 }
 
 function legacyPinMatches(candidate) {
@@ -482,6 +519,52 @@ const server = http.createServer(async (req, res) => {
         recordSystemAudit(adminIdentity.name, "PLAYER_SAVE", `Saved ${player.name} to the player database`);
         return sendJson(res, 201, { player });
       }
+      if (req.method === "POST" && url.pathname === "/api/players/update-indexes") {
+        if (state.settings.locked) return sendJson(res, 423, { ok: false, error: "Unlock the finalized round before updating indexes" });
+        const body = await readBody(req);
+        const { parsed, plan } = await fetchIndexUpdatePlan();
+        const today = centralDate();
+        const outdated = parsed.updateDate !== today;
+        if (outdated && body.confirmOutdated !== true) {
+          return sendJson(res, 409, {
+            ok: false,
+            code: "OUTDATED_INDEX_ROSTER",
+            error: "Are you sure you want to update, the roster is outdated.",
+            sheetDate: parsed.updateDate || null,
+            currentDate: today
+          });
+        }
+        let activePlayersUpdated = 0;
+        if (plan.updates.length) {
+          createSnapshot("before-index-update");
+          playerDatabase.updateIndexes(plan.updates);
+          const updatedIndexes = new Map(plan.updates.map((update) => [update.id, update.ghin]));
+          state.players = state.players.map((player) => {
+            if (!player.directoryId || !updatedIndexes.has(player.directoryId) || Number(player.ghin) === updatedIndexes.get(player.directoryId)) return player;
+            activePlayersUpdated += 1;
+            return { ...player, ghin: updatedIndexes.get(player.directoryId) };
+          });
+          const dateDescription = parsed.updateDate || "no update date";
+          recordSystemAudit(adminIdentity.name, "INDEX_IMPORT", `Updated ${plan.updates.length} saved player index${plan.updates.length === 1 ? "" : "es"} from the published roster dated ${dateDescription}`);
+        }
+        return sendJson(res, 200, {
+          ok: true,
+          players: playerDatabase.list(),
+          summary: {
+            updated: plan.updates.length,
+            unchanged: plan.unchanged.length,
+            unmatched: plan.unmatched.map((player) => player.name),
+            ambiguous: plan.ambiguous.map((player) => player.name),
+            invalid: plan.invalid.map((player) => player.name),
+            invalidSheetRows: plan.invalidSheetRows.length,
+            validSheetRows: plan.validSheetRows,
+            activePlayersUpdated,
+            sheetDate: parsed.updateDate || null,
+            currentDate: today,
+            outdated
+          }
+        });
+      }
       if (req.method === "PUT" && playerRoute) {
         const body = await readBody(req);
         const player = playerDatabase.update(decodeURIComponent(playerRoute[1]), body.player || body);
@@ -496,7 +579,7 @@ const server = http.createServer(async (req, res) => {
       }
       return sendJson(res, 405, { ok: false, error: "Method not allowed" });
     } catch (error) {
-      const status = error.message === "Saved player not found" ? 404 : 400;
+      const status = error.statusCode || (error.message === "Saved player not found" ? 404 : 400);
       return sendJson(res, status, { ok: false, error: error.message });
     }
   }

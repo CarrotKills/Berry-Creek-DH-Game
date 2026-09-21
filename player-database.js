@@ -66,6 +66,7 @@ class PlayerDatabase {
     this.findStatement = this.db.prepare("SELECT * FROM players WHERE id = ?");
     this.insertStatement = this.db.prepare("INSERT INTO players (id, name, ghin, tee_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)");
     this.updateStatement = this.db.prepare("UPDATE players SET name = ?, ghin = ?, tee_key = ?, updated_at = ? WHERE id = ?");
+    this.updateIndexStatement = this.db.prepare("UPDATE players SET ghin = ?, updated_at = ? WHERE id = ?");
     this.deleteStatement = this.db.prepare("DELETE FROM players WHERE id = ?");
   }
 
@@ -87,6 +88,27 @@ class PlayerDatabase {
     const player = normalizeInput({ ...current, ...value });
     this.updateStatement.run(player.name, player.ghin, player.teeKey, new Date().toISOString(), String(id));
     return this.find(id);
+  }
+
+  updateIndexes(values) {
+    if (!Array.isArray(values)) throw new Error("Index updates must be an array");
+    const updates = values.map((value) => {
+      const id = String(value?.id || "");
+      const ghin = Number(value?.ghin);
+      if (!id || !this.find(id)) throw new Error("Saved player not found");
+      if (!Number.isFinite(ghin) || ghin < -10 || ghin > 54) throw new Error("A Handicap Index is invalid");
+      return { id, ghin: Math.round(ghin * 10) / 10 };
+    });
+    const updatedAt = new Date().toISOString();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      updates.forEach((update) => this.updateIndexStatement.run(update.ghin, updatedAt, update.id));
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    return updates.map((update) => this.find(update.id));
   }
 
   remove(id) {

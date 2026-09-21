@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.10.5";
+  const APP_VERSION = "9.10.6";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -58,6 +58,9 @@
   let pendingReuseRound = null;
   let savedPlayerSearch = "";
   let playerEntryMode = "";
+  let indexUpdateInProgress = false;
+  let indexUpdateMessage = "";
+  let indexUpdateError = false;
   const savedPlayerGroupSelections = new Map();
   const scoreSyncStatus = new Map();
   const scoreSyncTimers = new Map();
@@ -206,7 +209,10 @@
         lockAdminControls();
         render();
       }
-      throw new Error(body.error || "The admin request failed");
+      const error = new Error(body.error || "The admin request failed");
+      error.code = body.code || "";
+      error.details = body;
+      throw error;
     }
     return body;
   }
@@ -226,6 +232,74 @@
     } catch (error) {
       savedPlayers = [];
       renderSavedPlayers(error.message);
+    }
+  }
+
+  function displayRosterDate(value) {
+    if (!value) return "not provided";
+    const [year, month, day] = String(value).split("-").map(Number);
+    if (!year || !month || !day) return String(value);
+    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(year, month - 1, day));
+  }
+
+  function renderIndexUpdateState() {
+    const button = $("#updateIndexesBtn");
+    const status = $("#indexUpdateStatus");
+    if (!button || !status) return;
+    button.textContent = indexUpdateInProgress ? "Updating…" : "Update Indexes";
+    button.disabled = indexUpdateInProgress || !adminUnlocked || connectionMode !== "live" || isLocked();
+    status.textContent = indexUpdateMessage;
+    status.hidden = !indexUpdateMessage;
+    status.classList.toggle("is-error", indexUpdateError);
+  }
+
+  function indexUpdateSummary(summary) {
+    const parts = [
+      `${summary.updated} updated`,
+      `${summary.unchanged} already current`,
+      `${summary.unmatched.length} not found`,
+      `${summary.ambiguous.length} ambiguous`,
+      `${summary.invalid.length + summary.invalidSheetRows} invalid`
+    ];
+    const issues = [...summary.unmatched, ...summary.ambiguous, ...summary.invalid];
+    const issueText = issues.length ? ` Review: ${issues.slice(0, 6).join(", ")}${issues.length > 6 ? ` and ${issues.length - 6} more` : ""}.` : "";
+    return `Roster date ${displayRosterDate(summary.sheetDate)}: ${parts.join(" · ")}.${summary.activePlayersUpdated ? ` ${summary.activePlayersUpdated} active-round player${summary.activePlayersUpdated === 1 ? " was" : "s were"} refreshed.` : ""}${issueText}`;
+  }
+
+  async function updateIndexesFromSheet() {
+    if (indexUpdateInProgress || !adminUnlocked || connectionMode !== "live" || isLocked()) return;
+    indexUpdateInProgress = true;
+    indexUpdateError = false;
+    indexUpdateMessage = "Checking the published roster and its Update Date…";
+    renderIndexUpdateState();
+    try {
+      let body;
+      try {
+        body = await databaseRequest("/api/players/update-indexes", { method: "POST", body: JSON.stringify({ confirmOutdated: false }) });
+      } catch (error) {
+        if (error.code !== "OUTDATED_INDEX_ROSTER") throw error;
+        const sheetDate = displayRosterDate(error.details?.sheetDate);
+        const currentDate = displayRosterDate(error.details?.currentDate);
+        const confirmed = window.confirm(`Are you sure you want to update, the roster is outdated.\n\nSheet update date: ${sheetDate}\nCurrent date: ${currentDate}`);
+        if (!confirmed) {
+          indexUpdateMessage = `Update canceled. The roster date is ${sheetDate}; no indexes were changed.`;
+          renderIndexUpdateState();
+          return;
+        }
+        body = await databaseRequest("/api/players/update-indexes", { method: "POST", body: JSON.stringify({ confirmOutdated: true }) });
+      }
+      savedPlayers = Array.isArray(body.players) ? body.players : savedPlayers;
+      await refreshState().catch(() => {});
+      indexUpdateMessage = indexUpdateSummary(body.summary);
+      indexUpdateError = Boolean(body.summary.unmatched.length || body.summary.ambiguous.length || body.summary.invalid.length || body.summary.invalidSheetRows);
+      showToast(body.summary.updated ? `${body.summary.updated} player index${body.summary.updated === 1 ? "" : "es"} updated.` : "All matched player indexes were already current.", "success");
+    } catch (error) {
+      indexUpdateMessage = error.message;
+      indexUpdateError = true;
+      showToast(error.message, "error");
+    } finally {
+      indexUpdateInProgress = false;
+      render();
     }
   }
 
@@ -527,6 +601,7 @@
     const status = $("#playerDatabaseStatus");
     const search = $("#savedPlayerSearch");
     if (!list || !status || !search) return;
+    renderIndexUpdateState();
     list.replaceChildren();
     search.disabled = !adminUnlocked || connectionMode !== "live";
     search.value = savedPlayerSearch;
@@ -1507,6 +1582,7 @@
     document.body.classList.toggle("spectator-mode", spectatorMode);
     if (!adminUnlocked || isLocked()) playerEntryMode = "";
     renderPlayerEntryPanels();
+    renderIndexUpdateState();
   }
 
   function render() {
@@ -1869,6 +1945,7 @@
     $(`#${id}`).addEventListener(id.endsWith("Tee") ? "change" : "input", renderDraftHandicaps);
   });
   $("#savedPlayerSearch").addEventListener("input", (event) => { savedPlayerSearch = event.target.value; renderSavedPlayers(); });
+  $("#updateIndexesBtn").addEventListener("click", updateIndexesFromSheet);
   $("#resetLeaderboardSortBtn").addEventListener("click", () => { leaderboardSort = { key: "standing", direction: "asc" }; renderLeaderboard(); });
   $("#activeGroupSelect").addEventListener("change", (event) => { clearTimeout(autoAdvanceTimer); selectedGroup = event.target.value; const url = new URL(location.href); url.searchParams.set("group", selectedGroup); history.replaceState(null, "", url); renderGroupScoring(); });
   $("#holeSelect").addEventListener("change", (event) => moveToHole(Number(event.target.value)));

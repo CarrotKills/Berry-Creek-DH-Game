@@ -20,13 +20,16 @@ try {
   assert.equal(updated.teeKey, "member");
   const migrated = database.create({ name: "Legacy Tee", ghin: 8.2, teeKey: "creekWomen" });
   assert.equal(migrated.teeKey, "creekMen");
+  const bulkUpdated = database.updateIndexes([{ id: created.id, ghin: -2.4 }, { id: migrated.id, ghin: 7.1 }]);
+  assert.equal(bulkUpdated.find((player) => player.id === created.id).ghin, -2.4);
+  assert.equal(bulkUpdated.find((player) => player.id === migrated.id).ghin, 7.1);
   database.remove(migrated.id);
   database.close();
 
   database = new PlayerDatabase(databaseFile);
   const persisted = database.find(created.id);
   assert.equal(persisted.name, "Alice Golfer");
-  assert.equal(persisted.ghin, 10.8);
+  assert.equal(persisted.ghin, -2.4);
   database.remove(created.id);
   assert.equal(database.list().length, 0);
   database.close();

@@ -61,6 +61,8 @@ main { width: min(1180px, calc(100% - 2rem)); margin: 1.25rem auto 3rem; }
 .player-database-panel { margin-top: 1rem; padding: 1rem; border: 1px solid var(--line); border-top: 4px solid var(--forest); border-radius: 12px; background: var(--paper); box-shadow: var(--shadow); }
 .player-database-panel h3 { margin: 0; font-family: Georgia, serif; font-size: 1.25rem; font-weight: 500; }
 .player-database-panel > .helper { margin-bottom: 0.8rem; }
+.index-update-status { padding: 0.65rem 0.75rem; border-radius: 8px; color: #1e6434; background: #edf8f0; }
+.index-update-status.is-error { color: var(--danger); background: #fff0f1; }
 .player-entry-panel { margin-top: 1rem; padding: 0.9rem; border: 1px solid var(--line); border-radius: 10px; background: var(--gold-soft); scroll-margin-top: 5rem; }
 .player-entry-panel[hidden] { display: none !important; }
 .player-entry-panel h4 { margin: 0.1rem 0 0.25rem; color: var(--forest); font-family: Georgia, serif; font-size: 1.05rem; }
