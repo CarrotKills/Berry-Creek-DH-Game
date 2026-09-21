@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.10.4";
+  const APP_VERSION = "9.10.5";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -20,13 +20,12 @@
     { key: "birdies", label: "Birdies", firstDirection: "desc" },
     { key: "eagles", label: "Eagles+", firstDirection: "desc" },
     { key: "skins", label: "Skins", firstDirection: "desc" },
-    { key: "front", label: "F", firstDirection: "desc" },
-    { key: "back", label: "B", firstDirection: "desc" },
-    { key: "totalNet", label: "Total", firstDirection: "desc" },
-    { key: "sandyPars", label: "Sandy par", firstDirection: "desc" },
-    { key: "sandyBirdies", label: "Sandy birdie", firstDirection: "desc" },
+    { key: "frontWeight", label: "FN", firstDirection: "desc" },
+    { key: "backWeight", label: "BN", firstDirection: "desc" },
+    { key: "totalNetWeight", label: "TN", firstDirection: "desc" },
+    { key: "sandies", label: "Sandy", firstDirection: "desc" },
     { key: "kps", label: "KP", firstDirection: "desc" },
-    { key: "kpMarked", label: "KP Marked", firstDirection: "desc" },
+    { key: "kpMarked", label: "KPM", firstDirection: "desc" },
     { key: "positive", label: "Points +", firstDirection: "desc" },
     { key: "negative", label: "Points −", firstDirection: "desc" },
     { key: "netPoints", label: "Net points", firstDirection: "desc" }
@@ -840,10 +839,8 @@
       const competitive = E.isInGame(player);
       const strokes = E.strokesForHole(hcp(player), hole.strokeIndex);
       const net = E.netScore(gross, strokes);
-      const birdie = Number(gross) > 0 && Number(gross) <= hole.par - 1;
       const achievement = competitive ? (E.isEagle(gross, hole.par) ? "Eagle" : E.isBirdie(gross, hole.par) ? "Birdie" : Number(gross) > 0 && Number(gross) <= hole.par - 3 ? "Albatross" : "") : "";
-      const sandyPar = competitive && player.sandies[index] && Number(gross) === hole.par;
-      const sandyBirdie = competitive && player.sandies[index] && birdie;
+      const sandy = competitive && player.sandies[index] && Number(gross) >= 1 && Number(gross) <= hole.par;
       const canMarkSandy = competitive && Number(gross) >= 1 && Number(gross) <= hole.par;
       const isKpHole = competitive && KP_HOLES.includes(selectedHole);
       const hasKp = (state.settings.kpClaims[String(selectedHole)] || []).includes(player.id);
@@ -861,7 +858,7 @@
         <div class="score-player"><strong>${playerNameHtml(player, state.players.indexOf(player))}</strong><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${strokes > 0 ? `gets ${strokes}` : strokes < 0 ? `gives ${Math.abs(strokes)}` : "no stroke"}</span>${competitive ? "" : '<span class="score-only-note">Not in the game · score only</span>'}</div>
         <div class="score-entry-wrap"><div class="score-stepper"><button type="button" data-delta="-1" ${disabled} aria-label="Decrease score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" ${disabled} aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" ${disabled} aria-label="Increase score">+</button></div>${syncLabel ? `<span class="score-sync score-sync--${syncState}" role="status">${syncLabel}</span>` : ""}</div>
         <div class="net-box"><span>Net</span><strong>${net ?? "—"}</strong></div>
-        <div class="card-tics">${achievement ? `<span class="auto-tic">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle" title="${hasKp ? "Remove KP before marking a sand save" : "Mark sand save"}"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${sandyDisabled}>Sand save</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle" title="${player.sandies[index] ? "Remove Sand save before marking KP" : "Mark KP"}"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${kpDisabled}>KP</label>` : ""}${kpNote}${sandyPar ? '<span class="auto-tic">Sandy par ✓</span>' : ""}${sandyBirdie ? '<span class="auto-tic">Sandy birdie ✓</span>' : ""}</div>
+        <div class="card-tics">${achievement ? `<span class="auto-tic">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle" title="${hasKp ? "Remove KP before marking a Sandy" : "Mark Sandy"}"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${sandyDisabled}>Sandy</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle" title="${player.sandies[index] ? "Remove Sandy before marking KP" : "Mark KP"}"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${kpDisabled}>KP</label>` : ""}${kpNote}${sandy ? '<span class="auto-tic">Sandy ✓</span>' : ""}</div>
       </article>`;
     }).join("");
     list.querySelectorAll(".group-score-card").forEach((card) => {
@@ -982,11 +979,10 @@
           birdies: tics.birdies,
           eagles: tics.eagles,
           skins: tics.skins,
-          front: tics.front,
-          back: tics.back,
-          totalNet: tics.totalNet,
-          sandyPars: tics.sandyPars,
-          sandyBirdies: tics.sandyBirdies,
+          frontWeight: tics.frontWeight,
+          backWeight: tics.backWeight,
+          totalNetWeight: tics.totalNetWeight,
+          sandies: tics.sandies,
           kps: tics.kps,
           kpMarked: tics.kpMarked,
           positive: ledger.positive,
@@ -1035,7 +1031,9 @@
       const thru = item.sortValues.thru;
       const netClass = ledger.net > 0 ? "is-positive" : ledger.net < 0 ? "is-negative" : "";
       const netText = `${ledger.net > 0 ? "+" : ""}${ledger.net.toFixed(1)}`;
-      return `<tr class="${item.player.id === standingLeaderId && item.totals.total.completed ? "leader-row-leading" : ""}"><td>${playerNameHtml(item.player, item.index)}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${displayPlayingHandicap(hcp(item.player))}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.front}</td><td>${tics.back}</td><td>${tics.totalNet}</td><td>${tics.sandyPars}</td><td>${tics.sandyBirdies}</td><td>${tics.kps}</td><td class="kp-marked-count">${tics.kpMarked}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
+      const kpCode = E.kpCode(item.player, state.players, E.COURSE, state.settings, "kp");
+      const kpmCode = E.kpCode(item.player, state.players, E.COURSE, state.settings, "marked");
+      return `<tr class="${item.player.id === standingLeaderId && item.totals.total.completed ? "leader-row-leading" : ""}"><td>${playerNameHtml(item.player, item.index)}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${displayPlayingHandicap(hcp(item.player))}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.frontWeight}</td><td>${tics.backWeight}</td><td>${tics.totalNetWeight}</td><td>${tics.sandies}</td><td class="kp-code" title="KP holes 2, 8, 12, and 17">${kpCode}</td><td class="kp-code kp-marked-count" title="KPM holes 2, 8, 12, and 17">${kpmCode}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
     }).join("");
     $("#leaderboardEmpty").hidden = players.length > 0;
     $(".leaderboard-wrap").hidden = players.length === 0;
@@ -1160,7 +1158,9 @@
       const tics = E.ticSummary(player, roundState.players, E.COURSE, roundState.settings);
       const ledger = E.pointsLedger(player, roundState.players, E.COURSE, roundState.settings);
       const netClass = ledger.net > 0 ? "is-positive" : ledger.net < 0 ? "is-negative" : "";
-      return `<tr><td>${playerNameHtml(player, index)}</td><td>${player.group}</td><td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td><td>${tics.kps}</td><td class="kp-marked-count">${tics.kpMarked}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${ledger.net > 0 ? "+" : ""}${ledger.net.toFixed(1)}</td></tr>`;
+      const kpCode = E.kpCode(player, roundState.players, E.COURSE, roundState.settings, "kp");
+      const kpmCode = E.kpCode(player, roundState.players, E.COURSE, roundState.settings, "marked");
+      return `<tr><td>${playerNameHtml(player, index)}</td><td>${player.group}</td><td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.frontWeight}</td><td>${tics.backWeight}</td><td>${tics.totalNetWeight}</td><td>${tics.sandies}</td><td class="kp-code">${kpCode}</td><td class="kp-code kp-marked-count">${kpmCode}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${ledger.net > 0 ? "+" : ""}${ledger.net.toFixed(1)}</td></tr>`;
     }).join("");
   }
 
@@ -1797,14 +1797,14 @@
   }
 
   function downloadCsv() {
-    const headers = ["Player", "Guest", "In Game", "Group", "GHIN Index", "Tee", "Playing Handicap", ...E.COURSE.holes.map((hole) => `Hole ${hole.number}`), "Gross", "Net", "Birdies", "Eagles or Better", "Skins", "Front Net Tic", "Back Net Tic", "Total Net Tic", "Sandy Pars", "Sandy Birdies", "KP Holes", "KP Marked Holes", "Raw Tics", "Weighted Tics", "Achievement Points", "Points Positive", "Points Negative", "Net Points"];
+    const headers = ["Player", "Guest", "In Game", "Group", "GHIN Index", "Tee", "Playing Handicap", ...E.COURSE.holes.map((hole) => `Hole ${hole.number}`), "Gross", "Net", "Birdies", "Eagles or Better", "Skins", "FN Tics", "BN Tics", "TN Tics", "Sandy", "KP Code (2/8/12/17)", "KPM Code (2/8/12/17)", "Raw Tics", "Weighted Tics", "Achievement Points", "Points Positive", "Points Negative", "Net Points"];
     const rows = state.players.map((player, index) => {
       const totals = E.playerTotals(player, E.COURSE, state.settings);
       const tics = E.ticSummary(player, state.players, E.COURSE, state.settings);
       const ledger = E.pointsLedger(player, state.players, E.COURSE, state.settings);
-      const kpHoles = KP_HOLES.filter((hole) => E.kpClaimStatus(player, E.COURSE, state.settings, hole - 1, state.players) === "kp").join("; ");
-      const kpMarkedHoles = KP_HOLES.filter((hole) => E.kpClaimStatus(player, E.COURSE, state.settings, hole - 1, state.players) === "marked").join("; ");
-      return [nameOf(player, index), player.isGuest ? "Yes" : "No", player.inGame ? "Yes" : "No", player.group, displayIndex(player.ghin), teeOf(player).name, displayPlayingHandicap(hcp(player)), ...player.scores, totals.total.completed ? totals.total.gross : "", totals.total.completed ? totals.total.net : "", tics.birdies, tics.eagles, tics.skins, tics.front, tics.back, tics.totalNet, tics.sandyPars, tics.sandyBirdies, kpHoles, kpMarkedHoles, tics.total, tics.weightedTics, tics.pointsEarned.toFixed(1), ledger.positive.toFixed(1), ledger.negative.toFixed(1), ledger.net.toFixed(1)].map(csvCell).join(",");
+      const kpCode = E.kpCode(player, state.players, E.COURSE, state.settings, "kp");
+      const kpmCode = E.kpCode(player, state.players, E.COURSE, state.settings, "marked");
+      return [nameOf(player, index), player.isGuest ? "Yes" : "No", player.inGame ? "Yes" : "No", player.group, displayIndex(player.ghin), teeOf(player).name, displayPlayingHandicap(hcp(player)), ...player.scores, totals.total.completed ? totals.total.gross : "", totals.total.completed ? totals.total.net : "", tics.birdies, tics.eagles, tics.skins, tics.frontWeight, tics.backWeight, tics.totalNetWeight, tics.sandies, kpCode, kpmCode, tics.total, tics.weightedTics, tics.pointsEarned.toFixed(1), ledger.positive.toFixed(1), ledger.negative.toFixed(1), ledger.net.toFixed(1)].map(csvCell).join(",");
     });
     downloadBlob([headers.map(csvCell).join(","), ...rows].join("\r\n"), "text/csv;charset=utf-8", `berry-creek-results-${state.date}.csv`);
   }
@@ -1824,8 +1824,8 @@
       return `<tr><td>${hole.number}</td><td>${resultText}</td></tr>`;
     }).join("");
     const groupTables = R.GROUPS.filter((group) => groupPlayers(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>Dots show handicap strokes. S marks a skin, KP marks the qualifying holder, KPM marks a claim that earned no tic, and an outlined KP is pending. Out, In, and Total show gross/net.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.slice(0, 9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>Out</th>${E.COURSE.holes.slice(9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>In</th><th>Total</th></tr></thead><tbody>${groupPlayers(group).map((player) => { const totals = E.playerTotals(player, E.COURSE, state.settings); const front = scorecardSegment(player, totals.front, 0, 9); const back = scorecardSegment(player, totals.back, 9, 18); const total = scorecardSegment(player, totals.total, 0, 18); const cells = player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceived(player, holeIndex))}</span>${scorecardIndicators(player, holeIndex)}</td>`); return `<tr class="${player.inGame ? "" : "score-only-row"}"><td>${esc(playerExportName(player, state.players.indexOf(player)))}</td>${cells.slice(0, 9).join("")}<td>${front.text}</td>${cells.slice(9).join("")}<td>${back.text}</td><td>${total.text}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
-    const leaders = rankedPlayers().map((item, rank) => `<tr><td>${rank + 1}</td><td>${playerNameHtml(item.player, item.index)}</td><td>${item.player.group}</td><td>${item.player.scores.filter(Boolean).length}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.kps}</td><td>${item.tics.kpMarked}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${item.ledger.net.toFixed(1)}</td></tr>`).join("");
-    $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(state.roundName)}</h1><p>${esc(state.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table><thead><tr><th>Place</th><th>Player</th><th>Group</th><th>Thru</th><th>Gross</th><th>Net</th><th>KP</th><th>KP Marked</th><th>Points +</th><th>Points −</th><th>Net points</th></tr></thead><tbody>${leaders}</tbody></table><div class="print-columns"><section><h2>KPs</h2><table><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
+    const leaders = rankedPlayers().map((item, rank) => { const kpCode = E.kpCode(item.player, state.players, E.COURSE, state.settings, "kp"); const kpmCode = E.kpCode(item.player, state.players, E.COURSE, state.settings, "marked"); return `<tr><td>${rank + 1}</td><td>${playerNameHtml(item.player, item.index)}</td><td>${item.player.group}</td><td>${item.player.scores.filter(Boolean).length}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.birdies}</td><td>${item.tics.eagles}</td><td>${item.tics.skins}</td><td>${item.tics.frontWeight}</td><td>${item.tics.backWeight}</td><td>${item.tics.totalNetWeight}</td><td>${item.tics.sandies}</td><td class="kp-code">${kpCode}</td><td class="kp-code">${kpmCode}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${item.ledger.net.toFixed(1)}</td></tr>`; }).join("");
+    $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(state.roundName)}</h1><p>${esc(state.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table><thead><tr><th>Place</th><th>Player</th><th>Group</th><th>Thru</th><th>Gross</th><th>Net</th><th>Birdies</th><th>Eagles+</th><th>Skins</th><th>FN</th><th>BN</th><th>TN</th><th>Sandy</th><th>KP</th><th>KPM</th><th>Points +</th><th>Points −</th><th>Net points</th></tr></thead><tbody>${leaders}</tbody></table><div class="print-columns"><section><h2>KPs</h2><table><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
   }
 
   async function checkVersion() {

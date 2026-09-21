@@ -57,13 +57,14 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - Playing Handicap = Course Handicap x the event allowance, rounded.
 - Strokes use the current scorecard's tee-specific stroke-index sequence.
 - Birdie tics are automatic for gross birdies or better.
-- Front, back, and total net tics are automatic once the relevant holes are complete. Tied leaders each get a tic.
+- Front, back, and total net tics are automatic once the relevant holes are complete. The leaderboard labels them FN, BN, and TN. An outright winner receives 2 tics; tied leaders each receive 1 tic.
 - Net skins are automatic after every player has a score for the hole. The single lowest handicap-adjusted net score wins; a tie awards no skin.
-- A marked sand save becomes a sandy-par or sandy-birdie tic when the score qualifies.
+- A marked sand save at par or better earns one Sandy tic. A Sandy birdie also earns its separate birdie tic.
 - Sand Save is available only after a par-or-better gross score. Changing that score to bogey or worse automatically clears the sand save.
 - Group scorecards use traditional score shapes: birdies are circled, eagles or better are double-circled, bogeys are squared, and double bogeys or worse are double-squared.
 - The selected group's live scorecard can be exported as a high-resolution JPEG or PDF styled after the club's physical card, including front/back panels, par, handicap, tee yardages, gross/net totals, handicap dots, score shapes, and all three KP categories.
 - KPs can be marked during play on holes 2, 8, 12, and 17. Each group retains its checked KP claim, while correcting the selected player within the same group replaces that group's mistaken claim. The latest qualifying claim remains **KP Pending** until all competing scores are entered on the hole, then earns 1 tic as **KP**. Earlier, corrected, or over-par claims are **KP Marked** and earn 0 tics. A player cannot be marked for both KP and a sandy on the same par 3.
+- Leaderboard KP and KPM values use four digits for holes 2, 8, 12, and 17 in that order. For example, `1100` means the player has that result on holes 2 and 8; `0000` means none.
 - On a blank score, the first tap of either score arrow enters par. Additional taps then decrease or increase the score in the arrow's direction.
 - Entering a new eagle score plays an original three-second celebration on the scorekeeper's device.
 - Entering a new birdie score plays a short original two-note tweet sound on the scorekeeper's device.

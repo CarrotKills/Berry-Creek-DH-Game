@@ -189,6 +189,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .kp-scorecard-mark.is-marked { min-width: 1.65rem; color: var(--forest); background: #fff1f3; }
 .skin-scorecard-mark { min-width: 0.95rem; color: #fff; background: var(--forest-2); }
 .kp-marked-count { color: var(--forest-2); font-weight: 900; }
+.kp-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 900; letter-spacing: 0.1em; font-variant-numeric: tabular-nums; }
 .score-mark { position: relative; border: 2px solid currentColor; }
 .score-mark--birdie, .score-mark--eagle { border-radius: 50%; }
 .score-mark--bogey, .score-mark--double-bogey { border-radius: 2px; }

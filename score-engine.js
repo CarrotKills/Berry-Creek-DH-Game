@@ -226,15 +226,23 @@
     return allScoresEntered ? "kp" : "pending";
   }
 
+  function kpCode(player, players, course, settings, status = "kp") {
+    const target = status === "marked" ? "marked" : "kp";
+    return course.holes
+      .map((hole, holeIndex) => ({ hole, holeIndex }))
+      .filter(({ hole }) => hole.par === 3)
+      .map(({ holeIndex }) => kpClaimStatus(player, course, settings, holeIndex, players) === target ? "1" : "0")
+      .join("");
+  }
+
   function ticSummary(player, players, course, settings) {
-    const empty = { birdies: 0, eagles: 0, skins: 0, front: 0, frontWeight: 0, back: 0, backWeight: 0, totalNet: 0, totalNetWeight: 0, sandyPars: 0, sandyBirdies: 0, kps: 0, kpMarked: 0, total: 0, weightedTics: 0, pointsEarned: 0 };
+    const empty = { birdies: 0, eagles: 0, skins: 0, front: 0, frontWeight: 0, back: 0, backWeight: 0, totalNet: 0, totalNetWeight: 0, sandies: 0, kps: 0, kpMarked: 0, total: 0, weightedTics: 0, pointsEarned: 0 };
     if (!isInGame(player)) return empty;
     const eligiblePlayers = gamePlayers(players);
     let birdies = 0;
     let eagles = 0;
     let skins = 0;
-    let sandyPars = 0;
-    let sandyBirdies = 0;
+    let sandies = 0;
     let kps = 0;
     let kpMarked = 0;
     holesForPlayer(course, player).forEach((hole, i) => {
@@ -242,8 +250,7 @@
       if (gross > 0 && gross <= hole.par - 1) birdies += 1;
       if (gross > 0 && gross <= hole.par - 2) eagles += 1;
       if (skinResult(eligiblePlayers, course, settings, i).winnerId === player.id) skins += 1;
-      if (player.sandies[i] && gross === hole.par) sandyPars += 1;
-      if (player.sandies[i] && gross > 0 && gross <= hole.par - 1) sandyBirdies += 1;
+      if (player.sandies[i] && gross > 0 && gross <= hole.par) sandies += 1;
       const kpStatus = kpClaimStatus(player, course, settings, i, eligiblePlayers);
       if (kpStatus === "kp") kps += 1;
       if (kpStatus === "marked") kpMarked += 1;
@@ -257,7 +264,7 @@
     const frontWeight = front ? (frontLeaders.length === 1 ? 2 : 1) : 0;
     const backWeight = back ? (backLeaders.length === 1 ? 2 : 1) : 0;
     const totalNetWeight = totalNet ? (totalLeaders.length === 1 ? 2 : 1) : 0;
-    const weightedTics = birdies + eagles + skins + frontWeight + backWeight + totalNetWeight + sandyPars + sandyBirdies + kps;
+    const weightedTics = birdies + eagles + skins + frontWeight + backWeight + totalNetWeight + sandies + kps;
     return {
       birdies,
       eagles,
@@ -268,11 +275,10 @@
       backWeight,
       totalNet,
       totalNetWeight,
-      sandyPars,
-      sandyBirdies,
+      sandies,
       kps,
       kpMarked,
-      total: birdies + skins + front + back + totalNet + sandyPars + sandyBirdies + kps,
+      total: birdies + skins + front + back + totalNet + sandies + kps,
       weightedTics,
       pointsEarned: weightedTics * 0.5
     };
@@ -313,6 +319,7 @@
     skinResult,
     skinPendingLeaders,
     kpClaimStatus,
+    kpCode,
     ticSummary,
     pointsLedger
   };
