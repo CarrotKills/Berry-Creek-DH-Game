@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.10.2";
+  const APP_VERSION = "9.10.3";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -95,6 +95,22 @@
   function hcpForValues(index, teeKey) { return E.playingHandicap(E.parseHandicapInput(index), state.settings, E.teeForPlayer(E.COURSE, { teeKey })); }
   function displayIndex(value) { return E.formatHandicap(value, 1); }
   function displayPlayingHandicap(value) { return E.formatHandicap(value, 0); }
+  function isPlusHandicapInput(value) { return /^[+-]/.test(String(value ?? "").trim()); }
+  function syncPlusHandicapToggle(input, button) {
+    const active = isPlusHandicapInput(input.value);
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+    return active;
+  }
+  function togglePlusHandicapInput(input, button) {
+    const nextActive = button.getAttribute("aria-pressed") !== "true";
+    const magnitude = input.value.trim().replace(/^[+-]/, "");
+    input.value = `${nextActive ? "+" : ""}${magnitude}`;
+    syncPlusHandicapToggle(input, button);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.focus({ preventScroll: true });
+    input.setSelectionRange?.(input.value.length, input.value.length);
+  }
   function complete(value, done) { return done ? String(value) : "—"; }
   function groupPlayers(group = selectedGroup) { return state.players.filter((player) => player.group === group); }
   function isLocked() { return Boolean(state.settings.locked); }
@@ -489,6 +505,8 @@
   function renderDraftHandicaps() {
     const saved = $("#savedPlayerHdcp");
     const guest = $("#guestPlayerHdcp");
+    syncPlusHandicapToggle($("#savedPlayerGhin"), $("#savedPlayerPlus"));
+    syncPlusHandicapToggle($("#guestPlayerGhin"), $("#guestPlayerPlus"));
     if (saved) saved.textContent = displayPlayingHandicap(hcpForValues($("#savedPlayerGhin").value, $("#savedPlayerTee").value));
     if (guest) guest.textContent = displayPlayingHandicap(hcpForValues($("#guestPlayerGhin").value, $("#guestPlayerTee").value));
   }
@@ -546,19 +564,22 @@
       row.className = "saved-player-row";
       row.dataset.savedPlayerId = saved.id;
       row.innerHTML = `<label class="saved-player-name">Name<input class="saved-name" type="text" maxlength="40" value="${esc(saved.name)}" ${canEdit ? "" : "disabled"}></label>
-        <label>GHIN Index<input class="saved-ghin" type="text" maxlength="6" inputmode="decimal" value="${displayIndex(saved.ghin)}" placeholder="12.4 or +4.2" ${canEdit ? "" : "disabled"}></label>
+        <div class="handicap-field"><span class="field-label">GHIN Index</span><div class="handicap-input-row"><input class="saved-ghin" type="text" maxlength="6" inputmode="decimal" value="${displayIndex(saved.ghin)}" placeholder="12.4" aria-label="GHIN Index for ${esc(saved.name)}" ${canEdit ? "" : "disabled"}><button class="saved-ghin-plus plus-handicap-toggle" type="button" aria-pressed="false" aria-label="Mark ${esc(saved.name)} as plus handicap" ${canEdit ? "" : "disabled"}><span aria-hidden="true">+</span><span class="plus-label">HCP</span></button></div></div>
         <div class="playing-hcp form-hcp"><span>HDCP</span><strong>${displayPlayingHandicap(hcpForValues(saved.ghin, saved.teeKey))}</strong></div>
         <label>Tee<select class="saved-tee" ${canEdit ? "" : "disabled"}>${teeOptions(saved.teeKey)}</select></label>
         <label>Add to<select class="saved-group" ${addDisabled ? "disabled" : ""}>${savedGroupOptions(selected)}</select></label>
         <div class="saved-player-actions"><button class="button button-primary add-saved-player" type="button" ${addDisabled ? "disabled" : ""}>${activePlayer ? `In Group ${activePlayer.group}` : "Add to group"}</button><button class="button button-quiet delete-saved-player" type="button" ${canEdit ? "" : "disabled"}>Delete</button></div>`;
       const name = row.querySelector(".saved-name");
       const ghin = row.querySelector(".saved-ghin");
+      const plusHandicap = row.querySelector(".saved-ghin-plus");
       const tee = row.querySelector(".saved-tee");
       const handicap = row.querySelector(".playing-hcp strong");
       const group = row.querySelector(".saved-group");
+      syncPlusHandicapToggle(ghin, plusHandicap);
       name.addEventListener("change", () => updateSavedPlayer(saved.id, { name: name.value }));
-      ghin.addEventListener("input", () => { handicap.textContent = displayPlayingHandicap(hcpForValues(ghin.value, tee.value)); });
+      ghin.addEventListener("input", () => { syncPlusHandicapToggle(ghin, plusHandicap); handicap.textContent = displayPlayingHandicap(hcpForValues(ghin.value, tee.value)); });
       ghin.addEventListener("change", () => updateSavedPlayer(saved.id, { ghin: E.parseHandicapInput(ghin.value) }));
+      plusHandicap.addEventListener("click", () => { togglePlusHandicapInput(ghin, plusHandicap); updateSavedPlayer(saved.id, { ghin: E.parseHandicapInput(ghin.value) }); });
       tee.addEventListener("change", () => { handicap.textContent = displayPlayingHandicap(hcpForValues(ghin.value, tee.value)); updateSavedPlayer(saved.id, { teeKey: tee.value }); });
       group.addEventListener("change", () => savedPlayerGroupSelections.set(saved.id, group.value));
       row.querySelector(".add-saved-player").addEventListener("click", () => addSavedPlayerToRound(saved.id, group.value));
@@ -652,13 +673,16 @@
       row.querySelector(".player-number").textContent = index + 1;
       const name = row.querySelector(".player-name"); name.value = player.name;
       const ghinInput = row.querySelector(".player-ghin"); ghinInput.value = displayIndex(player.ghin);
+      const plusHandicap = row.querySelector(".player-ghin-plus"); syncPlusHandicapToggle(ghinInput, plusHandicap);
       const tee = row.querySelector(".player-tee"); tee.innerHTML = teeOptions(player.teeKey);
       const group = row.querySelector(".player-group"); group.innerHTML = groupOptions(player.group, player.id);
       const typeBadge = row.querySelector(".player-type-badge"); typeBadge.hidden = !player.isGuest;
       const notInGame = row.querySelector(".player-in-game"); notInGame.checked = !player.inGame;
       row.querySelector(".playing-hcp strong").textContent = displayPlayingHandicap(hcp(player));
       name.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, name: event.target.value } }));
+      ghinInput.addEventListener("input", () => syncPlusHandicapToggle(ghinInput, plusHandicap));
       ghinInput.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, ghin: E.parseHandicapInput(event.target.value) } }));
+      plusHandicap.addEventListener("click", () => { togglePlusHandicapInput(ghinInput, plusHandicap); dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, ghin: E.parseHandicapInput(ghinInput.value) } }); });
       tee.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, teeKey: event.target.value } }));
       group.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, group: event.target.value } }));
       notInGame.addEventListener("change", (event) => dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, inGame: !event.target.checked } }));
@@ -1871,6 +1895,8 @@
   $("#cancelGuestBtn").addEventListener("click", closePlayerEntry);
   $("#savedPlayerForm").addEventListener("submit", createSavedPlayer);
   $("#guestPlayerForm").addEventListener("submit", addGuest);
+  $("#savedPlayerPlus").addEventListener("click", () => togglePlusHandicapInput($("#savedPlayerGhin"), $("#savedPlayerPlus")));
+  $("#guestPlayerPlus").addEventListener("click", () => togglePlusHandicapInput($("#guestPlayerGhin"), $("#guestPlayerPlus")));
   ["savedPlayerGhin", "savedPlayerTee", "guestPlayerGhin", "guestPlayerTee"].forEach((id) => {
     $(`#${id}`).addEventListener(id.endsWith("Tee") ? "change" : "input", renderDraftHandicaps);
   });

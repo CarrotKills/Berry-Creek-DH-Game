@@ -17,5 +17,12 @@ assert.ok(html.indexOf('id="savedPlayerList"') < html.indexOf('id="savedPlayerEn
 assert.match(app, /openPlayerEntry\("saved"\)/);
 assert.match(app, /openPlayerEntry\("guest"\)/);
 assert.match(app, /playerEntryMode = "";\s*render\(\);/);
+assert.match(html, /id="savedPlayerPlus"[^>]*aria-pressed="false"/);
+assert.match(html, /id="guestPlayerPlus"[^>]*aria-pressed="false"/);
+assert.match(html, /class="player-ghin-plus plus-handicap-toggle admin-control"/);
+assert.match(app, /class="saved-ghin-plus plus-handicap-toggle"/);
+assert.match(app, /function togglePlusHandicapInput\(input, button\)/);
+assert.match(app, /togglePlusHandicapInput\(ghinInput, plusHandicap\)/);
+assert.match(app, /togglePlusHandicapInput\(ghin, plusHandicap\)/);
 
 console.log("Player-entry UI tests passed.");
