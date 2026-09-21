@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.10.1";
+  const APP_VERSION = "9.10.2";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -59,6 +59,7 @@
   let activeSavedRound = null;
   let pendingReuseRound = null;
   let savedPlayerSearch = "";
+  let playerEntryMode = "";
   const savedPlayerGroupSelections = new Map();
   const scoreSyncStatus = new Map();
   const scoreSyncTimers = new Map();
@@ -111,6 +112,7 @@
     savedRounds = [];
     shareTokens = {};
     readinessData = null;
+    playerEntryMode = "";
     sessionStorage.removeItem(ADMIN_PIN_KEY);
   }
 
@@ -421,13 +423,32 @@
   }
 
   function nextAvailableGroup() { return R.GROUPS.find((g) => groupPlayers(g).length < R.MAX_GROUP_SIZE) || "A"; }
-  function addPlayer() {
-    if (state.players.length >= R.MAX_PLAYERS) return showValidation("Maximum of 30 players reached.");
-    const group = nextAvailableGroup();
-    if (groupPlayers(group).length >= R.MAX_GROUP_SIZE) return showValidation("All six groups already have five players.");
-    const player = R.normalizePlayer({ id: makeId(), name: "", ghin: 0, teeKey: E.COURSE.defaultTee, group });
-    dispatch({ type: "ADD_PLAYER", payload: { player } });
-    requestAnimationFrame(() => $("#playerList").lastElementChild?.querySelector(".player-name")?.focus());
+
+  function renderPlayerEntryPanels() {
+    const savedOpen = playerEntryMode === "saved";
+    const guestOpen = playerEntryMode === "guest";
+    $("#savedPlayerEntryPanel").hidden = !savedOpen;
+    $("#guestEntryPanel").hidden = !guestOpen;
+    $("#addPlayerBtn").setAttribute("aria-expanded", String(savedOpen));
+    $("#addGuestBtn").setAttribute("aria-expanded", String(guestOpen));
+  }
+
+  function openPlayerEntry(mode) {
+    if (!adminUnlocked || isLocked()) return;
+    if (mode === "guest" && state.players.length >= R.MAX_PLAYERS) return showValidation("Maximum of 30 players reached.");
+    playerEntryMode = mode;
+    renderPlayerEntryPanels();
+    const panel = mode === "guest" ? $("#guestEntryPanel") : $("#savedPlayerEntryPanel");
+    const firstInput = mode === "guest" ? $("#guestPlayerName") : $("#savedPlayerName");
+    requestAnimationFrame(() => {
+      panel.scrollIntoView({ behavior: "smooth", block: "center" });
+      firstInput.focus({ preventScroll: true });
+    });
+  }
+
+  function closePlayerEntry() {
+    playerEntryMode = "";
+    renderPlayerEntryPanels();
   }
 
   function addGuest(event) {
@@ -452,6 +473,8 @@
       if (!accepted) return;
       $("#guestPlayerName").value = "";
       $("#guestPlayerGhin").value = "";
+      playerEntryMode = "";
+      render();
       renderDraftHandicaps();
       showToast(`${name} added to Group ${group} as an independent guest.`, "success");
     });
@@ -509,7 +532,7 @@
     const activeCount = savedPlayers.filter((saved) => state.players.some((player) => player.directoryId === saved.id)).length;
     status.textContent = `${savedPlayers.length} saved player${savedPlayers.length === 1 ? "" : "s"} · ${activeCount} in this round`;
     if (!filtered.length) {
-      list.innerHTML = `<div class="empty-state">${savedPlayers.length ? "No saved players match that search." : "No saved players yet. Use the form above to create the reusable roster."}</div>`;
+      list.innerHTML = `<div class="empty-state">${savedPlayers.length ? "No saved players match that search." : "No saved players yet. Use Add Player above to create the reusable roster."}</div>`;
       return;
     }
     const canEdit = adminUnlocked && connectionMode === "live" && !isLocked();
@@ -556,6 +579,7 @@
       savedPlayers = [...savedPlayers, body.player].sort((a, b) => a.name.localeCompare(b.name));
       $("#savedPlayerName").value = "";
       $("#savedPlayerGhin").value = "0.0";
+      playerEntryMode = "";
       render();
       showToast(`${body.player.name} saved to the player database.`, "success");
     } catch (error) {
@@ -643,8 +667,8 @@
     });
     if (!state.players.length) list.innerHTML = '<div class="empty-state">No players yet. Add up to 30 golfers.</div>';
     $("#playerLimit").hidden = true;
-    $("#addPlayerBtn").disabled = state.players.length >= R.MAX_PLAYERS;
     $("#addGuestBtn").disabled = state.players.length >= R.MAX_PLAYERS;
+    $("#saveGuestBtn").disabled = state.players.length >= R.MAX_PLAYERS;
     $("#groupCounts").innerHTML = R.GROUPS.map((group) => `<span>Group ${group}: <strong>${groupPlayers(group).length}/5</strong></span>`).join("");
     renderSetupWarnings();
   }
@@ -1425,7 +1449,7 @@
       const isSaveRoundControl = control.id === "saveRoundBtn";
       const isNewRoundControl = control.id === "startNewRoundBtn";
       const availableWhenLocked = control.dataset.allowLocked === "true" || ["toggleRoundLockBtn", "saveRoundBtn", "startNewRoundBtn", "completeBackupBtn", "completeRestoreInput", "createSnapshotBtn", "refreshReadinessBtn"].includes(control.id);
-      const atPlayerLimit = ["addPlayerBtn", "addGuestBtn"].includes(control.id) && state.players.length >= R.MAX_PLAYERS;
+      const atPlayerLimit = ["addGuestBtn", "saveGuestBtn"].includes(control.id) && state.players.length >= R.MAX_PLAYERS;
       const noRoundToSave = isSaveRoundControl && !state.players.length;
       control.disabled = !adminUnlocked || (isLocked() && !availableWhenLocked) || atPlayerLimit || noRoundToSave;
     });
@@ -1433,6 +1457,8 @@
     $("#spectatorStatus").hidden = !spectatorMode;
     document.body.classList.toggle("round-locked", isLocked());
     document.body.classList.toggle("spectator-mode", spectatorMode);
+    if (!adminUnlocked || isLocked()) playerEntryMode = "";
+    renderPlayerEntryPanels();
   }
 
   function render() {
@@ -1839,7 +1865,10 @@
   }
 
   document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => switchView(tab.dataset.view)));
-  $("#addPlayerBtn").addEventListener("click", addPlayer);
+  $("#addPlayerBtn").addEventListener("click", () => openPlayerEntry("saved"));
+  $("#addGuestBtn").addEventListener("click", () => openPlayerEntry("guest"));
+  $("#cancelSavedPlayerBtn").addEventListener("click", closePlayerEntry);
+  $("#cancelGuestBtn").addEventListener("click", closePlayerEntry);
   $("#savedPlayerForm").addEventListener("submit", createSavedPlayer);
   $("#guestPlayerForm").addEventListener("submit", addGuest);
   ["savedPlayerGhin", "savedPlayerTee", "guestPlayerGhin", "guestPlayerTee"].forEach((id) => {

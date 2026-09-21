@@ -28,7 +28,7 @@ Scorekeepers do not need an admin PIN; their group links allow scoring only for 
 
 ## Saved player database
 
-The Players tab includes an admin-only reusable player database. Save each golfer's name, GHIN Index, and preferred tee once, then search the list and add that golfer to any Group A-F for a new round. Tee choices are `Championship/Gold/1`, `Member/Blue/2`, `Combo/23`, and `Creek/White/3`. The tee-adjusted HDCP is displayed immediately to the right of the GHIN Index and updates with the selected tee and event allowance. Editing a saved player's GHIN Index, name, or tee also updates their linked entry in the active round.
+The Players tab includes an admin-only reusable player database. It opens with Search by name and the saved roster. The top Add Player button reveals a form at the bottom and saves the golfer's name, GHIN Index, and preferred tee to the database; Add Guest reveals a separate bottom form for a one-round player who is not saved. Tee choices are `Championship/Gold/1`, `Member/Blue/2`, `Combo/23`, and `Creek/White/3`. The tee-adjusted HDCP is displayed immediately to the right of the GHIN Index and updates with the selected tee and event allowance. Editing a saved player's GHIN Index, name, or tee also updates their linked entry in the active round.
 
 The guest-entry form in the database panel creates a one-time, independent player for the active round. A name, Handicap Index, tee, and group are required. Guests are not saved to the reusable roster, may be entered repeatedly in different groups, and display `*G` beside their names on the leaderboard.
 
