@@ -28,7 +28,7 @@
 
   function buildScorecardModel({ course, settings, players, group, roundName, date, scoring }) {
     const roster = Array.isArray(players) ? players : [];
-    const teeKeys = [...new Set(roster.map((player) => player.teeKey || course.defaultTee))];
+    const teeKeys = [...new Set(roster.map((player) => scoring.normalizeTeeKey ? scoring.normalizeTeeKey(course, player.teeKey) : (player.teeKey || course.defaultTee)))];
     const teeRows = teeKeys.map((teeKey) => {
       const tee = course.tees[teeKey] || course.tees[course.defaultTee];
       return {

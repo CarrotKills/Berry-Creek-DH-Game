@@ -17,6 +17,14 @@ assert.equal(E.COURSE.tees.memberCreekCombo.yards.reduce((sum, y) => sum + y, 0)
 assert.equal(E.COURSE.tees.creekMen.yards.reduce((sum, y) => sum + y, 0), 5469);
 assert.equal(E.COURSE.tees.creekBerryCombo.yards.reduce((sum, y) => sum + y, 0), 5291);
 assert.equal(E.COURSE.tees.berryMen.yards.reduce((sum, y) => sum + y, 0), 5017);
+assert.deepEqual(Object.values(E.COURSE.tees).filter((tee) => tee.selectable !== false).map((tee) => tee.name), [
+  "Championship/Gold/1",
+  "Member/Blue/2",
+  "Combo/23",
+  "Creek/White/3"
+]);
+assert.equal(E.normalizeTeeKey(E.COURSE, "creekWomen"), "creekMen");
+assert.equal(E.teeForPlayer(E.COURSE, { teeKey: "berryMen" }).name, "Creek/White/3");
 assert.equal(E.courseHandicap(10, 130, 72.1, 72), 12);
 assert.equal(E.playingHandicap(10, { ...settings, allowance: 90 }, E.COURSE.tees.championship), 11);
 assert.deepEqual(E.COURSE.strokeIndexes.upper, [15,17,1,5,13,3,7,11,9,8,4,10,6,12,16,14,18,2]);

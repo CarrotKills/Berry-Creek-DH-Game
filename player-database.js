@@ -5,12 +5,21 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { DatabaseSync } = require("node:sqlite");
 
+const TEE_KEY_ALIASES = Object.freeze({ creekWomen: "creekMen", creekBerryCombo: "creekMen", berryMen: "creekMen", berryWomen: "creekMen" });
+const TEE_KEYS = new Set(["championship", "member", "memberCreekCombo", "creekMen"]);
+
+function normalizeTeeKey(value) {
+  const requested = String(value || "championship").slice(0, 40);
+  const normalized = TEE_KEY_ALIASES[requested] || requested;
+  return TEE_KEYS.has(normalized) ? normalized : "championship";
+}
+
 function normalizeInput(value) {
   const name = String(value?.name || "").trim().slice(0, 40);
   if (!name) throw new Error("Player name is required");
   const rawGhin = Number(value?.ghin);
   const ghin = Number.isFinite(rawGhin) ? Math.max(-10, Math.min(54, rawGhin)) : 0;
-  const teeKey = String(value?.teeKey || "championship").slice(0, 40);
+  const teeKey = normalizeTeeKey(value?.teeKey);
   return { name, ghin, teeKey };
 }
 
@@ -19,7 +28,7 @@ function fromRow(row) {
     id: row.id,
     name: row.name,
     ghin: Number(row.ghin),
-    teeKey: row.tee_key,
+    teeKey: normalizeTeeKey(row.tee_key),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   } : null;

@@ -22,19 +22,33 @@
       lower: [14, 18, 2, 16, 8, 4, 6, 12, 10, 9, 1, 15, 3, 7, 11, 13, 17, 5]
     },
     tees: {
-      championship: { name: "Championship", rating: 72.1, slope: 130, yards: [373,172,548,436,321,457,544,175,326,374,529,181,547,308,334,385,169,421], strokeSet: "upper" },
-      member: { name: "Member", rating: 70.0, slope: 128, yards: [342,164,502,414,278,421,506,159,316,368,503,161,508,271,298,341,153,399], strokeSet: "upper" },
-      memberCreekCombo: { name: "Member/Creek Combo", rating: 68.1, slope: 121, yards: [342,164,450,346,278,385,506,159,231,312,475,161,473,271,298,341,153,362], strokeSet: "upper" },
-      creekMen: { name: "Creek (Men)", rating: 67.1, slope: 118, yards: [288,152,450,346,260,385,454,134,231,312,475,135,473,256,280,328,148,362], strokeSet: "lower" },
-      creekWomen: { name: "Creek (Women)", rating: 72.0, slope: 123, yards: [288,152,450,346,260,385,454,134,231,312,475,135,473,256,280,328,148,362], strokeSet: "lower" },
-      creekBerryCombo: { name: "Creek/Berry Combo", rating: 71.0, slope: 122, yards: [288,126,450,346,250,359,438,134,231,297,475,121,452,256,280,302,148,338], strokeSet: "lower" },
-      berryMen: { name: "Berry (Men)", rating: 64.7, slope: 114, yards: [255,126,400,245,250,359,438,120,212,297,453,121,452,247,266,302,136,338], strokeSet: "lower" },
-      berryWomen: { name: "Berry (Women)", rating: 70.0, slope: 120, yards: [255,126,400,245,250,359,438,120,212,297,453,121,452,247,266,302,136,338], strokeSet: "lower" }
+      championship: { name: "Championship/Gold/1", rating: 72.1, slope: 130, yards: [373,172,548,436,321,457,544,175,326,374,529,181,547,308,334,385,169,421], strokeSet: "upper" },
+      member: { name: "Member/Blue/2", rating: 70.0, slope: 128, yards: [342,164,502,414,278,421,506,159,316,368,503,161,508,271,298,341,153,399], strokeSet: "upper" },
+      memberCreekCombo: { name: "Combo/23", rating: 68.1, slope: 121, yards: [342,164,450,346,278,385,506,159,231,312,475,161,473,271,298,341,153,362], strokeSet: "upper" },
+      creekMen: { name: "Creek/White/3", rating: 67.1, slope: 118, yards: [288,152,450,346,260,385,454,134,231,312,475,135,473,256,280,328,148,362], strokeSet: "lower" },
+      creekWomen: { name: "Legacy Creek (Women)", rating: 72.0, slope: 123, yards: [288,152,450,346,260,385,454,134,231,312,475,135,473,256,280,328,148,362], strokeSet: "lower", selectable: false },
+      creekBerryCombo: { name: "Legacy Creek/Berry Combo", rating: 71.0, slope: 122, yards: [288,126,450,346,250,359,438,134,231,297,475,121,452,256,280,302,148,338], strokeSet: "lower", selectable: false },
+      berryMen: { name: "Legacy Berry (Men)", rating: 64.7, slope: 114, yards: [255,126,400,245,250,359,438,120,212,297,453,121,452,247,266,302,136,338], strokeSet: "lower", selectable: false },
+      berryWomen: { name: "Legacy Berry (Women)", rating: 70.0, slope: 120, yards: [255,126,400,245,250,359,438,120,212,297,453,121,452,247,266,302,136,338], strokeSet: "lower", selectable: false }
     }
   });
 
+  const LEGACY_TEE_ALIASES = Object.freeze({
+    creekWomen: "creekMen",
+    creekBerryCombo: "creekMen",
+    berryMen: "creekMen",
+    berryWomen: "creekMen"
+  });
+
+  function normalizeTeeKey(course, teeKey) {
+    const requested = String(teeKey || course.defaultTee);
+    const normalized = LEGACY_TEE_ALIASES[requested] || requested;
+    const tee = course.tees[normalized];
+    return tee && tee.selectable !== false ? normalized : course.defaultTee;
+  }
+
   function teeForPlayer(course, player) {
-    return course.tees[player?.teeKey] || course.tees[course.defaultTee];
+    return course.tees[normalizeTeeKey(course, player?.teeKey)] || course.tees[course.defaultTee];
   }
 
   function holesForPlayer(course, player) {
@@ -263,6 +277,7 @@
 
   return {
     COURSE,
+    normalizeTeeKey,
     teeForPlayer,
     holesForPlayer,
     parseHandicapInput,

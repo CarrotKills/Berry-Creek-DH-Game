@@ -18,6 +18,9 @@ try {
   const updated = database.update(created.id, { ghin: 10.8, teeKey: "member" });
   assert.equal(updated.ghin, 10.8);
   assert.equal(updated.teeKey, "member");
+  const migrated = database.create({ name: "Legacy Tee", ghin: 8.2, teeKey: "creekWomen" });
+  assert.equal(migrated.teeKey, "creekMen");
+  database.remove(migrated.id);
   database.close();
 
   database = new PlayerDatabase(databaseFile);

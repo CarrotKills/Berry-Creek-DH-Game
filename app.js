@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.10.0";
+  const APP_VERSION = "9.10.1";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -33,7 +33,7 @@
     { key: "netPoints", label: "Net points", firstDirection: "desc" }
   ];
   const $ = (selector) => document.querySelector(selector);
-  const teeEntries = Object.entries(E.COURSE.tees);
+  const teeEntries = Object.entries(E.COURSE.tees).filter(([, tee]) => tee.selectable !== false);
   const params = new URLSearchParams(location.search);
   const spectatorMode = params.get("spectator") === "1";
   let state = loadLocal();
@@ -91,6 +91,7 @@
   function playerExportName(player, index) { return `${nameOf(player, index)}${player.isGuest ? " *G" : ""}${player.inGame ? "" : " (not in game)"}`; }
   function teeOf(player) { return E.teeForPlayer(E.COURSE, player); }
   function hcp(player) { return E.playingHandicap(player.ghin, state.settings, teeOf(player)); }
+  function hcpForValues(index, teeKey) { return E.playingHandicap(E.parseHandicapInput(index), state.settings, E.teeForPlayer(E.COURSE, { teeKey })); }
   function displayIndex(value) { return E.formatHandicap(value, 1); }
   function displayPlayingHandicap(value) { return E.formatHandicap(value, 0); }
   function complete(value, done) { return done ? String(value) : "—"; }
@@ -451,13 +452,22 @@
       if (!accepted) return;
       $("#guestPlayerName").value = "";
       $("#guestPlayerGhin").value = "";
+      renderDraftHandicaps();
       showToast(`${name} added to Group ${group} as an independent guest.`, "success");
     });
   }
   function showValidation(message) { const el = $("#playerLimit"); el.textContent = message; el.hidden = false; }
 
   function teeOptions(selected) {
-    return teeEntries.map(([key, tee]) => `<option value="${key}" ${key === selected ? "selected" : ""}>${esc(tee.name)} · ${tee.rating}/${tee.slope}</option>`).join("");
+    const selectedKey = E.normalizeTeeKey(E.COURSE, selected);
+    return teeEntries.map(([key, tee]) => `<option value="${key}" ${key === selectedKey ? "selected" : ""}>${esc(tee.name)}</option>`).join("");
+  }
+
+  function renderDraftHandicaps() {
+    const saved = $("#savedPlayerHdcp");
+    const guest = $("#guestPlayerHdcp");
+    if (saved) saved.textContent = displayPlayingHandicap(hcpForValues($("#savedPlayerGhin").value, $("#savedPlayerTee").value));
+    if (guest) guest.textContent = displayPlayingHandicap(hcpForValues($("#guestPlayerGhin").value, $("#guestPlayerTee").value));
   }
   function groupOptions(selected, currentPlayerId) {
     return R.GROUPS.map((group) => {
@@ -514,16 +524,19 @@
       row.dataset.savedPlayerId = saved.id;
       row.innerHTML = `<label class="saved-player-name">Name<input class="saved-name" type="text" maxlength="40" value="${esc(saved.name)}" ${canEdit ? "" : "disabled"}></label>
         <label>GHIN Index<input class="saved-ghin" type="text" maxlength="6" inputmode="decimal" value="${displayIndex(saved.ghin)}" placeholder="12.4 or +4.2" ${canEdit ? "" : "disabled"}></label>
+        <div class="playing-hcp form-hcp"><span>HDCP</span><strong>${displayPlayingHandicap(hcpForValues(saved.ghin, saved.teeKey))}</strong></div>
         <label>Tee<select class="saved-tee" ${canEdit ? "" : "disabled"}>${teeOptions(saved.teeKey)}</select></label>
         <label>Add to<select class="saved-group" ${addDisabled ? "disabled" : ""}>${savedGroupOptions(selected)}</select></label>
         <div class="saved-player-actions"><button class="button button-primary add-saved-player" type="button" ${addDisabled ? "disabled" : ""}>${activePlayer ? `In Group ${activePlayer.group}` : "Add to group"}</button><button class="button button-quiet delete-saved-player" type="button" ${canEdit ? "" : "disabled"}>Delete</button></div>`;
       const name = row.querySelector(".saved-name");
       const ghin = row.querySelector(".saved-ghin");
       const tee = row.querySelector(".saved-tee");
+      const handicap = row.querySelector(".playing-hcp strong");
       const group = row.querySelector(".saved-group");
       name.addEventListener("change", () => updateSavedPlayer(saved.id, { name: name.value }));
+      ghin.addEventListener("input", () => { handicap.textContent = displayPlayingHandicap(hcpForValues(ghin.value, tee.value)); });
       ghin.addEventListener("change", () => updateSavedPlayer(saved.id, { ghin: E.parseHandicapInput(ghin.value) }));
-      tee.addEventListener("change", () => updateSavedPlayer(saved.id, { teeKey: tee.value }));
+      tee.addEventListener("change", () => { handicap.textContent = displayPlayingHandicap(hcpForValues(ghin.value, tee.value)); updateSavedPlayer(saved.id, { teeKey: tee.value }); });
       group.addEventListener("change", () => savedPlayerGroupSelections.set(saved.id, group.value));
       row.querySelector(".add-saved-player").addEventListener("click", () => addSavedPlayerToRound(saved.id, group.value));
       row.querySelector(".delete-saved-player").addEventListener("click", () => deleteSavedPlayer(saved.id));
@@ -1432,6 +1445,7 @@
     const guestPlayerTee = $("#guestPlayerTee");
     const selectedGuestTee = guestPlayerTee.value || E.COURSE.defaultTee;
     guestPlayerTee.innerHTML = teeOptions(selectedGuestTee);
+    renderDraftHandicaps();
     const guestPlayerGroup = $("#guestPlayerGroup");
     let selectedGuestGroup = R.GROUPS.includes(guestPlayerGroup.value) ? guestPlayerGroup.value : nextAvailableGroup();
     if (groupPlayers(selectedGuestGroup).length >= R.MAX_GROUP_SIZE) selectedGuestGroup = nextAvailableGroup();
@@ -1828,6 +1842,9 @@
   $("#addPlayerBtn").addEventListener("click", addPlayer);
   $("#savedPlayerForm").addEventListener("submit", createSavedPlayer);
   $("#guestPlayerForm").addEventListener("submit", addGuest);
+  ["savedPlayerGhin", "savedPlayerTee", "guestPlayerGhin", "guestPlayerTee"].forEach((id) => {
+    $(`#${id}`).addEventListener(id.endsWith("Tee") ? "change" : "input", renderDraftHandicaps);
+  });
   $("#savedPlayerSearch").addEventListener("input", (event) => { savedPlayerSearch = event.target.value; renderSavedPlayers(); });
   $("#resetLeaderboardSortBtn").addEventListener("click", () => { leaderboardSort = { key: "standing", direction: "asc" }; renderLeaderboard(); });
   $("#activeGroupSelect").addEventListener("change", (event) => { clearTimeout(autoAdvanceTimer); selectedGroup = event.target.value; const url = new URL(location.href); url.searchParams.set("group", selectedGroup); history.replaceState(null, "", url); renderGroupScoring(); });

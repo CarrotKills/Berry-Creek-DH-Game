@@ -12,6 +12,8 @@
   const GROUPS = ["A", "B", "C", "D", "E", "F"];
   const KP_HOLES = [2, 8, 12, 17];
   const HOLE_PARS = [4, 3, 5, 4, 4, 4, 5, 3, 4, 4, 5, 3, 5, 4, 4, 4, 3, 4];
+  const TEE_KEY_ALIASES = Object.freeze({ creekWomen: "creekMen", creekBerryCombo: "creekMen", berryMen: "creekMen", berryWomen: "creekMen" });
+  const TEE_KEYS = new Set(["championship", "member", "memberCreekCombo", "creekMen"]);
   const ADMIN_ACTIONS = new Set(["SET_META", "SET_ALLOWANCE", "ADD_PLAYER", "REMOVE_PLAYER", "UPDATE_PLAYER", "REPLACE_ROUND", "START_FROM_SAVED", "RESET_SCORES", "CLEAR_ROUND", "SET_LOCKED", "CLEAR_AUDIT"]);
   const SCORING_ACTIONS = new Set(["SET_SCORE", "SET_SANDY", "SET_KP", "UNDO_LAST"]);
 
@@ -35,6 +37,8 @@
   }
 
   function normalizePlayer(player) {
+    const requestedTee = String(player.teeKey || "championship");
+    const normalizedTee = TEE_KEY_ALIASES[requestedTee] || requestedTee;
     return {
       id: String(player.id || ""),
       directoryId: player.directoryId ? String(player.directoryId) : "",
@@ -42,7 +46,7 @@
       ghin: Number(player.ghin) || 0,
       isGuest: Boolean(player.isGuest),
       inGame: player.inGame !== false,
-      teeKey: String(player.teeKey || "championship"),
+      teeKey: TEE_KEYS.has(normalizedTee) ? normalizedTee : "championship",
       group: GROUPS.includes(player.group) ? player.group : "A",
       scores: Array.from({ length: 18 }, (_, i) => player.scores?.[i] ?? ""),
       skins: Array.from({ length: 18 }, (_, i) => Boolean(player.skins?.[i])),
