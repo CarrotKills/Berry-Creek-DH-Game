@@ -32,7 +32,8 @@ assert.equal(model.playerRows[0].totalGross, 21);
 assert.equal(model.playerRows[0].kpStatuses[1], "marked");
 assert.equal(model.playerRows[0].kpStatuses[7], "pending");
 assert.equal(model.playerRows[0].kpStatuses[11], "kp");
-assert.equal(model.playerRows[0].kpStatuses[16], "three-putt");
+assert.equal(model.playerRows[0].kpStatuses[16], "marked");
+assert.equal(model.playerRows[0].skins[0], true);
 const guestModel = X.buildScorecardModel({
   course: E.COURSE,
   settings: { par: 72, allowance: 100, kpWinners: {}, kpClaims: {} },
@@ -81,13 +82,7 @@ assert.equal(guestModel.playerRows[0].name, "Guest Player *G (not in game)");
     scoring: E
   });
   delete global.document;
-  const markedFill = drawCalls.find((call) => call.kind === "fill" && call.value === "KP MARKED");
-  const markedStroke = drawCalls.find((call) => call.kind === "stroke" && call.value === "KP MARKED");
-  const threePuttFill = drawCalls.find((call) => call.kind === "fill" && call.value === "KP 3-PUTT");
-  const threePuttStroke = drawCalls.find((call) => call.kind === "stroke" && call.value === "KP 3-PUTT");
-  assert.equal(markedFill.alpha, 0.31);
-  assert.equal(markedStroke.alpha, 0.7);
-  assert.equal(threePuttFill.alpha, 0.34);
-  assert.equal(threePuttStroke.alpha, 0.76);
+  assert.ok(drawCalls.some((call) => call.kind === "fill" && call.value === "KPM"));
+  assert.ok(drawCalls.some((call) => call.kind === "fill" && call.value === "S"));
   console.log("Scorecard JPEG, PDF, and ZIP export tests passed.");
 })().catch((error) => { console.error(error); process.exit(1); });

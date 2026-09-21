@@ -194,7 +194,20 @@
     return { status: "awarded", winnerId: lowPlayers[0].playerId, lowNet };
   }
 
-  function kpClaimStatus(player, course, settings, holeIndex) {
+  function skinPendingLeaders(players, course, settings, holeIndex) {
+    const entries = gamePlayers(players).flatMap((player) => {
+      const gross = Number(player.scores?.[holeIndex]);
+      if (!Number.isFinite(gross) || gross < 1) return [];
+      const hole = holesForPlayer(course, player)[holeIndex];
+      const strokes = strokesForHole(playingHandicap(player.ghin, settings, teeForPlayer(course, player)), hole.strokeIndex);
+      return [{ playerId: player.id, net: netScore(gross, strokes) }];
+    });
+    if (!entries.length) return [];
+    const lowNet = Math.min(...entries.map((entry) => entry.net));
+    return entries.filter((entry) => entry.net === lowNet).map((entry) => entry.playerId);
+  }
+
+  function kpClaimStatus(player, course, settings, holeIndex, players = [player]) {
     if (!isInGame(player)) return "none";
     const hole = holesForPlayer(course, player)[holeIndex];
     if (!hole) return "none";
@@ -205,11 +218,16 @@
     if (!isCurrent) return "marked";
     const gross = Number(player.scores?.[holeIndex]);
     if (!Number.isFinite(gross) || gross < 1) return "pending";
-    return gross <= hole.par ? "kp" : "three-putt";
+    if (gross > hole.par) return "marked";
+    const allScoresEntered = gamePlayers(players).every((item) => {
+      const score = Number(item.scores?.[holeIndex]);
+      return Number.isFinite(score) && score >= 1;
+    });
+    return allScoresEntered ? "kp" : "pending";
   }
 
   function ticSummary(player, players, course, settings) {
-    const empty = { birdies: 0, eagles: 0, skins: 0, front: 0, frontWeight: 0, back: 0, backWeight: 0, totalNet: 0, totalNetWeight: 0, sandyPars: 0, sandyBirdies: 0, kps: 0, kpMarked: 0, kpThreePutts: 0, total: 0, weightedTics: 0, pointsEarned: 0 };
+    const empty = { birdies: 0, eagles: 0, skins: 0, front: 0, frontWeight: 0, back: 0, backWeight: 0, totalNet: 0, totalNetWeight: 0, sandyPars: 0, sandyBirdies: 0, kps: 0, kpMarked: 0, total: 0, weightedTics: 0, pointsEarned: 0 };
     if (!isInGame(player)) return empty;
     const eligiblePlayers = gamePlayers(players);
     let birdies = 0;
@@ -219,7 +237,6 @@
     let sandyBirdies = 0;
     let kps = 0;
     let kpMarked = 0;
-    let kpThreePutts = 0;
     holesForPlayer(course, player).forEach((hole, i) => {
       const gross = Number(player.scores[i]);
       if (gross > 0 && gross <= hole.par - 1) birdies += 1;
@@ -227,10 +244,9 @@
       if (skinResult(eligiblePlayers, course, settings, i).winnerId === player.id) skins += 1;
       if (player.sandies[i] && gross === hole.par) sandyPars += 1;
       if (player.sandies[i] && gross > 0 && gross <= hole.par - 1) sandyBirdies += 1;
-      const kpStatus = kpClaimStatus(player, course, settings, i);
+      const kpStatus = kpClaimStatus(player, course, settings, i, eligiblePlayers);
       if (kpStatus === "kp") kps += 1;
       if (kpStatus === "marked") kpMarked += 1;
-      if (kpStatus === "three-putt") kpThreePutts += 1;
     });
     const frontLeaders = leaders(eligiblePlayers, course, settings, "front");
     const backLeaders = leaders(eligiblePlayers, course, settings, "back");
@@ -256,7 +272,6 @@
       sandyBirdies,
       kps,
       kpMarked,
-      kpThreePutts,
       total: birdies + skins + front + back + totalNet + sandyPars + sandyBirdies + kps,
       weightedTics,
       pointsEarned: weightedTics * 0.5
@@ -296,6 +311,7 @@
     playerTotals,
     leaders,
     skinResult,
+    skinPendingLeaders,
     kpClaimStatus,
     ticSummary,
     pointsLedger

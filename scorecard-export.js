@@ -26,8 +26,9 @@
     return scores.slice(start, end).filter((score) => Number.isFinite(Number(score)) && Number(score) >= 1).length;
   }
 
-  function buildScorecardModel({ course, settings, players, group, roundName, date, scoring }) {
+  function buildScorecardModel({ course, settings, players, allPlayers, group, roundName, date, scoring }) {
     const roster = Array.isArray(players) ? players : [];
+    const competitors = Array.isArray(allPlayers) ? allPlayers : roster;
     const teeKeys = [...new Set(roster.map((player) => scoring.normalizeTeeKey ? scoring.normalizeTeeKey(course, player.teeKey) : (player.teeKey || course.defaultTee)))];
     const teeRows = teeKeys.map((teeKey) => {
       const tee = course.tees[teeKey] || course.tees[course.defaultTee];
@@ -62,9 +63,10 @@
         marks: scores.map((score, holeIndex) => scoring.scoreMark(score, course.holes[holeIndex].par)),
         strokes: holes.map((hole) => Math.max(0, scoring.strokesForHole(handicap, hole.strokeIndex))),
         kpStatuses: holes.map((hole) => {
-          const status = scoring.kpClaimStatus(player, course, settings, hole.number - 1);
+          const status = scoring.kpClaimStatus(player, course, settings, hole.number - 1, competitors);
           return status === "none" ? "" : status;
         }),
+        skins: holes.map((hole) => scoring.skinResult(competitors, course, settings, hole.number - 1).winnerId === player.id),
         frontGross: frontCount ? totals.front.gross : "",
         backGross: backCount ? totals.back.gross : "",
         totalGross: totalCount ? totals.total.gross : "",
@@ -143,30 +145,12 @@
 
   function drawKpBadge(ctx, status, x, y, width, height) {
     if (!status) return;
-    if (status === "marked" || status === "three-putt") {
-      const stamp = status === "marked" ? "KP MARKED" : "KP 3-PUTT";
-      ctx.save();
-      ctx.translate(x + width / 2, y + height / 2);
-      ctx.rotate(-Math.PI / 7);
-      ctx.fillStyle = COLORS.red;
-      ctx.font = "900 15px Arial, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.globalAlpha = status === "marked" ? 0.31 : 0.34;
-      ctx.fillText(stamp, 0, 1);
-      ctx.globalAlpha = status === "marked" ? 0.7 : 0.76;
-      ctx.strokeStyle = COLORS.red;
-      ctx.lineWidth = 0.9;
-      ctx.strokeText(stamp, 0, 1);
-      ctx.restore();
-      return;
-    }
-    const badgeWidth = 44;
+    const badgeWidth = status === "marked" ? 52 : 44;
     const badgeHeight = 21;
     const badgeX = x + width - badgeWidth - 6;
     const badgeY = y + height - badgeHeight - 5;
     ctx.save();
-    ctx.fillStyle = status === "kp" ? COLORS.red : COLORS.paper;
+    ctx.fillStyle = status === "kp" ? COLORS.red : status === "marked" ? "#fff1f3" : COLORS.paper;
     ctx.strokeStyle = COLORS.red;
     ctx.lineWidth = status === "kp" ? 2 : 3;
     ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
@@ -175,11 +159,31 @@
     ctx.font = "800 15px Arial, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("KP", badgeX + badgeWidth / 2, badgeY + badgeHeight / 2 + 1);
+    ctx.fillText(status === "marked" ? "KPM" : "KP", badgeX + badgeWidth / 2, badgeY + badgeHeight / 2 + 1);
     ctx.restore();
   }
 
-  function drawPlayerScore(ctx, value, mark, strokes, kpStatus, x, y, width, height) {
+  function drawSkinBadge(ctx, skin, x, y, height) {
+    if (!skin) return;
+    const badgeWidth = 25;
+    const badgeHeight = 21;
+    const badgeX = x + 6;
+    const badgeY = y + height - badgeHeight - 5;
+    ctx.save();
+    ctx.fillStyle = COLORS.navyDark;
+    ctx.strokeStyle = COLORS.navyDark;
+    ctx.lineWidth = 2;
+    ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
+    ctx.strokeRect(badgeX, badgeY, badgeWidth, badgeHeight);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "800 15px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("S", badgeX + badgeWidth / 2, badgeY + badgeHeight / 2 + 1);
+    ctx.restore();
+  }
+
+  function drawPlayerScore(ctx, value, mark, strokes, kpStatus, skin, x, y, width, height) {
     const centerX = x + width / 2;
     const centerY = y + height / 2 + 3;
     drawScoreSymbol(ctx, centerX, centerY, mark);
@@ -198,6 +202,7 @@
         ctx.fill();
       }
     }
+    drawSkinBadge(ctx, skin, x, y, height);
     drawKpBadge(ctx, kpStatus, x, y, width, height);
   }
 
@@ -276,7 +281,7 @@
         drawCell(ctx, x, rowY, valueWidth, 86, { fill });
         if (index < 9) {
           const holeIndex = startHole + index;
-          drawPlayerScore(ctx, value, player.marks[holeIndex], player.strokes[holeIndex], player.kpStatuses[holeIndex], x, rowY, valueWidth, 86);
+          drawPlayerScore(ctx, value, player.marks[holeIndex], player.strokes[holeIndex], player.kpStatuses[holeIndex], player.skins[holeIndex], x, rowY, valueWidth, 86);
         } else {
           drawCenteredText(ctx, value === "" ? "—" : value, x, rowY, valueWidth, 86, { font: "800 30px Arial, sans-serif" });
         }
@@ -343,7 +348,7 @@
     ctx.textBaseline = "middle";
     ctx.fillText("Red dots show handicap strokes received.", margin, backBottom + 50);
     ctx.fillText("Birdie: circle  ·  Eagle or better: double circle  ·  Bogey: square  ·  Double bogey or higher: double square", margin, backBottom + 91);
-    ctx.fillText("Filled KP: qualifier (1 tic)  ·  KP MARKED: later beaten (0)  ·  KP 3-PUTT: latest closest is over par; no KP awarded until a later qualifier (0)  ·  Outlined KP: pending (0)", margin, backBottom + 132);
+    ctx.fillText("S: skin  ·  Filled KP: qualifying holder (1 tic)  ·  KPM: marked but not awarded (0)  ·  Outlined KP: pending (0)", margin, backBottom + 132);
 
     return new Promise((resolve, reject) => {
       canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The scorecard JPEG could not be created")), "image/jpeg", 0.94);

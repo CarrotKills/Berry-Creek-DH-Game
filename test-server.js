@@ -36,7 +36,7 @@ async function adminRequest(path = "", options = {}) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.10.3");
+  assert.equal(config.appVersion, "9.10.4");
   assert.equal(config.adminSetupRequired, true);
   const scorecardExportAsset = await fetch(`${base}/scorecard-export.js`);
   assert.equal(scorecardExportAsset.status, 200);
@@ -154,7 +154,9 @@ async function adminRequest(path = "", options = {}) {
   assert.deepEqual(kpState.settings.kpClaims["2"], ["live-a", "live-b"]);
   assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-a"), kpState.players, E.COURSE, kpState.settings).kps, 0);
   assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-a"), kpState.players, E.COURSE, kpState.settings).kpMarked, 1);
-  assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-a"), kpState.players, E.COURSE, kpState.settings).kpThreePutts, 0);
+  assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-b"), kpState.players, E.COURSE, kpState.settings).kps, 0, "KP stays pending until every competing score is entered");
+  await action("SET_SCORE", { playerId: "live-a", holeIndex: 1, score: 3 }, { group: "A" });
+  kpState = await (await fetch(`${base}/api/state`)).json();
   assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-b"), kpState.players, E.COURSE, kpState.settings).kps, 1);
   await action("UNDO_LAST", { group: "B" }, { group: "B" });
   kpState = await (await fetch(`${base}/api/state`)).json();
@@ -164,13 +166,12 @@ async function adminRequest(path = "", options = {}) {
   await action("SET_SCORE", { playerId: "live-b", holeIndex: 1, score: 4 }, { group: "B" });
   kpState = await (await fetch(`${base}/api/state`)).json();
   assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-b"), kpState.players, E.COURSE, kpState.settings).kps, 0);
-  assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-b"), kpState.players, E.COURSE, kpState.settings).kpMarked, 0);
-  assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-b"), kpState.players, E.COURSE, kpState.settings).kpThreePutts, 1);
+  assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-b"), kpState.players, E.COURSE, kpState.settings).kpMarked, 1);
   assert.equal(kpState.players.reduce((sum, player) => sum + E.ticSummary(player, kpState.players, E.COURSE, kpState.settings).kps, 0), 0);
   await action("SET_SCORE", { playerId: "live-b", holeIndex: 1, score: 3 }, { group: "B" });
   await action("UNDO_LAST", { group: "A" }, { group: "A" });
   const undoneState = await (await fetch(`${base}/api/state`)).json();
-  assert.equal(undoneState.players.find((p) => p.id === "live-a").scores[0], "");
+  assert.equal(undoneState.players.find((p) => p.id === "live-a").scores[1], "");
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4 }, { group: "A" });
   const conflictResponse = await action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 5, expectedScore: "" }, { group: "A", status: 409 });
   const conflict = await conflictResponse.json();

@@ -345,6 +345,7 @@
         const holeIndex = Number(p.holeIndex);
         const gross = Number(player?.scores[holeIndex]);
         if (!player || holeIndex < 0 || holeIndex > 17) { changed = false; break; }
+        if (Boolean(p.value) && HOLE_PARS[holeIndex] === 3 && (state.settings.kpClaims[String(holeIndex + 1)] || []).includes(player.id)) { changed = false; break; }
         const previous = player.sandies[holeIndex];
         player.sandies[holeIndex] = Boolean(p.value) && gross >= 1 && gross <= HOLE_PARS[holeIndex];
         if (player.sandies[holeIndex] === previous) changed = false;
@@ -356,14 +357,28 @@
         const previous = state.settings.kpWinners[key] || "";
         const previousClaims = [...(state.settings.kpClaims[key] || [])];
         const nextPlayerId = p.playerId && state.players.some((player) => player.id === p.playerId && player.inGame) ? String(p.playerId) : "";
-        if (nextPlayerId) {
+        const nextPlayer = state.players.find((player) => player.id === nextPlayerId);
+        const selecting = nextPlayerId && p.value !== false;
+        if (selecting && nextPlayer?.sandies[Number(p.hole) - 1]) { changed = false; break; }
+        if (selecting) {
+          const correctedClaims = previousClaims.filter((playerId) => {
+            const claimant = state.players.find((player) => player.id === playerId);
+            return claimant && claimant.group !== nextPlayer.group;
+          });
           state.settings.kpWinners[key] = nextPlayerId;
-          state.settings.kpClaims[key] = [...new Set([...previousClaims, nextPlayerId])];
+          state.settings.kpClaims[key] = [...correctedClaims, nextPlayerId];
+        } else if (nextPlayerId && p.value === false) {
+          const remainingClaims = previousClaims.filter((playerId) => playerId !== nextPlayerId);
+          if (remainingClaims.length) {
+            state.settings.kpClaims[key] = remainingClaims;
+            state.settings.kpWinners[key] = remainingClaims.at(-1);
+          } else {
+            delete state.settings.kpClaims[key];
+            delete state.settings.kpWinners[key];
+          }
         } else {
           delete state.settings.kpWinners[key];
-          const remainingClaims = previousClaims.filter((playerId) => playerId !== previous);
-          if (remainingClaims.length) state.settings.kpClaims[key] = remainingClaims;
-          else delete state.settings.kpClaims[key];
+          delete state.settings.kpClaims[key];
         }
         const claimsChanged = JSON.stringify(state.settings.kpClaims[key] || []) !== JSON.stringify(previousClaims);
         if ((state.settings.kpWinners[key] || "") === previous && !claimsChanged) changed = false;
