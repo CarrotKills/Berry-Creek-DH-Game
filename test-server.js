@@ -36,7 +36,7 @@ async function adminRequest(path = "", options = {}) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.10.6");
+  assert.equal(config.appVersion, "9.10.7");
   assert.equal(config.adminSetupRequired, true);
   const scorecardExportAsset = await fetch(`${base}/scorecard-export.js`);
   assert.equal(scorecardExportAsset.status, 200);

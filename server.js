@@ -14,7 +14,7 @@ const IndexSheet = require("./index-sheet.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.10.6";
+const APP_VERSION = "9.10.7";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -343,7 +343,8 @@ const mime = {
   ".svg": "image/svg+xml",
   ".jpeg": "image/jpeg",
   ".jpg": "image/jpeg",
-  ".png": "image/png"
+  ".png": "image/png",
+  ".wav": "audio/wav"
 };
 
 const server = http.createServer(async (req, res) => {

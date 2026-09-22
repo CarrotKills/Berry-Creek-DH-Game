@@ -12,6 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="app-icon-180.png">
   <link rel="icon" type="image/png" sizes="32x32" href="app-icon-32.png">
+  <link rel="preload" href="eagle-call.wav" as="audio" type="audio/wav">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body data-display="normal">
@@ -107,7 +108,7 @@
       <div class="control-grid">
         <article class="control-card"><h3>Round status</h3><p id="roundStatusText">The round is open for scoring.</p><button id="toggleRoundLockBtn" class="button button-danger admin-control" type="button">Finalize and lock round</button></article>
         <article class="control-card"><h3>Device preferences</h3><label class="switch-row"><input id="soundToggle" type="checkbox" checked> Birdie and eagle sounds</label><label class="switch-row"><input id="autoAdvanceToggle" type="checkbox"> Automatically advance completed holes</label><label>Display mode<select id="displayMode"><option value="normal">Normal</option><option value="outdoor">Outdoor high contrast</option><option value="dark">Dark</option></select></label></article>
-        <article class="control-card"><h3>App version</h3><p><strong id="appVersion">Version 9.10.6</strong><br><span id="versionStatus">Checking for updates…</span></p><button id="checkUpdateBtn" class="button button-quiet" type="button">Check for updates</button></article>
+        <article class="control-card"><h3>App version</h3><p><strong id="appVersion">Version 9.10.7</strong><br><span id="versionStatus">Checking for updates…</span></p><button id="checkUpdateBtn" class="button button-quiet" type="button">Check for updates</button></article>
         <article class="control-card"><h3>Complete backups</h3><p>Download or restore the active round, saved-player database, and all historical rounds in one file.</p><div class="tool-row"><button id="completeBackupBtn" class="button button-primary admin-control" type="button">Download complete backup</button><label class="button button-quiet file-button admin-only-label">Restore complete backup<input id="completeRestoreInput" class="admin-control" type="file" accept="application/json"></label></div></article>
         <article class="control-card"><h3>Active round file</h3><p>Use these smaller files when you only need the current event.</p><div class="tool-row"><button id="exportBtn" class="button button-quiet" type="button">Export active round</button><label class="button button-quiet file-button admin-only-label">Import active round<input id="importInput" class="admin-control" type="file" accept="application/json"></label></div></article>
         <article class="control-card"><h3>Start a new round</h3><p>Clear the active roster, groups, scores, KPs, and tics while keeping saved players and historical rounds.</p><button id="startNewRoundBtn" class="button button-danger admin-control" type="button">Start new round</button></article>
@@ -130,7 +131,7 @@
   </main>
 
   <section id="printReport" class="print-report" aria-hidden="true"></section>
-  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Connecting to shared scoring…</span><button id="footerVersionBtn" class="text-button" type="button">App v9.10.6</button></footer>
+  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Connecting to shared scoring…</span><button id="footerVersionBtn" class="text-button" type="button">App v9.10.7</button></footer>
 
   <dialog id="adminDialog"><form method="dialog"><h2>Admin access</h2><p>Enter the admin PIN to change the roster, settings, or round status.</p><label>Admin PIN<input id="adminPinInput" type="password" inputmode="numeric" autocomplete="current-password" maxlength="20"></label><p id="adminError" class="validation" role="alert" hidden></p><div class="dialog-actions"><button class="button button-quiet" value="cancel">Cancel</button><button id="adminSubmitBtn" class="button button-primary" value="unlock">Unlock</button></div></form></dialog>
   <dialog id="adminInviteDialog"><form id="acceptAdminInviteForm"><h2>Create your admin access</h2><p>Enter your name and choose a private PIN. The person who sent this link cannot see your PIN.</p><label>Name<input id="invitedAdminName" type="text" maxlength="40" autocomplete="name" required></label><label>Choose a PIN<input id="invitedAdminPin" type="password" inputmode="numeric" minlength="4" maxlength="10" pattern="[0-9]{4,10}" autocomplete="new-password" required></label><label>Confirm PIN<input id="invitedAdminPinConfirm" type="password" inputmode="numeric" minlength="4" maxlength="10" pattern="[0-9]{4,10}" autocomplete="new-password" required></label><p id="adminInviteError" class="validation" role="alert" hidden></p><div class="dialog-actions"><button id="cancelAdminInviteBtn" class="button button-quiet" type="button">Cancel</button><button id="acceptAdminInviteBtn" class="button button-primary" type="submit">Create admin access</button></div></form></dialog>

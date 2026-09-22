@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.10.6";
+  const APP_VERSION = "9.10.7";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -43,6 +43,7 @@
   let scorerToken = params.get("token") || "";
   const scorerRoundId = params.get("round") || "";
   let celebrationAudioContext;
+  let eagleAudio;
   let eventSource;
   let serviceWorkerRegistration;
   let toastTimer;
@@ -810,8 +811,7 @@
     $("#holeWarning").classList.toggle("complete", Boolean(players.length && !missing));
   }
 
-  function playEagleCelebration() {
-    if (!preferences.sound) return;
+  function playEagleFallback() {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) return;
     celebrationAudioContext ||= new AudioContextClass();
@@ -820,23 +820,33 @@
     const start = ctx.currentTime;
     const master = ctx.createGain();
     master.gain.setValueAtTime(0.0001, start);
-    master.gain.exponentialRampToValueAtTime(0.22, start + 0.04);
-    master.gain.setValueAtTime(0.22, start + 2.45);
-    master.gain.exponentialRampToValueAtTime(0.0001, start + 2.95);
+    master.gain.exponentialRampToValueAtTime(0.18, start + 0.025);
+    master.gain.exponentialRampToValueAtTime(0.0001, start + 1.35);
     master.connect(ctx.destination);
-    [{ frequency: 392, delay: 0, duration: 0.42 }, { frequency: 523.25, delay: 0.34, duration: 0.46 }, { frequency: 659.25, delay: 0.7, duration: 0.5 }, { frequency: 783.99, delay: 1.08, duration: 0.72 }, { frequency: 1046.5, delay: 1.55, duration: 1.35 }].forEach((note, index) => {
+    [0, 0.42, 0.83].forEach((delay, index) => {
       const oscillator = ctx.createOscillator();
       const gain = ctx.createGain();
-      oscillator.type = index === 4 ? "sine" : "triangle";
-      oscillator.frequency.setValueAtTime(note.frequency, start + note.delay);
-      if (index === 4) oscillator.frequency.exponentialRampToValueAtTime(1318.5, start + 2.15);
-      gain.gain.setValueAtTime(0.0001, start + note.delay);
-      gain.gain.exponentialRampToValueAtTime(index === 4 ? 0.65 : 0.45, start + note.delay + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + note.delay + note.duration);
+      const noteStart = start + delay;
+      oscillator.type = "sawtooth";
+      oscillator.frequency.setValueAtTime(2200 - index * 180, noteStart);
+      oscillator.frequency.exponentialRampToValueAtTime(850 - index * 80, noteStart + 0.38);
+      gain.gain.setValueAtTime(0.0001, noteStart);
+      gain.gain.exponentialRampToValueAtTime(0.32, noteStart + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + 0.42);
       oscillator.connect(gain).connect(master);
-      oscillator.start(start + note.delay);
-      oscillator.stop(start + note.delay + note.duration + 0.05);
+      oscillator.start(noteStart);
+      oscillator.stop(noteStart + 0.44);
     });
+  }
+
+  function playEagleCelebration() {
+    if (!preferences.sound) return;
+    eagleAudio ||= new Audio("eagle-call.wav");
+    eagleAudio.preload = "auto";
+    eagleAudio.volume = 0.72;
+    eagleAudio.pause();
+    eagleAudio.currentTime = 0;
+    eagleAudio.play().catch(playEagleFallback);
   }
 
   function playBirdieTweets() {
