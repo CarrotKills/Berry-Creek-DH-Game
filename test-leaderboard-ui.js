@@ -19,5 +19,11 @@ assert.doesNotMatch(app, /tics\.sandyPars|tics\.sandyBirdies/);
 assert.doesNotMatch(app, /Sandy par ✓|Sandy birdie ✓/);
 assert.match(html, /<th>FN<\/th><th>BN<\/th><th>TN<\/th><th>Sandy<\/th><th>KP<\/th><th>KPM<\/th>/);
 assert.match(css, /\.kp-code[^}]*font-family: ui-monospace/s);
+assert.doesNotMatch(html, /Non-cash points are automatic/);
+assert.doesNotMatch(html, /KP\/KPM code order/);
+assert.ok(html.indexOf('class="leaderboard-wrap"') < html.indexOf('id="printBtn"'), "Print results must appear below the leaderboard");
+assert.ok(html.indexOf('class="leaderboard-wrap"') < html.indexOf('id="csvBtn"'), "Download spreadsheet must appear below the leaderboard");
+assert.match(html, /class="section-actions leaderboard-footer-actions"/);
+assert.match(css, /\.leaderboard-footer-actions\s*\{[^}]*justify-content:\s*flex-end/s);
 
 console.log("Leaderboard display tests passed.");
