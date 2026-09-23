@@ -16,6 +16,7 @@
   const TEE_KEYS = new Set(["championship", "member", "memberCreekCombo", "creekMen"]);
   const ADMIN_ACTIONS = new Set(["SET_META", "SET_ALLOWANCE", "ADD_PLAYER", "REMOVE_PLAYER", "UPDATE_PLAYER", "REPLACE_ROUND", "START_FROM_SAVED", "RESET_SCORES", "CLEAR_ROUND", "SET_LOCKED", "CLEAR_AUDIT"]);
   const SCORING_ACTIONS = new Set(["SET_SCORE", "SET_SANDY", "SET_KP", "UNDO_LAST"]);
+  const ACCESS_ACTIONS = new Set(["SET_SCOREKEEPER"]);
 
   function newRoundId() {
     return globalThis.crypto?.randomUUID?.() || `round-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -23,12 +24,12 @@
 
   function defaultState() {
     return {
-      version: 6,
+      version: 7,
       revision: 0,
       roundId: newRoundId(),
       roundName: "Berry Creek Round",
       date: new Date().toISOString().slice(0, 10),
-      settings: { par: 72, allowance: 100, kpWinners: {}, kpClaims: {}, locked: false },
+      settings: { par: 72, allowance: 100, kpWinners: {}, kpClaims: {}, scorekeepers: {}, locked: false },
       players: [],
       auditLog: [],
       groupActivity: {},
@@ -122,16 +123,21 @@
     });
     const validPlayerIds = new Set(players.filter((player) => player.inGame).map((player) => player.id));
     const kpWinners = Object.fromEntries(Object.entries(value.settings?.kpWinners || {}).filter(([hole, playerId]) => KP_HOLES.includes(Number(hole)) && validPlayerIds.has(String(playerId))).map(([hole, playerId]) => [String(hole), String(playerId)]));
+    const scorekeepers = Object.fromEntries(GROUPS.flatMap((group) => {
+      const playerId = String(value.settings?.scorekeepers?.[group] || "");
+      return players.some((player) => player.id === playerId && player.group === group) ? [[group, playerId]] : [];
+    }));
     return {
       ...base,
       ...value,
-      version: 6,
+      version: 7,
       roundId: String(value.roundId || base.roundId),
       settings: {
         ...base.settings,
         ...(value.settings || {}),
         kpWinners,
         kpClaims: normalizeKpClaims(value.settings?.kpClaims, kpWinners, validPlayerIds),
+        scorekeepers,
         locked: Boolean(value.settings?.locked)
       },
       players,
@@ -161,6 +167,7 @@
       }
       case "SET_SANDY": return `${playerName(after, p.playerId)} · Hole ${Number(p.holeIndex) + 1}: sand save ${p.value ? "marked" : "removed"}`;
       case "SET_KP": return `Hole ${p.hole} KP: ${p.playerId ? playerName(after, p.playerId) : "cleared"}`;
+      case "SET_SCOREKEEPER": return p.playerId ? `Set ${playerName(after, p.playerId)} as Group ${p.group} scorekeeper` : `Cleared Group ${p.group} scorekeeper`;
       case "UNDO_LAST": return `Undid ${p.detail || "the last scoring change"}`;
       case "RESET_SCORES": return "Reset all scores and tics";
       case "CLEAR_ROUND": return "Started a new event";
@@ -290,6 +297,7 @@
       case "REMOVE_PLAYER":
         if (!state.players.some((player) => player.id === p.playerId)) { changed = false; break; }
         state.players = state.players.filter((player) => player.id !== p.playerId);
+        Object.keys(state.settings.scorekeepers).forEach((group) => { if (state.settings.scorekeepers[group] === p.playerId) delete state.settings.scorekeepers[group]; });
         Object.keys(state.settings.kpWinners).forEach((hole) => {
           if (state.settings.kpWinners[hole] === p.playerId) delete state.settings.kpWinners[hole];
         });
@@ -315,6 +323,9 @@
         if (GROUPS.includes(p.group)) {
           const groupCount = state.players.filter((item) => item.group === p.group && item.id !== p.playerId).length;
           if (groupCount < MAX_GROUP_SIZE) player.group = p.group;
+        }
+        if (player.group !== previousGroup) {
+          Object.keys(state.settings.scorekeepers).forEach((group) => { if (state.settings.scorekeepers[group] === player.id) delete state.settings.scorekeepers[group]; });
         }
         if (player.group !== previousGroup) state.undoStack = state.undoStack.filter((entry) => entry.playerId !== p.playerId && entry.beforeValue !== p.playerId && entry.afterValue !== p.playerId && !entry.beforeClaims.includes(p.playerId));
         if (!player.inGame) {
@@ -384,6 +395,16 @@
         if ((state.settings.kpWinners[key] || "") === previous && !claimsChanged) changed = false;
         break;
       }
+      case "SET_SCOREKEEPER": {
+        const group = GROUPS.includes(p.group) ? p.group : "";
+        const playerId = String(p.playerId || "");
+        const previous = group ? String(state.settings.scorekeepers[group] || "") : "";
+        if (!group || (playerId && !state.players.some((player) => player.id === playerId && player.group === group))) { changed = false; break; }
+        if (playerId) state.settings.scorekeepers[group] = playerId;
+        else delete state.settings.scorekeepers[group];
+        if (previous === playerId) changed = false;
+        break;
+      }
       case "UNDO_LAST":
         changed = undoLastScoringChange(state, p);
         break;
@@ -400,6 +421,7 @@
         state.settings.locked = false;
         state.settings.kpWinners = {};
         state.settings.kpClaims = {};
+        state.settings.scorekeepers = {};
         state.groupActivity = {};
         state.undoStack = [];
         break;
@@ -443,6 +465,7 @@
     HOLE_PARS,
     ADMIN_ACTIONS,
     SCORING_ACTIONS,
+    ACCESS_ACTIONS,
     defaultState,
     normalizePlayer,
     activePlayerConflict,

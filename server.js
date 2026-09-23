@@ -14,7 +14,7 @@ const IndexSheet = require("./index-sheet.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.10.8";
+const APP_VERSION = "9.11.1";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -24,10 +24,12 @@ const ROUND_HISTORY_DB_FILE = path.resolve(process.env.ROUND_HISTORY_DB_FILE || 
 const ADMIN_DB_FILE = path.resolve(process.env.ADMIN_DB_FILE || path.join(DATA_DIR, "admins.sqlite"));
 const BACKUP_DIR = path.resolve(process.env.BACKUP_DIR || path.join(DATA_DIR, "backups"));
 const BACKUP_FORMAT = "berry-creek-complete-backup";
-const BACKUP_FORMAT_VERSION = 1;
+const BACKUP_FORMAT_VERSION = 2;
 const SNAPSHOT_LIMIT = 25;
 const DESTRUCTIVE_ACTIONS = new Set(["CLEAR_ROUND", "REPLACE_ROUND", "START_FROM_SAVED", "RESET_SCORES"]);
 const SHARE_SECRET = String(process.env.SHARE_SECRET || ADMIN_PIN);
+const AUTH_SECRET = String(process.env.AUTH_SECRET || SHARE_SECRET);
+const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 const INDEX_SHEET_CSV_URL = String(process.env.INDEX_SHEET_URL || "https://docs.google.com/spreadsheets/d/e/2PACX-1vSZyzvxEBnr9IugRMC6aptHh1ZJ3mugb4boxRmu7NS7TL-kn7BY3hAgmtSHh-7ZoyvuFtLmUEL5v3f9/pub?output=csv");
 const INDEX_SHEET_MAX_BYTES = 2 * 1024 * 1024;
 const clients = new Map();
@@ -64,7 +66,15 @@ function broadcast() {
 }
 
 function presencePayload() {
-  return Object.fromEntries(Round.GROUPS.map((group) => [group, [...clients.values()].filter((client) => client.group === group && client.scorer && scoringTokenMatches(group, client.token)).length]));
+  const connectedGroups = [...clients.values()].map((client) => {
+    if (client.accountId) {
+      const account = playerDatabase.findAccount(client.accountId);
+      const player = activePlayerForAccount(sessionAccount(account, "player"));
+      if (player && state.settings.scorekeepers[player.group] === player.id) return player.group;
+    }
+    return client.scorer && scoringTokenMatches(client.group, client.token) ? client.group : "";
+  });
+  return Object.fromEntries(Round.GROUPS.map((group) => [group, connectedGroups.filter((connectedGroup) => connectedGroup === group).length]));
 }
 
 function broadcastPresence() {
@@ -96,15 +106,17 @@ function buildCompleteBackup(reason = "manual") {
     reason: String(reason).slice(0, 80),
     activeRound: state,
     savedPlayers: playerDatabase.list(),
+    playerAccounts: playerDatabase.exportAccounts(),
     savedRounds: roundHistoryDatabase.exportAll()
   };
 }
 
 function normalizeCompleteBackup(value) {
-  if (value?.format !== BACKUP_FORMAT || Number(value?.formatVersion) !== BACKUP_FORMAT_VERSION) throw new Error("That file is not a Berry Creek complete backup");
+  if (value?.format !== BACKUP_FORMAT || ![1, BACKUP_FORMAT_VERSION].includes(Number(value?.formatVersion))) throw new Error("That file is not a Berry Creek complete backup");
   if (!value.activeRound || !Array.isArray(value.activeRound.players)) throw new Error("The active round in the backup is invalid");
   if (!Array.isArray(value.savedPlayers) || value.savedPlayers.length > 5000) throw new Error("The saved-player data in the backup is invalid");
   if (!Array.isArray(value.savedRounds) || value.savedRounds.length > 1000) throw new Error("The saved-round data in the backup is invalid");
+  if (value.playerAccounts !== undefined && (!Array.isArray(value.playerAccounts) || value.playerAccounts.length > 5000)) throw new Error("The player-login data in the backup is invalid");
   const savedRounds = value.savedRounds.map((round) => {
     if (!round?.state || !Array.isArray(round.state.players)) throw new Error("A saved round in the backup is invalid");
     return { ...round, state: Round.normalizeState(round.state) };
@@ -113,6 +125,7 @@ function normalizeCompleteBackup(value) {
     ...value,
     activeRound: Round.normalizeState(value.activeRound),
     savedPlayers: value.savedPlayers,
+    playerAccounts: Array.isArray(value.playerAccounts) ? value.playerAccounts : null,
     savedRounds
   };
 }
@@ -148,15 +161,20 @@ function createSnapshot(reason, bundle = buildCompleteBackup(reason)) {
 
 function restoreCompleteBackup(value) {
   const incoming = normalizeCompleteBackup(value);
+  (incoming.playerAccounts || []).forEach((account) => {
+    if (adminDatabase.findByUsername(account.username)) throw new Error(`Player username ${account.username} conflicts with an admin username`);
+  });
   const previous = buildCompleteBackup("before-complete-restore");
   const snapshot = createSnapshot("before-complete-restore", previous);
   try {
     playerDatabase.replaceAll(incoming.savedPlayers);
+    if (incoming.playerAccounts) playerDatabase.replaceAccounts(incoming.playerAccounts);
     roundHistoryDatabase.replaceAll(incoming.savedRounds);
     state = incoming.activeRound;
     persist();
   } catch (error) {
     playerDatabase.replaceAll(previous.savedPlayers);
+    playerDatabase.replaceAccounts(previous.playerAccounts || []);
     roundHistoryDatabase.replaceAll(previous.savedRounds);
     state = Round.normalizeState(previous.activeRound);
     persist();
@@ -185,18 +203,27 @@ function readinessPayload(req) {
   const latest = latestSnapshot();
   const backupFresh = Boolean(latest && Date.now() - Date.parse(latest.createdAt) < 24 * 60 * 60 * 1000);
   const secureConnection = requestIsSecure(req);
+  const authSecretConfigured = Boolean(process.env.AUTH_SECRET || process.env.SHARE_SECRET || process.env.ADMIN_PIN);
   const activeGroups = Round.GROUPS.filter((group) => state.players.some((player) => player.group === group));
   const competingPlayers = state.players.filter((player) => player.inGame).length;
   const savedPlayerCount = playerDatabase.list().length;
+  const playerAccounts = playerDatabase.exportAccounts();
+  const activePlayersWithoutLogin = state.players.filter((player) => player.isGuest
+    ? !playerAccounts.some((account) => account.accountType === "guest" && account.roundId === state.roundId && account.activePlayerId === player.id)
+    : !player.directoryId || !playerAccounts.some((account) => account.accountType === "player" && account.playerId === player.directoryId));
+  const groupsWithoutScorekeeper = activeGroups.filter((group) => !state.settings.scorekeepers[group]);
   const savedRoundCount = roundHistoryDatabase.list().length;
   const checks = [
     { key: "storage", label: "Server storage is writable", ok: storageWritable, severity: "error", detail: storageWritable ? "Round and database files can be updated." : "The server cannot write to its data folder." },
     { key: "persistent", label: "Persistent storage is configured", ok: persistentStorageConfigured, severity: "error", detail: persistentStorageConfigured ? "A persistent data location is configured." : "Set DATA_DIR or PLAYERS_DB_FILE to a persistent disk before a live event." },
     { key: "pin", label: "Named admin access is configured", ok: adminCount > 0, severity: "warning", detail: adminCount ? `${adminCount} named admin${adminCount === 1 ? "" : "s"} can sign in with separate PINs.` : "Sign in with the setup PIN, then add at least one named admin." },
+    { key: "auth-secret", label: "A private session secret is configured", ok: authSecretConfigured, severity: "warning", detail: authSecretConfigured ? "Signed user sessions remain private and stable across restarts." : "Set AUTH_SECRET to a long random value before live use." },
     { key: "backup", label: "A server snapshot is less than 24 hours old", ok: backupFresh, severity: "warning", detail: latest ? `Latest snapshot: ${latest.createdAt}.` : "Create a snapshot before the event begins." },
     { key: "roster", label: "The active round has competing players", ok: competingPlayers > 0, severity: "warning", detail: `${state.players.length} assigned; ${competingPlayers} in the game across ${activeGroups.length} group${activeGroups.length === 1 ? "" : "s"}.` },
-    { key: "database", label: "Admin, player, and round databases are available", ok: true, severity: "error", detail: `${adminCount} admin${adminCount === 1 ? "" : "s"}; ${savedPlayerCount} saved player${savedPlayerCount === 1 ? "" : "s"}; ${savedRoundCount} saved round${savedRoundCount === 1 ? "" : "s"}.` },
-    { key: "https", label: "The app is using a secure connection", ok: secureConnection, severity: "warning", detail: secureConnection ? "Scorekeeper and spectator links are protected in transit." : "Use HTTPS for links shared outside this device." }
+    { key: "logins", label: "Active players have login credentials", ok: activePlayersWithoutLogin.length === 0, severity: "warning", detail: activePlayersWithoutLogin.length ? `${activePlayersWithoutLogin.length} active player${activePlayersWithoutLogin.length === 1 ? " does" : "s do"} not have a usable login.` : `${state.players.length} active player login${state.players.length === 1 ? " is" : "s are"} ready.` },
+    { key: "scorekeepers", label: "Active groups have scorekeepers", ok: groupsWithoutScorekeeper.length === 0, severity: "warning", detail: groupsWithoutScorekeeper.length ? `Group${groupsWithoutScorekeeper.length === 1 ? "" : "s"} ${groupsWithoutScorekeeper.join(", ")} can select a scorekeeper on the Scoring page.` : "Every active group has one scorekeeper." },
+    { key: "database", label: "Admin, player, and round databases are available", ok: true, severity: "error", detail: `${adminCount} admin${adminCount === 1 ? "" : "s"}; ${savedPlayerCount} saved player${savedPlayerCount === 1 ? "" : "s"}; ${playerAccounts.length} player login${playerAccounts.length === 1 ? "" : "s"}; ${savedRoundCount} saved round${savedRoundCount === 1 ? "" : "s"}.` },
+    { key: "https", label: "The app is using a secure connection", ok: secureConnection, severity: "warning", detail: secureConnection ? "Usernames, PINs, and live scores are protected in transit." : "Use HTTPS before anyone signs in outside this device." }
   ];
   const failedErrors = checks.filter((check) => !check.ok && check.severity === "error").length;
   const failedWarnings = checks.filter((check) => !check.ok && check.severity === "warning").length;
@@ -269,6 +296,64 @@ function authenticateAdmin(candidate) {
   }
   if (adminDatabase.count() === 0 && legacyPinMatches(candidate)) return { id: "bootstrap", name: "Admin setup", bootstrap: true };
   return null;
+}
+
+function accountUsernameInUse(username, ignored = {}) {
+  const admin = adminDatabase.findByUsername(username);
+  if (admin && !(ignored.role === "admin" && ignored.id === admin.id)) return true;
+  const player = playerDatabase.findAccountByUsername(username);
+  return Boolean(player && !(ignored.role === "player" && ignored.id === player.id));
+}
+
+function sessionAccount(value, role) {
+  if (!value) return null;
+  if (role === "admin") return { id: value.id, username: value.username || "admin", name: value.name, role: "admin", updatedAt: value.updatedAt, bootstrap: Boolean(value.bootstrap) };
+  return { id: value.id, username: value.username, name: value.name, role: "player", accountType: value.accountType, playerId: value.playerId || "", roundId: value.roundId || "", activePlayerId: value.activePlayerId || "", updatedAt: value.updatedAt };
+}
+
+function issueSession(account) {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = Buffer.from(JSON.stringify({ sub: account.id, role: account.role, ver: account.updatedAt || "bootstrap", iat: now, exp: now + SESSION_TTL_SECONDS })).toString("base64url");
+  const signature = crypto.createHmac("sha256", AUTH_SECRET).update(payload).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+function verifySession(tokenValue) {
+  const [payloadPart, signaturePart, extra] = String(tokenValue || "").split(".");
+  if (!payloadPart || !signaturePart || extra) return null;
+  const supplied = Buffer.from(signaturePart);
+  const expected = Buffer.from(crypto.createHmac("sha256", AUTH_SECRET).update(payloadPart).digest("base64url"));
+  if (supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) return null;
+  let payload;
+  try { payload = JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf8")); }
+  catch (_) { return null; }
+  if (!payload?.sub || !["admin", "player"].includes(payload.role) || Number(payload.exp) <= Math.floor(Date.now() / 1000)) return null;
+  if (payload.role === "admin") {
+    if (payload.sub === "bootstrap" && adminDatabase.count() === 0 && payload.ver === "bootstrap") return sessionAccount({ id: "bootstrap", username: "admin", name: "Admin setup", updatedAt: "bootstrap", bootstrap: true }, "admin");
+    const admin = adminDatabase.find(payload.sub);
+    return admin && admin.updatedAt === payload.ver ? sessionAccount(admin, "admin") : null;
+  }
+  const player = playerDatabase.findAccount(payload.sub);
+  if (!player || player.updatedAt !== payload.ver) return null;
+  if (player.accountType === "guest" && player.roundId !== state.roundId) return null;
+  return sessionAccount(player, "player");
+}
+
+function requestSession(req) {
+  const header = String(req.headers.authorization || "");
+  return header.startsWith("Bearer ") ? verifySession(header.slice(7)) : null;
+}
+
+function authenticateAdminRequest(req) {
+  const session = requestSession(req);
+  if (session?.role === "admin") return session;
+  return authenticateAdmin(req.headers["x-admin-pin"]);
+}
+
+function activePlayerForAccount(account) {
+  if (!account || account.role !== "player") return null;
+  if (account.accountType === "guest") return account.roundId === state.roundId ? state.players.find((player) => player.id === account.activePlayerId) || null : null;
+  return state.players.find((player) => player.directoryId && player.directoryId === account.playerId) || null;
 }
 
 function loginAttemptKey(req) {
@@ -350,21 +435,50 @@ const mime = {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   if (req.method === "GET" && url.pathname === "/api/state") return sendJson(res, 200, state);
-  if (req.method === "GET" && url.pathname === "/api/config") return sendJson(res, 200, { appVersion: APP_VERSION, adminPinRequired: true, adminSetupRequired: adminDatabase.count() === 0 });
+  if (req.method === "GET" && url.pathname === "/api/config") return sendJson(res, 200, { appVersion: APP_VERSION, accountLogin: true, adminSetupRequired: adminDatabase.count() === 0 });
+
+  if (req.method === "POST" && url.pathname === "/api/auth/login") {
+    try {
+      const blockedUntil = loginBlockedUntil(req);
+      if (blockedUntil) return sendJson(res, 429, { ok: false, error: "Too many incorrect login attempts. Try again in one minute." }, { "Retry-After": String(Math.ceil((blockedUntil - Date.now()) / 1000)) });
+      const body = await readBody(req);
+      let account = sessionAccount(adminDatabase.authenticateCredentials(body.username, body.pin), "admin");
+      if (!account && !String(body.username || "").trim()) account = sessionAccount(authenticateAdmin(body.pin), "admin");
+      if (!account && adminDatabase.count() === 0 && ["admin", "setup"].includes(String(body.username || "").trim().toLowerCase()) && legacyPinMatches(body.pin)) {
+        account = sessionAccount({ id: "bootstrap", username: "admin", name: "Admin setup", updatedAt: "bootstrap", bootstrap: true }, "admin");
+      }
+      if (!account) account = sessionAccount(playerDatabase.authenticate(body.username, body.pin, state.roundId), "player");
+      if (!account) {
+        recordFailedLogin(req);
+        return sendJson(res, 401, { ok: false, error: "Incorrect username or PIN" });
+      }
+      adminLoginAttempts.delete(loginAttemptKey(req));
+      if (account.role === "admin" && !account.bootstrap) account = sessionAccount(adminDatabase.recordLogin(account.id), "admin");
+      if (account.role === "player") account = sessionAccount(playerDatabase.recordLogin(account.id), "player");
+      return sendJson(res, 200, { ok: true, account, token: issueSession(account), setupRequired: Boolean(account.bootstrap) });
+    } catch (error) {
+      return sendJson(res, 400, { ok: false, error: error.message });
+    }
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/auth/session") {
+    const account = requestSession(req);
+    return account ? sendJson(res, 200, { ok: true, account }) : sendJson(res, 401, { ok: false, error: "Your sign-in has expired" });
+  }
 
   if (req.method === "POST" && url.pathname === "/api/admin/check") {
     try {
       const blockedUntil = loginBlockedUntil(req);
       if (blockedUntil) return sendJson(res, 429, { ok: false, error: "Too many incorrect PIN attempts. Try again in one minute." }, { "Retry-After": String(Math.ceil((blockedUntil - Date.now()) / 1000)) });
       const body = await readBody(req);
-      const admin = authenticateAdmin(body.pin);
+      const admin = body.username ? adminDatabase.authenticateCredentials(body.username, body.pin) : authenticateAdmin(body.pin);
       if (!admin) {
         recordFailedLogin(req);
         return sendJson(res, 401, { ok: false, error: "Incorrect admin PIN" });
       }
       adminLoginAttempts.delete(loginAttemptKey(req));
-      const signedInAdmin = admin.bootstrap ? admin : { ...adminDatabase.recordLogin(admin.id), bootstrap: false };
-      return sendJson(res, 200, { ok: true, admin: signedInAdmin, setupRequired: admin.bootstrap });
+      const signedInAdmin = sessionAccount(admin.bootstrap ? admin : { ...adminDatabase.recordLogin(admin.id), bootstrap: false }, "admin");
+      return sendJson(res, 200, { ok: true, admin: signedInAdmin, account: signedInAdmin, token: issueSession(signedInAdmin), setupRequired: Boolean(admin.bootstrap) });
     } catch (error) {
       return sendJson(res, 400, { ok: false, error: error.message });
     }
@@ -374,10 +488,12 @@ const server = http.createServer(async (req, res) => {
     try {
       if (!requestIsSecure(req)) return sendJson(res, 400, { ok: false, error: "Open the hosted HTTPS app to create private admin access" });
       const body = await readBody(req);
-      const admin = adminDatabase.acceptInvitation(body.token, { name: body.name, pin: body.pin });
+      if (accountUsernameInUse(body.username)) return sendJson(res, 409, { ok: false, error: "That username is already in use" });
+      const admin = adminDatabase.acceptInvitation(body.token, { name: body.name, username: body.username, pin: body.pin });
       adminAuthCache.clear();
       recordSystemAudit(admin.name, "ADMIN_ACCEPT", `${admin.name} joined as an admin through a private invitation`);
-      return sendJson(res, 201, { ok: true, admin });
+      const account = sessionAccount(admin, "admin");
+      return sendJson(res, 201, { ok: true, admin, account, token: issueSession(account) });
     } catch (error) {
       const status = /expired|already been used|invalid/.test(error.message) ? 410 : /already assigned/.test(error.message) ? 409 : 400;
       return sendJson(res, status, { ok: false, error: error.message });
@@ -385,8 +501,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && url.pathname === "/api/admin-invitations") {
-    const adminIdentity = authenticateAdmin(req.headers["x-admin-pin"]);
-    if (!adminIdentity) return sendJson(res, 401, { ok: false, error: "Admin PIN required" });
+    const adminIdentity = authenticateAdminRequest(req);
+    if (!adminIdentity) return sendJson(res, 401, { ok: false, error: "Admin sign-in required" });
     if (adminIdentity.bootstrap) return sendJson(res, 400, { ok: false, error: "Create the first named admin before making invitation links" });
     if (!requestIsSecure(req)) return sendJson(res, 400, { ok: false, error: "Open the hosted HTTPS app before creating a private admin link" });
     try {
@@ -399,9 +515,39 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (req.method === "POST" && url.pathname === "/api/player-invitations/accept") {
+    try {
+      if (!requestIsSecure(req)) return sendJson(res, 400, { ok: false, error: "Open the hosted HTTPS app to create private player access" });
+      const body = await readBody(req);
+      if (adminDatabase.findByUsername(body.username)) return sendJson(res, 409, { ok: false, error: "That username is already in use" });
+      const accepted = playerDatabase.acceptInvitation(body.token, { username: body.username, pin: body.pin });
+      const account = sessionAccount(accepted.account, "player");
+      recordSystemAudit(accepted.player.name, accepted.wasReset ? "PLAYER_ACCESS_RESET" : "PLAYER_ACCESS_SETUP", `${accepted.player.name} privately ${accepted.wasReset ? "reset" : "created"} player access`);
+      return sendJson(res, 201, { ok: true, player: accepted.player, account, token: issueSession(account), wasReset: accepted.wasReset });
+    } catch (error) {
+      const status = /expired|already been used|invalid/.test(error.message) ? 410 : /already in use/.test(error.message) ? 409 : 400;
+      return sendJson(res, status, { ok: false, error: error.message });
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/player-invitations") {
+    const adminIdentity = authenticateAdminRequest(req);
+    if (!adminIdentity) return sendJson(res, 401, { ok: false, error: "Admin sign-in required" });
+    if (adminIdentity.bootstrap) return sendJson(res, 400, { ok: false, error: "Create the first named admin before making player setup links" });
+    if (!requestIsSecure(req)) return sendJson(res, 400, { ok: false, error: "Open the hosted HTTPS app before creating a private player link" });
+    try {
+      const body = await readBody(req);
+      const invitation = playerDatabase.createInvitation(body.playerId, adminIdentity.id, body.hours);
+      recordSystemAudit(adminIdentity.name, "PLAYER_INVITE", `Created a private ${invitation.resetsExistingLogin ? "login reset" : "login setup"} link for ${invitation.playerName}`);
+      return sendJson(res, 201, { ok: true, invitation });
+    } catch (error) {
+      return sendJson(res, error.message === "Saved player not found" ? 404 : 400, { ok: false, error: error.message });
+    }
+  }
+
   if (url.pathname === "/api/admins" || url.pathname.startsWith("/api/admins/")) {
-    const adminIdentity = authenticateAdmin(req.headers["x-admin-pin"]);
-    if (!adminIdentity) return sendJson(res, 401, { ok: false, error: "Admin PIN required" });
+    const adminIdentity = authenticateAdminRequest(req);
+    if (!adminIdentity) return sendJson(res, 401, { ok: false, error: "Admin sign-in required" });
     const adminRoute = url.pathname.match(/^\/api\/admins\/([^/]+)$/);
     try {
       if (req.method === "GET" && url.pathname === "/api/admins") {
@@ -410,20 +556,25 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST" && url.pathname === "/api/admins") {
         if (!adminIdentity.bootstrap) return sendJson(res, 403, { ok: false, error: "Use a private setup link so each new admin can choose their own PIN" });
         const body = await readBody(req);
-        const admin = adminDatabase.create(body.admin || body);
+        const candidate = body.admin || body;
+        if (accountUsernameInUse(candidate.username)) return sendJson(res, 409, { ok: false, error: "That username is already in use" });
+        const admin = adminDatabase.create(candidate);
         adminAuthCache.clear();
         recordSystemAudit(adminIdentity.name, "ADMIN_CREATE", `Added admin ${admin.name}`);
-        return sendJson(res, 201, { admin, sessionAdmin: authenticateAdmin(req.headers["x-admin-pin"]), bootstrapDisabled: adminDatabase.count() === 1 });
+        const account = sessionAccount(admin, "admin");
+        return sendJson(res, 201, { admin, sessionAdmin: account, token: issueSession(account), bootstrapDisabled: adminDatabase.count() === 1 });
       }
       if (req.method === "PUT" && adminRoute) {
         const body = await readBody(req);
         const targetId = decodeURIComponent(adminRoute[1]);
         const update = body.admin || body;
         if (update.pin && targetId !== adminIdentity.id) return sendJson(res, 403, { ok: false, error: "Only an admin can change their own private PIN" });
+        if (update.username && accountUsernameInUse(update.username, { role: "admin", id: targetId })) return sendJson(res, 409, { ok: false, error: "That username is already in use" });
         const admin = adminDatabase.update(targetId, update);
         adminAuthCache.clear();
         recordSystemAudit(adminIdentity.name, "ADMIN_UPDATE", `Updated admin ${admin.name}`);
-        return sendJson(res, 200, { admin, sessionAdmin: authenticateAdmin(req.headers["x-admin-pin"]) });
+        const account = sessionAccount(admin, "admin");
+        return sendJson(res, 200, { admin, sessionAdmin: account, ...(targetId === adminIdentity.id ? { token: issueSession(account) } : {}) });
       }
       if (req.method === "DELETE" && adminRoute) {
         const targetId = decodeURIComponent(adminRoute[1]);
@@ -441,19 +592,19 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/api/share-tokens") {
-    if (!authenticateAdmin(req.headers["x-admin-pin"])) return sendJson(res, 401, { ok: false, error: "Admin PIN required" });
+    if (!authenticateAdminRequest(req)) return sendJson(res, 401, { ok: false, error: "Admin sign-in required" });
     return sendJson(res, 200, { tokens: Object.fromEntries(Round.GROUPS.map((group) => [group, scoreTokenForGroup(group)])) });
   }
 
   if (req.method === "GET" && url.pathname === "/api/readiness") {
-    if (!authenticateAdmin(req.headers["x-admin-pin"])) return sendJson(res, 401, { ok: false, error: "Admin PIN required" });
+    if (!authenticateAdminRequest(req)) return sendJson(res, 401, { ok: false, error: "Admin sign-in required" });
     try { return sendJson(res, 200, readinessPayload(req)); }
     catch (error) { return sendJson(res, 500, { ok: false, error: error.message }); }
   }
 
   if (url.pathname === "/api/system-backup" || url.pathname === "/api/system-backup/snapshot" || url.pathname === "/api/system-backup/restore") {
-    const adminIdentity = authenticateAdmin(req.headers["x-admin-pin"]);
-    if (!adminIdentity) return sendJson(res, 401, { ok: false, error: "Admin PIN required" });
+    const adminIdentity = authenticateAdminRequest(req);
+    if (!adminIdentity) return sendJson(res, 401, { ok: false, error: "Admin sign-in required" });
     try {
       if (req.method === "GET" && url.pathname === "/api/system-backup") {
         const bundle = buildCompleteBackup("download");
@@ -479,8 +630,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === "/api/rounds" || url.pathname.startsWith("/api/rounds/")) {
-    const adminIdentity = authenticateAdmin(req.headers["x-admin-pin"]);
-    if (!adminIdentity) return sendJson(res, 401, { ok: false, error: "Admin PIN required" });
+    const adminIdentity = authenticateAdminRequest(req);
+    if (!adminIdentity) return sendJson(res, 401, { ok: false, error: "Admin sign-in required" });
     const roundRoute = url.pathname.match(/^\/api\/rounds\/([^/]+)$/);
     try {
       if (req.method === "GET" && url.pathname === "/api/rounds") return sendJson(res, 200, { rounds: roundHistoryDatabase.list() });
@@ -507,8 +658,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === "/api/players" || url.pathname.startsWith("/api/players/")) {
-    const adminIdentity = authenticateAdmin(req.headers["x-admin-pin"]);
-    if (!adminIdentity) return sendJson(res, 401, { ok: false, error: "Admin PIN required" });
+    const adminIdentity = authenticateAdminRequest(req);
+    if (!adminIdentity) return sendJson(res, 401, { ok: false, error: "Admin sign-in required" });
     const playerRoute = url.pathname.match(/^\/api\/players\/([^/]+)$/);
     try {
       if (req.method === "GET" && url.pathname === "/api/players") {
@@ -516,7 +667,9 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === "POST" && url.pathname === "/api/players") {
         const body = await readBody(req);
-        const player = playerDatabase.create(body.player || body);
+        const candidate = body.player || body;
+        if (Object.hasOwn(candidate, "username") || Object.hasOwn(candidate, "pin")) return sendJson(res, 403, { ok: false, error: "Use a private player setup link so the player can choose their own username and PIN" });
+        const player = playerDatabase.create(candidate);
         recordSystemAudit(adminIdentity.name, "PLAYER_SAVE", `Saved ${player.name} to the player database`);
         return sendJson(res, 201, { player });
       }
@@ -568,7 +721,10 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === "PUT" && playerRoute) {
         const body = await readBody(req);
-        const player = playerDatabase.update(decodeURIComponent(playerRoute[1]), body.player || body);
+        const targetId = decodeURIComponent(playerRoute[1]);
+        const candidate = body.player || body;
+        if (Object.hasOwn(candidate, "username") || Object.hasOwn(candidate, "pin")) return sendJson(res, 403, { ok: false, error: "Use a private player reset link so the player can choose their own username and PIN" });
+        const player = playerDatabase.update(targetId, candidate);
         recordSystemAudit(adminIdentity.name, "PLAYER_UPDATE", `Updated saved player ${player.name}`);
         return sendJson(res, 200, { player });
       }
@@ -585,6 +741,22 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (req.method === "POST" && url.pathname === "/api/guest-accounts") {
+    const adminIdentity = authenticateAdminRequest(req);
+    if (!adminIdentity) return sendJson(res, 401, { ok: false, error: "Admin sign-in required" });
+    try {
+      const body = await readBody(req);
+      const player = state.players.find((item) => item.id === String(body.activePlayerId || "") && item.isGuest);
+      if (!player) return sendJson(res, 404, { ok: false, error: "Active guest not found" });
+      if (accountUsernameInUse(body.username)) return sendJson(res, 409, { ok: false, error: "That username is already in use" });
+      const account = playerDatabase.createGuestAccount(state.roundId, player.id, player.name, { username: body.username, pin: body.pin });
+      recordSystemAudit(adminIdentity.name, "GUEST_LOGIN", `Created temporary login for ${player.name}`);
+      return sendJson(res, 201, { account });
+    } catch (error) {
+      return sendJson(res, /already in use/.test(error.message) ? 409 : 400, { ok: false, error: error.message });
+    }
+  }
+
   if (req.method === "GET" && url.pathname === "/api/events") {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -594,8 +766,12 @@ const server = http.createServer(async (req, res) => {
     });
     const requestedGroup = String(url.searchParams.get("group") || "").toUpperCase();
     const token = String(url.searchParams.get("token") || "");
-    const scorer = url.searchParams.get("scorer") === "1" && scoringTokenMatches(requestedGroup, token);
-    clients.set(res, { group: scorer ? requestedGroup : "", scorer, token });
+    const account = playerDatabase.findAccount(String(url.searchParams.get("account") || ""));
+    const activeAccountPlayer = activePlayerForAccount(sessionAccount(account, "player"));
+    const accountScorekeeper = Boolean(activeAccountPlayer && state.settings.scorekeepers[activeAccountPlayer.group] === activeAccountPlayer.id);
+    const legacyScorer = url.searchParams.get("scorer") === "1" && scoringTokenMatches(requestedGroup, token);
+    const scorer = accountScorekeeper || legacyScorer;
+    clients.set(res, { group: accountScorekeeper ? activeAccountPlayer.group : legacyScorer ? requestedGroup : "", scorer, token, accountId: account?.id || "" });
     res.write(`event: state\ndata: ${JSON.stringify(state)}\n\n`);
     res.write(`event: presence\ndata: ${JSON.stringify(presencePayload())}\n\n`);
     broadcastPresence();
@@ -609,18 +785,31 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && url.pathname === "/api/action") {
     try {
       const action = await readBody(req);
-      const adminIdentity = authenticateAdmin(req.headers["x-admin-pin"]);
+      const sessionIdentity = requestSession(req);
+      const adminIdentity = sessionIdentity?.role === "admin" ? sessionIdentity : authenticateAdmin(req.headers["x-admin-pin"]);
       const adminAuthorized = Boolean(adminIdentity);
       const adminOverride = req.headers["x-admin-override"] === "1" && adminAuthorized;
       const scoringGroup = String(req.headers["x-scoring-group"] || "").toUpperCase();
-      const scorerAuthorized = scoringTokenMatches(scoringGroup, req.headers["x-scoring-token"]);
+      const actorPlayer = activePlayerForAccount(sessionIdentity);
+      const assignedScorekeeper = actorPlayer && actorPlayer.group === scoringGroup && state.settings.scorekeepers[scoringGroup] === actorPlayer.id;
+      const legacyScorerAuthorized = scoringTokenMatches(scoringGroup, req.headers["x-scoring-token"]);
+      const scorerAuthorized = Boolean(assignedScorekeeper || legacyScorerAuthorized);
 
-      if (Round.isAdminAction(action.type) && !adminAuthorized) return sendJson(res, 401, { ok: false, error: "Admin PIN required" });
+      if (Round.isAdminAction(action.type) && !adminAuthorized) return sendJson(res, 401, { ok: false, error: "Admin sign-in required" });
       if (state.settings.locked && !["SET_LOCKED", "CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type)) return sendJson(res, 423, { ok: false, error: "This round is finalized and locked" });
       const duplicatePlayer = duplicateActivePlayer(action);
       if (duplicatePlayer) return sendJson(res, 409, { ok: false, error: `${duplicatePlayer.name.trim() || "That player"} is already active in Group ${duplicatePlayer.group}` });
       if (Round.isScoringAction(action.type) && !adminOverride && (!scorerAuthorized || !scoringGroupAllowed(action, scoringGroup))) {
-        return sendJson(res, 403, { ok: false, error: "A current group scorekeeper link or admin access is required" });
+        return sendJson(res, 403, { ok: false, error: "Sign in as this group's scorekeeper or as an admin to enter scores" });
+      }
+      if (Round.ACCESS_ACTIONS.has(action.type)) {
+        const group = String(action.payload?.group || "").toUpperCase();
+        const targetPlayerId = String(action.payload?.playerId || "");
+        const currentScorekeeperId = String(state.settings.scorekeepers[group] || "");
+        const targetIsInGroup = !targetPlayerId || state.players.some((player) => player.id === targetPlayerId && player.group === group);
+        const groupMemberMayAssign = actorPlayer?.group === group && (!currentScorekeeperId || currentScorekeeperId === actorPlayer.id);
+        if (!Round.GROUPS.includes(group) || !targetIsInGroup) return sendJson(res, 400, { ok: false, error: "Choose a player from that group" });
+        if (!adminAuthorized && !groupMemberMayAssign) return sendJson(res, 403, { ok: false, error: currentScorekeeperId ? "Only the current scorekeeper or an admin can change this selection" : "Only a signed-in member of this group can choose its scorekeeper" });
       }
 
       if (action.type === "SET_SCORE") {
@@ -648,12 +837,16 @@ const server = http.createServer(async (req, res) => {
         payload: action.payload || {},
         meta: {
           at: new Date().toISOString(),
-          actor: Round.isAdminAction(action.type) || adminOverride ? adminIdentity.name : `Group ${scoringGroup} scorer`,
+          actor: Round.isAdminAction(action.type) || adminOverride || (Round.ACCESS_ACTIONS.has(action.type) && adminIdentity) ? adminIdentity.name : sessionIdentity?.name || `Group ${scoringGroup} scorer`,
           group: scoringGroup
         }
       };
+      const removedGuest = action.type === "REMOVE_PLAYER" ? state.players.find((player) => player.id === action.payload?.playerId && player.isGuest) : null;
+      const previousRoundId = state.roundId;
       if (DESTRUCTIVE_ACTIONS.has(action.type)) createSnapshot(`before-${action.type.toLowerCase().replaceAll("_", "-")}`);
       state = Round.applyAction(state, serverAction);
+      if (removedGuest) playerDatabase.removeGuestAccount(state.roundId, removedGuest.id);
+      if (["CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type) && state.roundId !== previousRoundId) playerDatabase.removeGuestAccountsForRound(previousRoundId);
       persist();
       broadcast();
       broadcastPresence();

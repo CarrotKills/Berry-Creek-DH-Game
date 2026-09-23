@@ -7,6 +7,7 @@ let scoreTokens = {};
 let adminPin = "2468";
 async function action(type, payload = {}, options = {}) {
   const headers = { "Content-Type": "application/json", "X-Scoring-Group": options.group || "A" };
+  if (options.authToken) headers.Authorization = `Bearer ${options.authToken}`;
   if (R.isAdminAction(type) || options.admin) {
     headers["X-Admin-Pin"] = options.pin || adminPin;
     headers["X-Admin-Override"] = "1";
@@ -34,9 +35,18 @@ async function adminRequest(path = "", options = {}) {
   return response.json();
 }
 
+async function createPlayerLogin(playerId, username, pin) {
+  const invitationResponse = await fetch(`${base}/api/player-invitations`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ playerId, hours: 24 }) });
+  assert.equal(invitationResponse.status, 201);
+  const invitation = (await invitationResponse.json()).invitation;
+  const acceptResponse = await fetch(`${base}/api/player-invitations/accept`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: invitation.token, username, pin }) });
+  assert.equal(acceptResponse.status, 201);
+  return { invitation, accepted: await acceptResponse.json() };
+}
+
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.10.8");
+  assert.equal(config.appVersion, "9.11.1");
   assert.equal(config.adminSetupRequired, true);
   const scorecardExportAsset = await fetch(`${base}/scorecard-export.js`);
   assert.equal(scorecardExportAsset.status, 200);
@@ -47,7 +57,7 @@ async function adminRequest(path = "", options = {}) {
   const rightPin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "2468" }) });
   assert.equal(rightPin.status, 200);
   assert.equal((await rightPin.json()).admin.bootstrap, true);
-  const firstAdmin = await adminRequest("", { method: "POST", status: 201, pin: "2468", body: { name: "Alice Admin", pin: "1357" } });
+  const firstAdmin = await adminRequest("", { method: "POST", status: 201, pin: "2468", body: { name: "Alice Admin", username: "alice.admin", pin: "1357" } });
   assert.equal(firstAdmin.admin.name, "Alice Admin");
   adminPin = "1357";
   const disabledSetupPin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "2468" }) });
@@ -55,6 +65,11 @@ async function adminRequest(path = "", options = {}) {
   const aliceLogin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: adminPin }) });
   assert.equal(aliceLogin.status, 200);
   assert.equal((await aliceLogin.json()).admin.name, "Alice Admin");
+  const accountLogin = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "alice.admin", pin: adminPin }) });
+  assert.equal(accountLogin.status, 200);
+  const adminSession = await accountLogin.json();
+  assert.equal(adminSession.account.role, "admin");
+  assert.equal((await fetch(`${base}/api/auth/session`, { headers: { Authorization: `Bearer ${adminSession.token}` } })).status, 200);
   const adminList = await adminRequest();
   assert.equal(adminList.admins.length, 1);
   assert.equal(Object.hasOwn(adminList.admins[0], "pin_hash"), false);
@@ -62,7 +77,7 @@ async function adminRequest(path = "", options = {}) {
   const inviteResponse = await fetch(`${base}/api/admin-invitations`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ hours: 24 }) });
   assert.equal(inviteResponse.status, 201);
   const invitation = (await inviteResponse.json()).invitation;
-  const acceptInvite = await fetch(`${base}/api/admin-invitations/accept`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: invitation.token, name: "Bob Admin", pin: "8642" }) });
+  const acceptInvite = await fetch(`${base}/api/admin-invitations/accept`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: invitation.token, name: "Bob Admin", username: "bob.admin", pin: "8642" }) });
   assert.equal(acceptInvite.status, 201);
   const reuseInvite = await fetch(`${base}/api/admin-invitations/accept`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: invitation.token, name: "Reuse", pin: "1111" }) });
   assert.equal(reuseInvite.status, 410);
@@ -95,6 +110,22 @@ async function adminRequest(path = "", options = {}) {
   assert.equal(unauthorizedReadiness.status, 401);
   const createdSaved = await playerRequest("", { method: "POST", status: 201, body: { name: "Saved Golfer", ghin: 15.2, teeKey: "championship" } });
   assert.equal(createdSaved.player.ghin, 15.2);
+  assert.equal(createdSaved.player.loginConfigured, false);
+  await playerRequest("", { method: "POST", status: 403, body: { name: "Admin-Credential Attempt", username: "not.allowed", pin: "1234", ghin: 5 } });
+  const savedLogin = await createPlayerLogin(createdSaved.player.id, "saved.golfer", "97531");
+  assert.equal(savedLogin.accepted.account.playerId, createdSaved.player.id);
+  assert.equal(savedLogin.accepted.wasReset, false);
+  await playerRequest(`/${createdSaved.player.id}`, { method: "PUT", status: 403, body: { pin: "1111" } });
+  const reusedPlayerInvite = await fetch(`${base}/api/player-invitations/accept`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: savedLogin.invitation.token, username: "saved.again", pin: "97531" }) });
+  assert.equal(reusedPlayerInvite.status, 410);
+  const resetLogin = await createPlayerLogin(createdSaved.player.id, "saved.golfer", "86420");
+  assert.equal(resetLogin.accepted.wasReset, true);
+  const invalidatedPlayerSession = await fetch(`${base}/api/auth/session`, { headers: { Authorization: `Bearer ${savedLogin.accepted.token}` } });
+  assert.equal(invalidatedPlayerSession.status, 401);
+  const oldSavedLogin = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "saved.golfer", pin: "97531" }) });
+  assert.equal(oldSavedLogin.status, 401);
+  const currentSavedLogin = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "saved.golfer", pin: "86420" }) });
+  assert.equal(currentSavedLogin.status, 200);
   const listedSaved = await playerRequest();
   assert.equal(listedSaved.players.some((player) => player.id === createdSaved.player.id), true);
   const updatedSaved = await playerRequest(`/${createdSaved.player.id}`, { method: "PUT", body: { ghin: 13.7 } });
@@ -122,19 +153,32 @@ async function adminRequest(path = "", options = {}) {
   const currentTokenResponse = await fetch(`${base}/api/share-tokens`, { headers: { "X-Admin-Pin": adminPin } });
   scoreTokens = (await currentTokenResponse.json()).tokens;
   assert.notEqual(scoreTokens.A, priorTokens.A);
+  const scoringSaved = await playerRequest("", { method: "POST", status: 201, body: { name: "Live A", ghin: 10, teeKey: "championship" } });
+  const groupBScorerSaved = await playerRequest("", { method: "POST", status: 201, body: { name: "Live B", ghin: 18, teeKey: "member" } });
+  await createPlayerLogin(scoringSaved.player.id, "live.a", "123456");
+  await createPlayerLogin(groupBScorerSaved.player.id, "live.b", "654321");
   const streamResponse = await fetch(`${base}/api/events`);
   assert.equal(streamResponse.status, 200);
   const reader = streamResponse.body.getReader();
   await reader.read();
 
   await Promise.all([
-    action("ADD_PLAYER", { player: { id: "live-a", directoryId: "saved-live-a", name: "Live A", group: "A", teeKey: "championship", ghin: 10 } }),
-    action("ADD_PLAYER", { player: { id: "live-b", name: "Live B", group: "B", teeKey: "member", ghin: 18 } })
+    action("ADD_PLAYER", { player: { id: "live-a", directoryId: scoringSaved.player.id, name: "Live A", group: "A", teeKey: "championship", ghin: 10 } }),
+    action("ADD_PLAYER", { player: { id: "live-b", directoryId: groupBScorerSaved.player.id, name: "Live B", group: "B", teeKey: "member", ghin: 18 } })
   ]);
-  await action("ADD_PLAYER", { player: { id: "live-a-duplicate", directoryId: "saved-live-a", name: "Live A duplicate", group: "C" } }, { status: 409 });
+  await action("ADD_PLAYER", { player: { id: "live-a-duplicate", directoryId: scoringSaved.player.id, name: "Live A duplicate", group: "C" } }, { status: 409 });
   const uniqueActiveState = await (await fetch(`${base}/api/state`)).json();
   assert.equal(uniqueActiveState.players.length, 2);
   assert.equal(uniqueActiveState.players.some((player) => player.id === "live-a-duplicate"), false);
+  const liveALogin = await (await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "live.a", pin: "123456" }) })).json();
+  const liveBLogin = await (await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "live.b", pin: "654321" }) })).json();
+  await action("SET_SCORE", { playerId: "live-a", holeIndex: 17, score: 4, expectedScore: "" }, { group: "A", authToken: liveALogin.token, noToken: true, status: 403 });
+  await action("SET_SCOREKEEPER", { group: "A", playerId: "live-a" }, { group: "A", authToken: liveALogin.token });
+  await action("SET_SCORE", { playerId: "live-a", holeIndex: 17, score: 4, expectedScore: "" }, { group: "A", authToken: liveALogin.token, noToken: true });
+  await action("SET_SCOREKEEPER", { group: "A", playerId: "live-a" }, { group: "A", authToken: liveBLogin.token, status: 403 });
+  await action("SET_SCOREKEEPER", { group: "B", playerId: "live-b" }, { group: "B", authToken: liveBLogin.token });
+  const adminReassign = await fetch(`${base}/api/action`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminSession.token}`, "X-Scoring-Group": "A" }, body: JSON.stringify({ type: "SET_SCOREKEEPER", payload: { group: "A", playerId: "live-a" } }) });
+  assert.equal(adminReassign.status, 200);
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4 }, { group: "A", token: priorTokens.A, status: 403 });
   await Promise.all([
     action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4, expectedScore: "" }, { group: "A" }),

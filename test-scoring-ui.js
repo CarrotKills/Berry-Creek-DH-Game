@@ -26,5 +26,9 @@ assert.match(app, /scorecard-segment-heading">Total/);
 assert.doesNotMatch(app, /Running total/);
 assert.match(app, /prevHoleBtn"\)\.addEventListener\("click", \(\) => moveToHole\([^\n]+skipMissingCheck: true/);
 assert.match(app, /playerId: player\.id, value: event\.target\.checked/);
+assert.match(app, /data-kind="scorekeeper"/);
+assert.match(app, /type: "SET_SCOREKEEPER"/);
+assert.doesNotMatch(app, /<span class="auto-tic">Sandy ✓<\/span>/);
+assert.match(html, /<h2>Sign in<\/h2>/);
 
 console.log("Scoring-page UI tests passed.");

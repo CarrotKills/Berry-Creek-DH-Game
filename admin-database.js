@@ -15,6 +15,17 @@ function normalizeName(value) {
   return name;
 }
 
+function normalizeUsername(value) {
+  const username = String(value || "").trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9._-]{2,29}$/.test(username)) throw new Error("Username must be 3 to 30 letters, numbers, dots, dashes, or underscores");
+  return username;
+}
+
+function suggestedUsername(name) {
+  const base = String(name || "admin").trim().toLowerCase().replace(/[^a-z0-9]+/g, ".").replace(/^\.|\.$/g, "").slice(0, 24);
+  return /^[a-z0-9]/.test(base) && base.length >= 3 ? base : `admin.${crypto.randomBytes(2).toString("hex")}`;
+}
+
 function normalizePin(value) {
   const pin = String(value || "").trim();
   if (!/^\d{4,10}$/.test(pin)) throw new Error("Admin PIN must contain 4 to 10 digits");
@@ -29,6 +40,7 @@ function publicAdmin(row) {
   return row ? {
     id: row.id,
     name: row.name,
+    username: row.username,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastLoginAt: row.last_login_at || ""
@@ -45,6 +57,7 @@ class AdminDatabase {
       CREATE TABLE IF NOT EXISTS admins (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
+        username TEXT,
         pin_salt TEXT NOT NULL,
         pin_hash TEXT NOT NULL,
         created_at TEXT NOT NULL,
@@ -63,12 +76,29 @@ class AdminDatabase {
       CREATE INDEX IF NOT EXISTS idx_admin_invitations_expires ON admin_invitations(expires_at);
       PRAGMA optimize;
     `);
-    this.listStatement = this.db.prepare("SELECT id, name, created_at, updated_at, last_login_at FROM admins ORDER BY name COLLATE NOCASE, created_at");
-    this.authRowsStatement = this.db.prepare("SELECT id, name, pin_salt, pin_hash, created_at, updated_at, last_login_at FROM admins ORDER BY created_at");
-    this.findStatement = this.db.prepare("SELECT id, name, created_at, updated_at, last_login_at FROM admins WHERE id = ?");
-    this.insertStatement = this.db.prepare("INSERT INTO admins (id, name, pin_salt, pin_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)");
-    this.updateNameStatement = this.db.prepare("UPDATE admins SET name = ?, updated_at = ? WHERE id = ?");
-    this.updatePinStatement = this.db.prepare("UPDATE admins SET name = ?, pin_salt = ?, pin_hash = ?, updated_at = ? WHERE id = ?");
+    if (!this.db.prepare("PRAGMA table_info(admins)").all().some((column) => column.name === "username")) this.db.exec("ALTER TABLE admins ADD COLUMN username TEXT");
+    const usedUsernames = new Set();
+    const legacyRows = this.db.prepare("SELECT id, name, username FROM admins ORDER BY created_at").all();
+    const migrateUsername = this.db.prepare("UPDATE admins SET username = ? WHERE id = ?");
+    legacyRows.forEach((row) => {
+      let username;
+      try { username = normalizeUsername(row.username); }
+      catch (_) { username = suggestedUsername(row.name); }
+      const base = username;
+      let suffix = 2;
+      while (usedUsernames.has(username)) username = `${base.slice(0, 27)}${suffix++}`;
+      usedUsernames.add(username);
+      if (row.username !== username) migrateUsername.run(username, row.id);
+    });
+    this.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_admins_username ON admins(username COLLATE NOCASE)");
+    this.listStatement = this.db.prepare("SELECT id, name, username, created_at, updated_at, last_login_at FROM admins ORDER BY name COLLATE NOCASE, created_at");
+    this.authRowsStatement = this.db.prepare("SELECT id, name, username, pin_salt, pin_hash, created_at, updated_at, last_login_at FROM admins ORDER BY created_at");
+    this.authCredentialsStatement = this.db.prepare("SELECT id, name, username, pin_salt, pin_hash, created_at, updated_at, last_login_at FROM admins WHERE username = ? COLLATE NOCASE");
+    this.findStatement = this.db.prepare("SELECT id, name, username, created_at, updated_at, last_login_at FROM admins WHERE id = ?");
+    this.findUsernameStatement = this.db.prepare("SELECT id, name, username, created_at, updated_at, last_login_at FROM admins WHERE username = ? COLLATE NOCASE");
+    this.insertStatement = this.db.prepare("INSERT INTO admins (id, name, username, pin_salt, pin_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    this.updateNameStatement = this.db.prepare("UPDATE admins SET name = ?, username = ?, updated_at = ? WHERE id = ?");
+    this.updatePinStatement = this.db.prepare("UPDATE admins SET name = ?, username = ?, pin_salt = ?, pin_hash = ?, updated_at = ? WHERE id = ?");
     this.loginStatement = this.db.prepare("UPDATE admins SET last_login_at = ? WHERE id = ?");
     this.deleteStatement = this.db.prepare("DELETE FROM admins WHERE id = ?");
     this.countStatement = this.db.prepare("SELECT COUNT(*) AS count FROM admins");
@@ -84,6 +114,11 @@ class AdminDatabase {
 
   find(id) { return publicAdmin(this.findStatement.get(String(id))); }
 
+  findByUsername(username) {
+    try { return publicAdmin(this.findUsernameStatement.get(normalizeUsername(username))); }
+    catch (_) { return null; }
+  }
+
   authenticate(value, ignoredId = "") {
     let pin;
     try { pin = normalizePin(value); }
@@ -98,15 +133,29 @@ class AdminDatabase {
     return matched;
   }
 
+  authenticateCredentials(usernameValue, pinValue) {
+    let username;
+    let pin;
+    try { username = normalizeUsername(usernameValue); pin = normalizePin(pinValue); }
+    catch (_) { return null; }
+    const row = this.authCredentialsStatement.get(username);
+    if (!row) return null;
+    const supplied = hashPin(pin, Buffer.from(row.pin_salt, "hex"));
+    const expected = Buffer.from(row.pin_hash, "hex");
+    return supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected) ? publicAdmin(row) : null;
+  }
+
   create(value) {
     if (this.count() >= MAX_ADMINS) throw new Error(`A maximum of ${MAX_ADMINS} admins may be saved`);
     const name = normalizeName(value?.name);
+    const username = normalizeUsername(value?.username || suggestedUsername(name));
+    if (this.findByUsername(username)) throw new Error("That username is already in use");
     const pin = normalizePin(value?.pin);
     if (this.authenticate(pin)) throw new Error("That PIN is already assigned to another admin");
     const id = crypto.randomUUID();
     const salt = crypto.randomBytes(16);
     const now = new Date().toISOString();
-    this.insertStatement.run(id, name, salt.toString("hex"), hashPin(pin, salt).toString("hex"), now, now);
+    this.insertStatement.run(id, name, username, salt.toString("hex"), hashPin(pin, salt).toString("hex"), now, now);
     return this.find(id);
   }
 
@@ -114,14 +163,17 @@ class AdminDatabase {
     const current = this.find(id);
     if (!current) throw new Error("Admin not found");
     const name = value?.name === undefined ? current.name : normalizeName(value.name);
+    const username = value?.username === undefined ? current.username : normalizeUsername(value.username);
+    const usernameOwner = this.findByUsername(username);
+    if (usernameOwner && usernameOwner.id !== String(id)) throw new Error("That username is already in use");
     const now = new Date().toISOString();
     if (value?.pin === undefined || value.pin === "") {
-      this.updateNameStatement.run(name, now, String(id));
+      this.updateNameStatement.run(name, username, now, String(id));
     } else {
       const pin = normalizePin(value.pin);
       if (this.authenticate(pin, String(id))) throw new Error("That PIN is already assigned to another admin");
       const salt = crypto.randomBytes(16);
-      this.updatePinStatement.run(name, salt.toString("hex"), hashPin(pin, salt).toString("hex"), now, String(id));
+      this.updatePinStatement.run(name, username, salt.toString("hex"), hashPin(pin, salt).toString("hex"), now, String(id));
     }
     return this.find(id);
   }
@@ -175,5 +227,6 @@ class AdminDatabase {
 }
 
 AdminDatabase.MAX_ADMINS = MAX_ADMINS;
+AdminDatabase.normalizeUsername = normalizeUsername;
 
 module.exports = AdminDatabase;

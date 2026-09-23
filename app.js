@@ -4,11 +4,11 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.10.8";
+  const APP_VERSION = "9.11.1";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
-  const ADMIN_PIN_KEY = "berry-creek-admin-pin";
+  const SESSION_KEY = "berry-creek-user-session-v1";
   const KP_HOLES = [2, 8, 12, 17];
   const LEADERBOARD_COLUMNS = [
     { key: "player", label: "Player", firstDirection: "asc", text: true },
@@ -36,6 +36,7 @@
   const spectatorMode = params.get("spectator") === "1";
   let state = loadLocal();
   let connectionMode = "connecting";
+  let groupWasChosen = params.has("group");
   let selectedGroup = R.GROUPS.includes(params.get("group")) ? params.get("group") : "A";
   let selectedHole = 1;
   let scorecardOpen = false;
@@ -47,11 +48,14 @@
   let eventSource;
   let serviceWorkerRegistration;
   let toastTimer;
-  let adminPin = sessionStorage.getItem(ADMIN_PIN_KEY) || "";
-  let adminUnlocked = Boolean(adminPin);
+  let authToken = localStorage.getItem(SESSION_KEY) || "";
+  let currentUser = null;
+  let adminUnlocked = false;
   let currentAdmin = null;
   let admins = [];
   let adminInviteLink = "";
+  let playerInviteLink = "";
+  let playerInvitePlayer = null;
   let savedPlayers = [];
   let savedRounds = [];
   let shareTokens = {};
@@ -82,6 +86,28 @@
     catch (_) { return { sound: true, autoAdvance: false, display: "normal" }; }
   }
   function savePreferences() { localStorage.setItem(PREFS_KEY, JSON.stringify(preferences)); }
+  function applyUserGroupDefault(force = false) {
+    if (groupWasChosen && !force) return;
+    const player = currentRoundPlayer();
+    selectedGroup = player?.group || "A";
+    const url = new URL(location.href);
+    url.searchParams.set("group", selectedGroup);
+    history.replaceState(null, "", url);
+  }
+
+  async function restoreSession() {
+    if (!authToken) return;
+    try {
+      const response = await fetch("/api/auth/session", { headers: { Authorization: `Bearer ${authToken}` }, cache: "no-store" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Sign-in expired");
+      currentUser = body.account;
+      adminUnlocked = currentUser?.role === "admin";
+      currentAdmin = adminUnlocked ? currentUser : null;
+    } catch (_) {
+      lockAdminControls();
+    }
+  }
   function loadQueue() {
     try { const value = JSON.parse(localStorage.getItem(QUEUE_KEY)); return Array.isArray(value) ? value : []; }
     catch (_) { return []; }
@@ -117,21 +143,33 @@
   function groupPlayers(group = selectedGroup) { return state.players.filter((player) => player.group === group); }
   function isLocked() { return Boolean(state.settings.locked); }
   function scorerLinkExpired() { return scorerLinkLocked && (!scorerToken || !scorerRoundId || scorerRoundId !== state.roundId); }
-  function canScore() { return !spectatorMode && !isLocked() && (adminUnlocked || (scorerLinkLocked && !scorerLinkExpired())); }
+  function currentRoundPlayer() {
+    if (currentUser?.role !== "player") return null;
+    if (currentUser.accountType === "guest") return currentUser.roundId === state.roundId ? state.players.find((player) => player.id === currentUser.activePlayerId) || null : null;
+    return state.players.find((player) => player.directoryId && player.directoryId === currentUser.playerId) || null;
+  }
+  function isSelectedGroupScorekeeper() {
+    const player = currentRoundPlayer();
+    return Boolean(player && player.group === selectedGroup && state.settings.scorekeepers[selectedGroup] === player.id);
+  }
+  function canScore() { return !spectatorMode && !isLocked() && (adminUnlocked || isSelectedGroupScorekeeper() || (scorerLinkLocked && !scorerLinkExpired())); }
   function scoreSyncKey(playerId, holeIndex) { return `${playerId}:${holeIndex}`; }
 
   function lockAdminControls() {
     adminUnlocked = false;
-    adminPin = "";
+    authToken = "";
+    currentUser = null;
     currentAdmin = null;
     admins = [];
     adminInviteLink = "";
+    playerInviteLink = "";
+    playerInvitePlayer = null;
     savedPlayers = [];
     savedRounds = [];
     shareTokens = {};
     readinessData = null;
     playerEntryMode = "";
-    sessionStorage.removeItem(ADMIN_PIN_KEY);
+    localStorage.removeItem(SESSION_KEY);
   }
 
   function setScoreSyncStatus(playerId, holeIndex, status) {
@@ -175,15 +213,15 @@
     return {
       type: action.type,
       payload: action.payload || {},
-      meta: { at: new Date().toISOString(), actor: admin ? (currentAdmin?.name || "Admin") : `Group ${selectedGroup} scorer`, group: selectedGroup }
+      meta: { at: new Date().toISOString(), actor: currentUser?.name || (admin ? (currentAdmin?.name || "Admin") : `Group ${selectedGroup} scorer`), group: selectedGroup }
     };
   }
 
   async function postAction(action, admin) {
     const headers = { "Content-Type": "application/json", "X-Scoring-Group": selectedGroup };
+    if (authToken) headers.Authorization = `Bearer ${authToken}`;
     const adminOverride = admin || (adminUnlocked && !scorerLinkLocked && R.isScoringAction(action.type));
     if (adminOverride) {
-      headers["X-Admin-Pin"] = adminPin;
       headers["X-Admin-Override"] = "1";
     } else if (scorerLinkLocked && scorerToken) {
       headers["X-Scoring-Token"] = scorerToken;
@@ -201,7 +239,7 @@
 
   async function databaseRequest(path, options = {}) {
     if (!adminUnlocked) throw new Error("Admin access is required");
-    const headers = { ...(options.headers || {}), "X-Admin-Pin": adminPin };
+    const headers = { ...(options.headers || {}), Authorization: `Bearer ${authToken}` };
     if (options.body) headers["Content-Type"] = "application/json";
     const response = await fetch(path, { ...options, headers });
     const body = await response.json().catch(() => ({}));
@@ -410,6 +448,7 @@
   async function dispatch(action, options = {}) {
     const admin = options.admin ?? R.isAdminAction(action.type);
     if (spectatorMode) { showToast("This leaderboard link is view only.", "error"); return false; }
+    if (R.ACCESS_ACTIONS.has(action.type) && !currentUser) { openAdminDialog(); showToast("Sign in to choose a group scorekeeper.", "error"); return false; }
     if (isLocked() && !["SET_LOCKED", "CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type)) { showToast("The round is finalized and locked.", "error"); return false; }
     if (admin && !adminUnlocked) {
       openAdminDialog();
@@ -482,12 +521,16 @@
     if (!location.protocol.startsWith("http")) { setConnection("offline"); return; }
     setConnection(connectionMode === "live" ? "live" : "connecting");
     try {
+      await restoreSession();
       await refreshState();
+      applyUserGroupDefault(Boolean(currentUser && !scorerLinkLocked));
+      render();
       setConnection("live");
       await flushQueue();
       await loadAdminData();
       eventSource?.close();
       const eventUrl = new URL("/api/events", location.origin);
+      if (currentUser?.role === "player") eventUrl.searchParams.set("account", currentUser.id);
       if (scorerLinkLocked) {
         eventUrl.searchParams.set("scorer", "1");
         eventUrl.searchParams.set("group", selectedGroup);
@@ -495,7 +538,9 @@
       }
       eventSource = new EventSource(eventUrl);
       eventSource.addEventListener("state", (event) => {
+        const previousRoundId = state.roundId;
         state = R.normalizeState(JSON.parse(event.data));
+        if (state.roundId !== previousRoundId) { groupWasChosen = false; applyUserGroupDefault(true); }
         saveLocal();
         setConnection("live");
         render();
@@ -540,12 +585,14 @@
     renderPlayerEntryPanels();
   }
 
-  function addGuest(event) {
+  async function addGuest(event) {
     event.preventDefault();
     if (state.players.length >= R.MAX_PLAYERS) return showValidation("Maximum of 30 players reached.");
     const name = $("#guestPlayerName").value.trim();
     const handicapText = $("#guestPlayerGhin").value.trim();
     const group = $("#guestPlayerGroup").value;
+    const username = $("#guestPlayerUsername").value.trim();
+    const pin = $("#guestPlayerPin").value.trim();
     if (!name) return showToast("Enter the guest's name.", "error");
     if (!handicapText || !Number.isFinite(Number(handicapText))) return showToast("Enter the guest's Handicap Index, such as 12.4 or +4.2.", "error");
     if (!R.GROUPS.includes(group) || groupPlayers(group).length >= R.MAX_GROUP_SIZE) return showValidation(`Group ${group} already has five players.`);
@@ -558,15 +605,22 @@
       teeKey: $("#guestPlayerTee").value,
       group
     });
-    dispatch({ type: "ADD_PLAYER", payload: { player } }).then((accepted) => {
-      if (!accepted) return;
+    const accepted = await dispatch({ type: "ADD_PLAYER", payload: { player } });
+    if (!accepted) return;
+    try {
+      await databaseRequest("/api/guest-accounts", { method: "POST", body: JSON.stringify({ activePlayerId: player.id, username, pin }) });
       $("#guestPlayerName").value = "";
       $("#guestPlayerGhin").value = "";
+      $("#guestPlayerUsername").value = "";
+      $("#guestPlayerPin").value = "";
       playerEntryMode = "";
       render();
       renderDraftHandicaps();
-      showToast(`${name} added to Group ${group} as an independent guest.`, "success");
-    });
+      showToast(`${name} added to Group ${group} with a temporary login.`, "success");
+    } catch (error) {
+      await dispatch({ type: "REMOVE_PLAYER", payload: { playerId: player.id } });
+      showToast(`${error.message} The guest was not added.`, "error");
+    }
   }
   function showValidation(message) { const el = $("#playerLimit"); el.textContent = message; el.hidden = false; }
 
@@ -607,7 +661,7 @@
     search.disabled = !adminUnlocked || connectionMode !== "live";
     search.value = savedPlayerSearch;
     if (!adminUnlocked) {
-      status.textContent = "Unlock admin controls to view saved players.";
+      status.textContent = "Sign in as an admin to view saved players and manage their logins.";
       return;
     }
     if (connectionMode !== "live") {
@@ -637,12 +691,14 @@
       const row = document.createElement("article");
       row.className = "saved-player-row";
       row.dataset.savedPlayerId = saved.id;
+      const loginDetail = saved.loginConfigured ? (saved.lastLoginAt ? `Last signed in ${new Date(saved.lastLoginAt).toLocaleString()}` : "Login created · Has not signed in yet") : "Setup link not yet accepted";
       row.innerHTML = `<label class="saved-player-name">Name<input class="saved-name" type="text" maxlength="40" value="${esc(saved.name)}" ${canEdit ? "" : "disabled"}></label>
         <div class="handicap-field"><span class="field-label">GHIN Index</span><div class="handicap-input-row"><input class="saved-ghin" type="text" maxlength="6" inputmode="decimal" value="${displayIndex(saved.ghin)}" placeholder="12.4" aria-label="GHIN Index for ${esc(saved.name)}" ${canEdit ? "" : "disabled"}><button class="saved-ghin-plus plus-handicap-toggle" type="button" aria-pressed="false" aria-label="Mark ${esc(saved.name)} as plus handicap" ${canEdit ? "" : "disabled"}><span aria-hidden="true">+</span><span class="plus-label">HCP</span></button></div></div>
         <div class="playing-hcp form-hcp"><span>HDCP</span><strong>${displayPlayingHandicap(hcpForValues(saved.ghin, saved.teeKey))}</strong></div>
         <label>Tee<select class="saved-tee" ${canEdit ? "" : "disabled"}>${teeOptions(saved.teeKey)}</select></label>
+        <div class="player-login-status"><span class="field-label">Player login</span><strong>${saved.loginConfigured ? esc(saved.username) : "Not configured"}</strong><small>${esc(loginDetail)}</small></div>
         <label>Add to<select class="saved-group" ${addDisabled ? "disabled" : ""}>${savedGroupOptions(selected)}</select></label>
-        <div class="saved-player-actions"><button class="button button-primary add-saved-player" type="button" ${addDisabled ? "disabled" : ""}>${activePlayer ? `In Group ${activePlayer.group}` : "Add to group"}</button><button class="button button-quiet delete-saved-player" type="button" ${canEdit ? "" : "disabled"}>Delete</button></div>`;
+        <div class="saved-player-actions"><button class="button button-quiet create-player-invite" type="button" ${canEdit ? "" : "disabled"}>${saved.loginConfigured ? "Create reset link" : "Create login link"}</button><button class="button button-primary add-saved-player" type="button" ${addDisabled ? "disabled" : ""}>${activePlayer ? `In Group ${activePlayer.group}` : "Add to group"}</button><button class="button button-quiet delete-saved-player" type="button" ${canEdit ? "" : "disabled"}>Delete</button></div>`;
       const name = row.querySelector(".saved-name");
       const ghin = row.querySelector(".saved-ghin");
       const plusHandicap = row.querySelector(".saved-ghin-plus");
@@ -656,6 +712,7 @@
       plusHandicap.addEventListener("click", () => { togglePlusHandicapInput(ghin, plusHandicap); updateSavedPlayer(saved.id, { ghin: E.parseHandicapInput(ghin.value) }); });
       tee.addEventListener("change", () => { handicap.textContent = displayPlayingHandicap(hcpForValues(ghin.value, tee.value)); updateSavedPlayer(saved.id, { teeKey: tee.value }); });
       group.addEventListener("change", () => savedPlayerGroupSelections.set(saved.id, group.value));
+      row.querySelector(".create-player-invite").addEventListener("click", () => createPlayerInvitation(saved.id));
       row.querySelector(".add-saved-player").addEventListener("click", () => addSavedPlayerToRound(saved.id, group.value));
       row.querySelector(".delete-saved-player").addEventListener("click", () => deleteSavedPlayer(saved.id));
       list.append(row);
@@ -676,9 +733,29 @@
       $("#savedPlayerGhin").value = "0.0";
       playerEntryMode = "";
       render();
-      showToast(`${body.player.name} saved to the player database.`, "success");
+      await createPlayerInvitation(body.player.id, { newlySaved: true });
     } catch (error) {
       showToast(error.message, "error");
+    }
+  }
+
+  async function createPlayerInvitation(playerId, options = {}) {
+    const saved = savedPlayers.find((player) => player.id === playerId);
+    if (!saved) return;
+    if (location.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(location.hostname)) return showToast("Open the hosted HTTPS app before creating a private player link.", "error");
+    try {
+      const body = await databaseRequest("/api/player-invitations", { method: "POST", body: JSON.stringify({ playerId, hours: 24 }) });
+      const url = new URL(location.origin + location.pathname);
+      url.hash = `player-invite=${body.invitation.token}`;
+      playerInviteLink = url.toString();
+      playerInvitePlayer = saved;
+      $("#playerInviteLinkTitle").textContent = body.invitation.resetsExistingLogin ? `Reset ${saved.name}'s login` : `Set up ${saved.name}'s login`;
+      $("#playerInviteUrl").value = playerInviteLink;
+      $("#playerInviteExpiry").textContent = `Single-use link · Expires ${new Date(body.invitation.expiresAt).toLocaleString()}${body.invitation.resetsExistingLogin ? " · Current login works until this link is accepted" : ""}`;
+      $("#playerInviteLinkDialog").showModal();
+      showToast(options.newlySaved ? `${saved.name} was saved and their private setup link is ready.` : `Private ${saved.loginConfigured ? "reset" : "setup"} link created for ${saved.name}.`, "success");
+    } catch (error) {
+      showToast(options.newlySaved ? `${saved.name} was saved, but the private setup link could not be created: ${error.message}` : error.message, "error");
     }
   }
 
@@ -776,10 +853,18 @@
     select.innerHTML = R.GROUPS.map((group) => `<option value="${group}" ${group === selectedGroup ? "selected" : ""}>Group ${group} · ${groupPlayers(group).length} player${groupPlayers(group).length === 1 ? "" : "s"}</option>`).join("");
     select.disabled = scorerLinkLocked;
     const notice = $("#scorerLinkNotice");
-    notice.hidden = adminUnlocked && !scorerLinkLocked;
-    if (scorerLinkLocked && !scorerLinkExpired()) notice.textContent = `This protected scorekeeper link is assigned to Group ${selectedGroup}.`;
-    else if (scorerLinkLocked) notice.textContent = "This scoring link has expired. Ask the admin for the current round's group link.";
-    else notice.textContent = "Unlock admin controls or open a protected group scorekeeper link to enter scores.";
+    notice.hidden = false;
+    const selectedScorekeeper = state.players.find((player) => player.id === state.settings.scorekeepers[selectedGroup]);
+    const signedInPlayer = currentRoundPlayer();
+    if (scorerLinkLocked && !scorerLinkExpired()) notice.textContent = `This legacy scoring link is assigned to Group ${selectedGroup}.`;
+    else if (scorerLinkLocked) notice.textContent = "This legacy scoring link has expired. Open the normal website and sign in.";
+    else if (adminUnlocked) notice.textContent = selectedScorekeeper ? `Group ${selectedGroup} scorekeeper: ${nameOf(selectedScorekeeper, 0)}. Admin scoring access is active.` : `Group ${selectedGroup} has no scorekeeper yet. As an admin, you may select one below or enter scores directly.`;
+    else if (!currentUser) notice.textContent = selectedScorekeeper ? `Viewing Group ${selectedGroup}. ${nameOf(selectedScorekeeper, 0)} is the scorekeeper. Sign in to use your player access.` : `Viewing Group ${selectedGroup}. No scorekeeper is assigned; a player in this group may sign in and choose one.`;
+    else if (!signedInPlayer) notice.textContent = `Signed in as ${currentUser.name}, but you are not assigned to the active round. You may browse every group.`;
+    else if (signedInPlayer.group !== selectedGroup) notice.textContent = `Viewing Group ${selectedGroup}. Your group is Group ${signedInPlayer.group}; you may browse both groups.`;
+    else if (isSelectedGroupScorekeeper()) notice.textContent = `You are the Group ${selectedGroup} scorekeeper. Scoring controls are active.`;
+    else if (selectedScorekeeper) notice.textContent = `${nameOf(selectedScorekeeper, 0)} is the Group ${selectedGroup} scorekeeper. You may browse the scorecard.`;
+    else notice.textContent = `Group ${selectedGroup} has no scorekeeper. Select SK beside a group member to assign one.`;
     const holes = $("#holeSelect");
     if (!holes.options.length) holes.innerHTML = E.COURSE.holes.map((hole) => `<option value="${hole.number}">Hole ${hole.number}</option>`).join("");
     holes.value = selectedHole;
@@ -878,7 +963,7 @@
   }
 
   async function setScore(playerId, score) {
-    if (!canScore()) return showToast(isLocked() ? "The round is finalized and locked." : scorerLinkExpired() ? "This scorekeeper link has expired. Ask the admin for a new link." : "A current scorekeeper link or admin access is required.", "error");
+    if (!canScore()) return showToast(isLocked() ? "The round is finalized and locked." : scorerLinkExpired() ? "This legacy scorekeeper link has expired." : currentUser ? "Only this group's selected scorekeeper or an admin can enter scores." : "Sign in as the selected scorekeeper or an admin to enter scores.", "error");
     const player = state.players.find((item) => item.id === playerId);
     const holeIndex = selectedHole - 1;
     const par = E.COURSE.holes[holeIndex].par;
@@ -925,7 +1010,6 @@
       const strokes = E.strokesForHole(hcp(player), hole.strokeIndex);
       const net = E.netScore(gross, strokes);
       const achievement = competitive ? (E.isEagle(gross, hole.par) ? "Eagle" : E.isBirdie(gross, hole.par) ? "Birdie" : Number(gross) > 0 && Number(gross) <= hole.par - 3 ? "Albatross" : "") : "";
-      const sandy = competitive && player.sandies[index] && Number(gross) >= 1 && Number(gross) <= hole.par;
       const canMarkSandy = competitive && Number(gross) >= 1 && Number(gross) <= hole.par;
       const isKpHole = competitive && KP_HOLES.includes(selectedHole);
       const hasKp = (state.settings.kpClaims[String(selectedHole)] || []).includes(player.id);
@@ -939,11 +1023,14 @@
       const kpDisabled = disabled || player.sandies[index] ? "disabled" : "";
       const syncState = scoreSyncStatus.get(scoreSyncKey(player.id, index));
       const syncLabel = { saving: "Saving…", pending: "Waiting to sync", synced: "Saved", error: "Sync problem" }[syncState] || "";
+      const scorekeeperId = state.settings.scorekeepers[selectedGroup] || "";
+      const signedInPlayer = currentRoundPlayer();
+      const canChangeScorekeeper = adminUnlocked || (signedInPlayer?.group === selectedGroup && (!scorekeeperId || scorekeeperId === signedInPlayer.id));
       return `<article class="group-score-card ${competitive ? "" : "is-score-only"}" data-player-id="${player.id}">
-        <div class="score-player"><strong>${playerNameHtml(player, state.players.indexOf(player))}</strong><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${strokes > 0 ? `gets ${strokes}` : strokes < 0 ? `gives ${Math.abs(strokes)}` : "no stroke"}</span>${competitive ? "" : '<span class="score-only-note">Not in the game · score only</span>'}</div>
+        <div class="score-player"><div class="score-player-heading"><label class="scorekeeper-toggle" title="Group scorekeeper"><input data-kind="scorekeeper" type="checkbox" ${scorekeeperId === player.id ? "checked" : ""} ${canChangeScorekeeper ? "" : "disabled"}>SK</label><strong>${playerNameHtml(player, state.players.indexOf(player))}</strong></div><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${strokes > 0 ? `gets ${strokes}` : strokes < 0 ? `gives ${Math.abs(strokes)}` : "no stroke"}</span>${competitive ? "" : '<span class="score-only-note">Not in the game · score only</span>'}</div>
         <div class="score-entry-wrap"><div class="score-stepper"><button type="button" data-delta="-1" ${disabled} aria-label="Decrease score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" ${disabled} aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" ${disabled} aria-label="Increase score">+</button></div>${syncLabel ? `<span class="score-sync score-sync--${syncState}" role="status">${syncLabel}</span>` : ""}</div>
         <div class="net-box"><span>Net</span><strong>${net ?? "—"}</strong></div>
-        <div class="card-tics">${achievement ? `<span class="auto-tic">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle" title="${hasKp ? "Remove KP before marking a Sandy" : "Mark Sandy"}"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${sandyDisabled}>Sandy</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle" title="${player.sandies[index] ? "Remove Sandy before marking KP" : "Mark KP"}"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${kpDisabled}>KP</label>` : ""}${kpNote}${sandy ? '<span class="auto-tic">Sandy ✓</span>' : ""}</div>
+        <div class="card-tics">${achievement ? `<span class="auto-tic">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle" title="${hasKp ? "Remove KP before marking a Sandy" : "Mark Sandy"}"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${sandyDisabled}>Sandy</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle" title="${player.sandies[index] ? "Remove Sandy before marking KP" : "Mark KP"}"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${kpDisabled}>KP</label>` : ""}${kpNote}</div>
       </article>`;
     }).join("");
     list.querySelectorAll(".group-score-card").forEach((card) => {
@@ -953,6 +1040,7 @@
       card.querySelectorAll("[data-delta]").forEach((button) => button.addEventListener("click", () => setScore(player.id, E.steppedScore(player.scores[selectedHole - 1], E.COURSE.holes[selectedHole - 1].par, Number(button.dataset.delta)))));
       card.querySelector('[data-kind="sandy"]')?.addEventListener("change", (event) => dispatch({ type: "SET_SANDY", payload: { playerId: player.id, holeIndex: selectedHole - 1, value: event.target.checked } }));
       card.querySelector('[data-kind="kp"]')?.addEventListener("change", (event) => dispatch({ type: "SET_KP", payload: { hole: selectedHole, playerId: player.id, value: event.target.checked } }));
+      card.querySelector('[data-kind="scorekeeper"]')?.addEventListener("change", (event) => dispatch({ type: "SET_SCOREKEEPER", payload: { group: selectedGroup, playerId: event.target.checked ? player.id : "" } }));
     });
     $("#noGroupPlayers").hidden = players.length > 0;
     list.hidden = players.length === 0;
@@ -1200,7 +1288,7 @@
     const list = $("#savedRoundsList");
     if (!status || !list) return;
     if (!adminUnlocked) {
-      status.textContent = "Unlock admin controls to save or view historical rounds.";
+      status.textContent = "Sign in as an admin to save or view historical rounds.";
       list.replaceChildren();
       return;
     }
@@ -1367,7 +1455,7 @@
     const list = $("#readinessList");
     if (!status || !list) return;
     if (!adminUnlocked) {
-      status.textContent = "Unlock admin controls to run the readiness checks.";
+      status.textContent = "Sign in as an admin to run the readiness checks.";
       list.innerHTML = "";
       return;
     }
@@ -1409,7 +1497,7 @@
     const inviteResult = $("#adminInviteResult");
     if (!status || !list) return;
     if (!adminUnlocked) {
-      status.textContent = "Unlock admin controls to manage administrators.";
+      status.textContent = "Sign in as an admin to manage administrators.";
       setupForm.hidden = true;
       inviteControls.hidden = true;
       list.innerHTML = "";
@@ -1435,7 +1523,7 @@
     list.innerHTML = admins.length ? admins.map((admin) => {
       const isCurrent = admin.id === currentAdmin?.id;
       const lastLogin = admin.lastLoginAt ? `Last signed in ${new Date(admin.lastLoginAt).toLocaleString()}` : "Has not signed in yet";
-      return `<article class="admin-row ${isCurrent ? "is-current" : ""}" data-admin-id="${esc(admin.id)}"><label>Name<input class="admin-account-name admin-control" data-allow-locked="true" type="text" maxlength="40" value="${esc(admin.name)}"><span class="admin-last-login">${esc(lastLogin)}${isCurrent ? " · Your account" : ""}</span></label>${isCurrent ? '<label>New private PIN<input class="admin-account-pin admin-control" data-allow-locked="true" type="password" inputmode="numeric" minlength="4" maxlength="10" pattern="[0-9]{4,10}" autocomplete="new-password" placeholder="Leave blank to keep"></label>' : '<div class="admin-row-meta"><strong>PIN remains private</strong><span>Only this admin can change it.</span></div>'}<div class="admin-row-actions"><button class="button button-primary admin-control" data-allow-locked="true" data-admin-action="update" type="button">Save changes</button>${isCurrent ? "" : '<button class="button button-danger admin-control" data-allow-locked="true" data-admin-action="remove" type="button">Remove</button>'}</div></article>`;
+      return `<article class="admin-row ${isCurrent ? "is-current" : ""}" data-admin-id="${esc(admin.id)}"><label>Name<input class="admin-account-name admin-control" data-allow-locked="true" type="text" maxlength="40" value="${esc(admin.name)}"><span class="admin-last-login">${esc(lastLogin)}${isCurrent ? " · Your account" : ""}</span></label><label>Username<input class="admin-account-username admin-control" data-allow-locked="true" type="text" minlength="3" maxlength="30" value="${esc(admin.username || "")}"></label>${isCurrent ? '<label>New private PIN<input class="admin-account-pin admin-control" data-allow-locked="true" type="password" inputmode="numeric" minlength="4" maxlength="10" pattern="[0-9]{4,10}" autocomplete="new-password" placeholder="Leave blank to keep"></label>' : '<div class="admin-row-meta"><strong>PIN remains private</strong><span>Only this admin can change it.</span></div>'}<div class="admin-row-actions"><button class="button button-primary admin-control" data-allow-locked="true" data-admin-action="update" type="button">Save changes</button>${isCurrent ? "" : '<button class="button button-danger admin-control" data-allow-locked="true" data-admin-action="remove" type="button">Remove</button>'}</div></article>`;
     }).join("") : '<div class="empty-state">No named admins found.</div>';
     document.querySelectorAll("[data-admin-action='update']").forEach((button) => button.addEventListener("click", () => updateAdminAccount(button.closest(".admin-row"))));
     document.querySelectorAll("[data-admin-action='remove']").forEach((button) => button.addEventListener("click", () => removeAdminAccount(button.closest(".admin-row"))));
@@ -1444,13 +1532,15 @@
   async function createFirstAdmin(event) {
     event.preventDefault();
     const name = $("#bootstrapAdminName").value.trim();
+    const username = $("#bootstrapAdminUsername").value.trim();
     const pin = $("#bootstrapAdminPin").value.trim();
     try {
-      const body = await databaseRequest("/api/admins", { method: "POST", body: JSON.stringify({ name, pin }) });
-      adminPin = pin;
-      currentAdmin = body.admin;
+      const body = await databaseRequest("/api/admins", { method: "POST", body: JSON.stringify({ name, username, pin }) });
+      authToken = body.token;
+      currentUser = body.sessionAdmin || body.admin;
+      currentAdmin = currentUser;
       adminUnlocked = true;
-      sessionStorage.setItem(ADMIN_PIN_KEY, pin);
+      localStorage.setItem(SESSION_KEY, authToken);
       $("#bootstrapAdminForm").reset();
       await loadAdminData();
       showToast(`${body.admin.name} is now the first named admin. The setup PIN is disabled.`, "success");
@@ -1478,15 +1568,14 @@
   async function updateAdminAccount(row) {
     const id = row?.dataset.adminId;
     const name = row?.querySelector(".admin-account-name")?.value.trim();
+    const username = row?.querySelector(".admin-account-username")?.value.trim();
     const pin = row?.querySelector(".admin-account-pin")?.value.trim() || "";
     try {
-      const body = await databaseRequest(`/api/admins/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ name, ...(pin ? { pin } : {}) }) });
+      const body = await databaseRequest(`/api/admins/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ name, username, ...(pin ? { pin } : {}) }) });
       if (id === currentAdmin?.id) {
-        currentAdmin = body.admin;
-        if (pin) {
-          adminPin = pin;
-          sessionStorage.setItem(ADMIN_PIN_KEY, pin);
-        }
+        currentUser = body.sessionAdmin || body.admin;
+        currentAdmin = currentUser;
+        if (body.token) { authToken = body.token; localStorage.setItem(SESSION_KEY, authToken); }
       }
       await loadAdmins();
       showToast(`${body.admin.name}'s admin account was updated.`, "success");
@@ -1525,6 +1614,7 @@
     event.preventDefault();
     const token = adminInvitationToken();
     const name = $("#invitedAdminName").value.trim();
+    const username = $("#invitedAdminUsername").value.trim();
     const pin = $("#invitedAdminPin").value.trim();
     const confirmation = $("#invitedAdminPinConfirm").value.trim();
     const errorBox = $("#adminInviteError");
@@ -1534,13 +1624,14 @@
       return;
     }
     try {
-      const response = await fetch("/api/admin-invitations/accept", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, name, pin }) });
+      const response = await fetch("/api/admin-invitations/accept", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, name, username, pin }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "The invitation could not be accepted");
-      adminPin = pin;
+      authToken = body.token;
       adminUnlocked = true;
-      currentAdmin = body.admin;
-      sessionStorage.setItem(ADMIN_PIN_KEY, pin);
+      currentUser = body.account || body.admin;
+      currentAdmin = currentUser;
+      localStorage.setItem(SESSION_KEY, authToken);
       const cleanUrl = new URL(location.href);
       cleanUrl.hash = "";
       history.replaceState(null, "", cleanUrl);
@@ -1550,6 +1641,59 @@
       await loadAdminData();
       switchView("tournament");
       showToast(`Admin access created for ${body.admin.name}.`, "success");
+    } catch (error) {
+      errorBox.textContent = error.message;
+      errorBox.hidden = false;
+    }
+  }
+
+  function playerInvitationToken() {
+    const match = location.hash.match(/^#player-invite=([A-Za-z0-9_-]{40,60})$/);
+    return match ? match[1] : "";
+  }
+
+  function openPlayerInvitation() {
+    if (!playerInvitationToken()) return;
+    $("#playerInviteError").hidden = true;
+    $("#playerInviteDialog").showModal();
+  }
+
+  async function acceptPlayerInvitation(event) {
+    event.preventDefault();
+    const token = playerInvitationToken();
+    const username = $("#invitedPlayerUsername").value.trim();
+    const pin = $("#invitedPlayerPin").value.trim();
+    const confirmation = $("#invitedPlayerPinConfirm").value.trim();
+    const errorBox = $("#playerInviteError");
+    if (pin !== confirmation) {
+      errorBox.textContent = "The PIN entries do not match.";
+      errorBox.hidden = false;
+      return;
+    }
+    try {
+      const response = await fetch("/api/player-invitations/accept", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, username, pin }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "The invitation could not be accepted");
+      authToken = body.token;
+      currentUser = body.account;
+      adminUnlocked = false;
+      currentAdmin = null;
+      admins = [];
+      savedPlayers = [];
+      savedRounds = [];
+      shareTokens = {};
+      readinessData = null;
+      localStorage.setItem(SESSION_KEY, authToken);
+      groupWasChosen = false;
+      applyUserGroupDefault(true);
+      const cleanUrl = new URL(location.href);
+      cleanUrl.hash = "";
+      history.replaceState(null, "", cleanUrl);
+      $("#playerInviteDialog").close();
+      $("#acceptPlayerInviteForm").reset();
+      render();
+      switchView("score");
+      showToast(`${body.wasReset ? "Login reset" : "Player access created"} for ${body.player.name}. You are signed in.`, "success");
     } catch (error) {
       errorBox.textContent = error.message;
       errorBox.hidden = false;
@@ -1575,7 +1719,7 @@
   }
 
   function renderAdminState() {
-    $("#adminBtn").textContent = adminUnlocked ? `Lock ${currentAdmin?.name || "admin"}` : "Admin unlock";
+    $("#adminBtn").textContent = currentUser ? `Sign out · ${currentUser.name}` : "Sign in";
     $("#setupLockedNotice").hidden = adminUnlocked;
     document.querySelectorAll(".admin-control").forEach((control) => {
       const isRoundLockControl = control.id === "toggleRoundLockBtn";
@@ -1641,27 +1785,33 @@
   }
 
   function openAdminDialog() {
+    $("#loginUsernameInput").value = "";
     $("#adminPinInput").value = "";
     $("#adminError").hidden = true;
     $("#adminDialog").showModal();
-    requestAnimationFrame(() => $("#adminPinInput").focus());
+    requestAnimationFrame(() => $("#loginUsernameInput").focus());
   }
 
   async function verifyAdmin() {
-    const candidate = $("#adminPinInput").value;
+    const username = $("#loginUsernameInput").value.trim();
+    const pin = $("#adminPinInput").value;
     try {
-      if (connectionMode !== "live") throw new Error("Connect to the server to verify an admin PIN");
-      const response = await fetch("/api/admin/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: candidate }) });
+      if (connectionMode !== "live") throw new Error("Connect to the server to sign in");
+      const response = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, pin }) });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || "Incorrect admin PIN");
-      adminPin = candidate;
-      adminUnlocked = true;
-      currentAdmin = body.admin;
-      sessionStorage.setItem(ADMIN_PIN_KEY, candidate);
+      if (!response.ok) throw new Error(body.error || "Incorrect username or PIN");
+      authToken = body.token;
+      currentUser = body.account;
+      adminUnlocked = currentUser.role === "admin";
+      currentAdmin = adminUnlocked ? currentUser : null;
+      localStorage.setItem(SESSION_KEY, authToken);
+      groupWasChosen = false;
+      applyUserGroupDefault(true);
       $("#adminDialog").close();
       render();
-      await loadAdminData();
-      showToast(body.setupRequired ? "Setup access unlocked. Create the first named admin in Settings." : `Signed in as ${body.admin.name}.`, "success");
+      if (adminUnlocked) await loadAdminData();
+      switchView(adminUnlocked && body.setupRequired ? "tournament" : "score");
+      showToast(body.setupRequired ? "Setup access unlocked. Create the first named admin in Settings." : `Signed in as ${currentUser.name}.`, "success");
     } catch (error) {
       $("#adminError").textContent = error.message;
       $("#adminError").hidden = false;
@@ -1957,7 +2107,7 @@
   $("#savedPlayerSearch").addEventListener("input", (event) => { savedPlayerSearch = event.target.value; renderSavedPlayers(); });
   $("#updateIndexesBtn").addEventListener("click", updateIndexesFromSheet);
   $("#resetLeaderboardSortBtn").addEventListener("click", () => { leaderboardSort = { key: "standing", direction: "asc" }; renderLeaderboard(); });
-  $("#activeGroupSelect").addEventListener("change", (event) => { clearTimeout(autoAdvanceTimer); selectedGroup = event.target.value; const url = new URL(location.href); url.searchParams.set("group", selectedGroup); history.replaceState(null, "", url); renderGroupScoring(); });
+  $("#activeGroupSelect").addEventListener("change", (event) => { clearTimeout(autoAdvanceTimer); groupWasChosen = true; selectedGroup = event.target.value; const url = new URL(location.href); url.searchParams.set("group", selectedGroup); history.replaceState(null, "", url); renderGroupScoring(); });
   $("#holeSelect").addEventListener("change", (event) => moveToHole(Number(event.target.value)));
   $("#prevHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 1 ? 18 : selectedHole - 1, { skipMissingCheck: true }));
   $("#nextHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 18 ? 1 : selectedHole + 1));
@@ -1969,11 +2119,12 @@
   $("#roundDate").addEventListener("change", (event) => dispatch({ type: "SET_META", payload: { date: event.target.value } }));
   $("#allowance").addEventListener("change", (event) => dispatch({ type: "SET_ALLOWANCE", payload: { allowance: Number(event.target.value) } }));
   $("#adminBtn").addEventListener("click", () => {
-    if (adminUnlocked) { const name = currentAdmin?.name || "Admin"; lockAdminControls(); savedPlayerSearch = ""; savedPlayerGroupSelections.clear(); render(); showToast(`${name} signed out.`); }
+    if (currentUser) { const name = currentUser.name; lockAdminControls(); savedPlayerSearch = ""; savedPlayerGroupSelections.clear(); render(); showToast(`${name} signed out.`); }
     else openAdminDialog();
   });
   $("#adminSubmitBtn").addEventListener("click", (event) => { event.preventDefault(); verifyAdmin(); });
   $("#adminPinInput").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); verifyAdmin(); } });
+  $("#loginUsernameInput").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); verifyAdmin(); } });
   $("#toggleRoundLockBtn").addEventListener("click", () => {
     if (isLocked()) dispatch({ type: "SET_LOCKED", payload: { locked: false } });
     else openFinalizeDialog();
@@ -2007,6 +2158,15 @@
   });
   $("#acceptAdminInviteForm").addEventListener("submit", acceptAdminInvitation);
   $("#cancelAdminInviteBtn").addEventListener("click", () => $("#adminInviteDialog").close());
+  $("#copyPlayerInviteBtn").addEventListener("click", async () => { if (playerInviteLink) { await copyText(playerInviteLink); showToast("Private player setup link copied.", "success"); } });
+  $("#sharePlayerInviteBtn").addEventListener("click", async () => {
+    if (!playerInviteLink) return;
+    const name = playerInvitePlayer?.name || "a Berry Creek player";
+    if (navigator.share) await navigator.share({ title: "Berry Creek player login", text: `${name}: privately create or reset your Berry Creek DH Game login. This single-use link expires after 24 hours.`, url: playerInviteLink }).catch(() => {});
+    else { await copyText(playerInviteLink); showToast("Private player setup link copied.", "success"); }
+  });
+  $("#acceptPlayerInviteForm").addEventListener("submit", acceptPlayerInvitation);
+  $("#cancelPlayerInviteBtn").addEventListener("click", () => $("#playerInviteDialog").close());
   $("#exportBtn").addEventListener("click", () => downloadBlob(JSON.stringify(state, null, 2), "application/json", `berry-creek-${state.date}.json`));
   $("#csvBtn").addEventListener("click", downloadCsv);
   $("#printBtn").addEventListener("click", () => { preparePrintReport(); window.print(); });
@@ -2059,7 +2219,8 @@
   $("#footerVersionBtn").textContent = `App v${APP_VERSION}`;
   render();
   openAdminInvitation();
-  const initialView = spectatorMode ? "leaderboard" : params.get("view");
+  openPlayerInvitation();
+  const initialView = spectatorMode ? "leaderboard" : params.get("view") || "score";
   if (["setup", "score", "leaderboard", "tournament"].includes(initialView)) switchView(initialView);
   connect();
   registerServiceWorker();

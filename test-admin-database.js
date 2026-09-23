@@ -9,7 +9,9 @@ const database = new AdminDatabase(path.join(directory, "admins.sqlite"));
 
 try {
   assert.equal(database.count(), 0);
-  const alice = database.create({ name: "Alice Admin", pin: "1357" });
+  const alice = database.create({ name: "Alice Admin", username: "alice.admin", pin: "1357" });
+  assert.equal(alice.username, "alice.admin");
+  assert.equal(database.authenticateCredentials("alice.admin", "1357").id, alice.id);
   assert.equal(database.authenticate("1357").name, "Alice Admin");
   assert.equal(database.authenticate("9999"), null);
   assert.equal(Object.hasOwn(database.list()[0], "pinHash"), false);
@@ -18,7 +20,7 @@ try {
 
   const invitation = database.createInvitation(alice.id, 24);
   assert.match(invitation.token, /^[A-Za-z0-9_-]{40,60}$/);
-  const bob = database.acceptInvitation(invitation.token, { name: "Bob Admin", pin: "8642" });
+  const bob = database.acceptInvitation(invitation.token, { name: "Bob Admin", username: "bob.admin", pin: "8642" });
   assert.equal(database.authenticate("8642").id, bob.id);
   assert.throws(() => database.acceptInvitation(invitation.token, { name: "Reuse", pin: "2468" }), /already been used|invalid/);
 

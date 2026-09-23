@@ -28,5 +28,13 @@ assert.match(html, /id="updateIndexesBtn"[^>]*>Update Indexes</);
 assert.match(html, /id="indexUpdateStatus"[^>]*aria-live="polite"/);
 assert.match(app, /Are you sure you want to update, the roster is outdated\./);
 assert.match(app, /\/api\/players\/update-indexes/);
+assert.doesNotMatch(html, /id="savedPlayerUsername"/);
+assert.doesNotMatch(html, /id="savedPlayerPin"/);
+assert.match(html, /id="playerInviteLinkDialog"/);
+assert.match(html, /id="playerInviteDialog"/);
+assert.match(app, /\/api\/player-invitations/);
+assert.match(app, /Create reset link/);
+assert.match(app, /Create login link/);
+assert.match(app, /function acceptPlayerInvitation\(event\)/);
 
 console.log("Player-entry UI tests passed.");
