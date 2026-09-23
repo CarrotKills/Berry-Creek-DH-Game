@@ -71,11 +71,11 @@ main { width: min(1180px, calc(100% - 2rem)); margin: 1.25rem auto 3rem; }
 .player-entry-panel h4 { margin: 0.1rem 0 0.25rem; color: var(--forest); font-family: Georgia, serif; font-size: 1.05rem; }
 .player-entry-panel .helper { margin: 0; }
 .entry-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.8rem; }
-.saved-player-form { display: grid; grid-template-columns: minmax(180px, 1.4fr) minmax(175px, 0.9fr) 70px minmax(180px, 1fr) auto; align-items: end; gap: 0.65rem; }
-.guest-player-form { display: grid; grid-template-columns: minmax(145px, 1fr) minmax(145px, 1fr) minmax(125px, 0.8fr) minmax(170px, 0.9fr) 70px minmax(165px, 1fr) 115px auto; align-items: end; gap: 0.55rem; }
+.saved-player-form { display: grid; grid-template-columns: minmax(210px, 1.4fr) 104px 70px minmax(240px, 1.35fr) auto; align-items: end; gap: 0.65rem; }
+.guest-player-form { display: grid; grid-template-columns: minmax(155px, 1fr) minmax(140px, 0.9fr) minmax(120px, 0.75fr) 104px 70px minmax(225px, 1.35fr) 96px auto; align-items: end; gap: 0.55rem; }
 .database-search { display: block; max-width: 360px; margin-top: 0; }
 .saved-player-list { display: grid; gap: 0.65rem; margin-top: 0.65rem; }
-.saved-player-row { display: grid; grid-template-columns: repeat(2, minmax(150px, 1fr)) 70px repeat(3, minmax(140px, 1fr)); align-items: end; gap: 0.65rem; padding: 0.75rem; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--paper) 94%, var(--gold-soft)); }
+.saved-player-row { display: grid; grid-template-columns: minmax(190px, 1.2fr) 104px 70px minmax(230px, 1.35fr) minmax(150px, 1fr) 96px; align-items: end; gap: 0.65rem; padding: 0.75rem; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--paper) 94%, var(--gold-soft)); }
 .saved-player-actions { display: flex; gap: 0.45rem; }
 .saved-player-row .saved-player-actions { grid-column: 1 / -1; }
 .saved-player-actions .button { flex: 1; min-height: 44px; padding-inline: 0.65rem; white-space: nowrap; }
@@ -85,7 +85,7 @@ main { width: min(1180px, calc(100% - 2rem)); margin: 1.25rem auto 3rem; }
 .group-counts { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0 0; }
 .group-counts span { padding: 0.45rem 0.65rem; border-radius: 999px; color: var(--forest); background: var(--gold-soft); font-size: 0.78rem; }
 .player-list { display: grid; gap: 0.65rem; margin-top: 1.25rem; }
-.player-row { display: grid; grid-template-columns: 2rem minmax(145px, 1fr) minmax(175px, 0.9fr) 70px minmax(170px, 1fr) 100px auto minmax(125px, auto) 44px; align-items: end; gap: 0.65rem; padding: 0.8rem; background: var(--paper); border-radius: 12px; box-shadow: 0 3px 16px rgba(122, 11, 22, 0.05); }
+.player-row { display: grid; grid-template-columns: 2rem minmax(155px, 1fr) 104px 70px minmax(230px, 1.4fr) 96px auto minmax(125px, auto) 44px; align-items: end; gap: 0.65rem; padding: 0.8rem; background: var(--paper); border-radius: 12px; box-shadow: 0 3px 16px rgba(122, 11, 22, 0.05); }
 .player-row.is-not-in-game { border: 1px dashed #bd6d77; background: #fbf6f7; }
 .not-in-game-toggle { align-self: center; display: flex; align-items: center; gap: 0.45rem; min-height: 44px; padding: 0.45rem 0.65rem; border-radius: 8px; color: var(--forest-2); background: var(--gold-soft); font-size: 0.8rem; font-weight: 800; white-space: nowrap; }
 .not-in-game-toggle input { display: inline-block; width: 20px; height: 20px; min-height: 0; margin: 0; accent-color: var(--forest); }
@@ -102,6 +102,10 @@ main { width: min(1180px, calc(100% - 2rem)); margin: 1.25rem auto 3rem; }
 .plus-handicap-toggle { min-width: 58px; min-height: 44px; border: 1px solid var(--forest); border-radius: 8px; padding: 0.45rem 0.5rem; color: var(--forest); background: var(--paper); font-weight: 900; }
 .plus-handicap-toggle.is-active { color: #fff; background: var(--forest); box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35); }
 .plus-label { margin-left: 0.15rem; font-size: 0.7rem; }
+.player-database-panel .plus-handicap-toggle, .player-row .plus-handicap-toggle { min-width: 44px; padding-inline: 0.4rem; }
+.player-database-panel .plus-label, .player-row .plus-label { display: none; }
+.saved-ghin-field .handicap-input-row input, .guest-handicap-field .handicap-input-row input, .player-handicap-field .handicap-input-row input { padding-inline: 0.35rem; }
+.saved-group-field select, .guest-group-field select, .player-group-field select { padding-inline: 0.45rem; text-overflow: clip; }
 .remove-player { color: var(--danger); background: #f3e4e2; }
 .validation { margin: 0.8rem 0; color: var(--danger); font-weight: 700; }
 .notice { margin-bottom: 1rem; padding: 0.8rem 1rem; border-left: 4px solid var(--forest); border-radius: 8px; color: var(--forest-2); background: var(--gold-soft); font-size: 0.9rem; font-weight: 700; }
@@ -368,17 +372,21 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .player-name-field { grid-column: 2 / 4; }
   .player-handicap-field { grid-column: 2; }
   .player-tee-field { grid-column: 2 / 4; }
-  .player-group-field { grid-column: 2; }
+  .player-group-field { grid-column: 2; width: 110px; }
   .playing-hcp { grid-column: 3; }
   .remove-player { grid-column: 4; grid-row: 1; }
   .saved-player-form { grid-template-columns: 1fr 1fr; }
   .saved-player-form label:first-child { grid-column: 1 / -1; }
-  .saved-player-form .button { width: 100%; }
+  .saved-player-form .saved-tee-field, .saved-player-form .button { grid-column: 1 / -1; width: 100%; }
   .saved-player-row { grid-template-columns: 1fr 1fr; }
   .saved-player-row .saved-player-name, .saved-player-actions { grid-column: 1 / -1; }
+  .saved-player-row .saved-tee-field { grid-column: 1 / -1; }
+  .saved-player-row .saved-group-field { width: 110px; }
   .entry-panel-heading { align-items: stretch; flex-direction: column; }
   .guest-player-form { grid-template-columns: 1fr 1fr; }
   .guest-player-form label:first-child { grid-column: 1 / -1; }
+  .guest-player-form .guest-tee-field { grid-column: 1 / -1; }
+  .guest-player-form .guest-group-field { width: 110px; }
   .guest-player-form .button { grid-column: 1 / -1; width: 100%; }
   .not-in-game-toggle { grid-column: 2 / 4; }
   .player-type-badge { grid-column: 2 / 4; }

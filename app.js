@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.11.2";
+  const APP_VERSION = "9.11.3";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -662,14 +662,14 @@
   function groupOptions(selected, currentPlayerId) {
     return R.GROUPS.map((group) => {
       const count = state.players.filter((player) => player.group === group && player.id !== currentPlayerId).length;
-      return `<option value="${group}" ${group === selected ? "selected" : ""} ${count >= R.MAX_GROUP_SIZE && group !== selected ? "disabled" : ""}>Group ${group} (${count + (group === selected ? 1 : 0)}/5)</option>`;
+      return `<option value="${group}" ${group === selected ? "selected" : ""} ${count >= R.MAX_GROUP_SIZE && group !== selected ? "disabled" : ""}>${group} (${count + (group === selected ? 1 : 0)}/5)</option>`;
     }).join("");
   }
 
   function savedGroupOptions(selected) {
     return R.GROUPS.map((group) => {
       const count = groupPlayers(group).length;
-      return `<option value="${group}" ${group === selected ? "selected" : ""} ${count >= R.MAX_GROUP_SIZE ? "disabled" : ""}>Group ${group} (${count}/5)</option>`;
+      return `<option value="${group}" ${group === selected ? "selected" : ""} ${count >= R.MAX_GROUP_SIZE ? "disabled" : ""}>${group} (${count}/5)</option>`;
     }).join("");
   }
 
@@ -715,11 +715,11 @@
       row.dataset.savedPlayerId = saved.id;
       const loginDetail = saved.loginConfigured ? (saved.lastLoginAt ? `Last signed in ${new Date(saved.lastLoginAt).toLocaleString()}` : "Login created · Has not signed in yet") : "Setup link not yet accepted";
       row.innerHTML = `<label class="saved-player-name">Name<input class="saved-name" type="text" maxlength="40" value="${esc(saved.name)}" ${canEdit ? "" : "disabled"}></label>
-        <div class="handicap-field"><span class="field-label">GHIN Index</span><div class="handicap-input-row"><input class="saved-ghin" type="text" maxlength="6" inputmode="decimal" value="${displayIndex(saved.ghin)}" placeholder="12.4" aria-label="GHIN Index for ${esc(saved.name)}" ${canEdit ? "" : "disabled"}><button class="saved-ghin-plus plus-handicap-toggle" type="button" aria-pressed="false" aria-label="Mark ${esc(saved.name)} as plus handicap" ${canEdit ? "" : "disabled"}><span aria-hidden="true">+</span><span class="plus-label">HCP</span></button></div></div>
+        <div class="handicap-field saved-ghin-field"><span class="field-label">GHIN IDX</span><div class="handicap-input-row"><input class="saved-ghin" type="text" maxlength="6" inputmode="decimal" value="${displayIndex(saved.ghin)}" placeholder="12.4" aria-label="GHIN Index for ${esc(saved.name)}" ${canEdit ? "" : "disabled"}><button class="saved-ghin-plus plus-handicap-toggle" type="button" aria-pressed="false" aria-label="Mark ${esc(saved.name)} as plus handicap" ${canEdit ? "" : "disabled"}><span aria-hidden="true">+</span><span class="plus-label">HCP</span></button></div></div>
         <div class="playing-hcp form-hcp"><span>HDCP</span><strong>${displayPlayingHandicap(hcpForValues(saved.ghin, saved.teeKey))}</strong></div>
-        <label>Tee<select class="saved-tee" ${canEdit ? "" : "disabled"}>${teeOptions(saved.teeKey)}</select></label>
+        <label class="saved-tee-field">Tee<select class="saved-tee" ${canEdit ? "" : "disabled"}>${teeOptions(saved.teeKey)}</select></label>
         <div class="player-login-status"><span class="field-label">Player login</span><strong>${saved.loginConfigured ? esc(saved.username) : "Not configured"}</strong><small>${esc(loginDetail)}</small></div>
-        <label>Add to<select class="saved-group" ${addDisabled ? "disabled" : ""}>${savedGroupOptions(selected)}</select></label>
+        <label class="saved-group-field">Add to<select class="saved-group" ${addDisabled ? "disabled" : ""}>${savedGroupOptions(selected)}</select></label>
         <div class="saved-player-actions"><button class="button button-quiet create-player-invite" type="button" ${canEdit ? "" : "disabled"}>${saved.loginConfigured ? "Create reset link" : "Create login link"}</button><button class="button button-primary add-saved-player" type="button" ${addDisabled ? "disabled" : ""}>${activePlayer ? `In Group ${activePlayer.group}` : "Add to group"}</button><button class="button button-quiet delete-saved-player" type="button" ${canEdit ? "" : "disabled"}>Delete</button></div>`;
       const name = row.querySelector(".saved-name");
       const ghin = row.querySelector(".saved-ghin");
@@ -2242,7 +2242,6 @@
     else pendingReuseRound = null;
   });
   $("#clearHistoryBtn").addEventListener("click", () => { if (window.confirm("Clear the complete change history?")) dispatch({ type: "CLEAR_AUDIT" }); });
-  $("#checkUpdateBtn").addEventListener("click", async () => { await serviceWorkerRegistration?.update(); const current = await checkVersion(); if (current) showToast("This device already has the current version.", "success"); });
   $("#footerVersionBtn").addEventListener("click", () => { switchView("tournament"); checkVersion(); });
   $("#installUpdateBtn").addEventListener("click", () => { if (serviceWorkerRegistration?.waiting) serviceWorkerRegistration.waiting.postMessage({ type: "SKIP_WAITING" }); else location.reload(); });
   window.addEventListener("online", connect);

@@ -36,5 +36,15 @@ assert.match(app, /\/api\/player-invitations/);
 assert.match(app, /Create reset link/);
 assert.match(app, /Create login link/);
 assert.match(app, /function acceptPlayerInvitation\(event\)/);
+assert.match(html, />GHIN IDX</);
+assert.match(html, />HCP IDX</);
+assert.match(app, /<span class="field-label">GHIN IDX<\/span>/);
+assert.match(html, /class="saved-tee-field"/);
+assert.match(html, /class="guest-tee-field"/);
+assert.match(html, /class="player-tee-field"/);
+assert.match(app, />\$\{group\} \(\$\{count\}/);
+assert.doesNotMatch(html, /id="checkUpdateBtn"/);
+assert.doesNotMatch(app, /#checkUpdateBtn/);
+assert.match(app, /checkVersion\(\);\s*\}\)\(\);/);
 
 console.log("Player-entry UI tests passed.");

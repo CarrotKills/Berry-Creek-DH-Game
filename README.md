@@ -94,7 +94,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - The normal website provides public, read-only group browsing and a leaderboard without requiring a separate viewing link. The Leaderboard tab displays the active round live, then falls back to the newest saved round after the active event is cleared. Signing in activates only the controls allowed for that account, so separate scoring and leaderboard links are no longer necessary.
 - Finalizing a round opens a checklist for missing scores, KPs, unusual scores, and roster-name issues before the admin locks it.
 - Celebration sounds can be muted per device. Normal, outdoor high-contrast, and dark display modes are also device-specific.
-- The visible app version and Check for updates button make cached versions easier to identify and replace.
+- The visible app version, automatic startup check, and update banner make cached versions easier to identify and replace without a separate manual check button.
 - Event readiness checks storage write access, persistent-disk configuration, the session secret, admin setup, player logins, group scorekeepers, backup freshness, roster setup, database access, and secure hosting.
 - Complete backup files contain the active event, reusable player database, hashed player-login credentials, temporary active-round guest logins, and every saved historical round. Pending single-use invitation links are intentionally excluded and can be recreated afterward. A restore first creates a server-side recovery snapshot of the current data.
 - Group QR images require an internet connection; Copy link remains available if the QR image service is unavailable.
