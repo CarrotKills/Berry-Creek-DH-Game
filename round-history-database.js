@@ -46,6 +46,11 @@ class RoundHistoryDatabase {
 
   list() { return this.listStatement.all().map(metadataFromRow); }
 
+  latest() {
+    const [mostRecent] = this.list();
+    return mostRecent ? this.find(mostRecent.id) : null;
+  }
+
   find(id) {
     const row = this.findStatement.get(String(id));
     if (!row) return null;

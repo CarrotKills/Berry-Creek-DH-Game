@@ -19,8 +19,10 @@ assert.equal(saved.completed, true);
 assert.equal(saved.state.players[0].scores.length, 18);
 assert.equal(database.list().length, 1);
 assert.equal(database.find(saved.id).state.players[0].name, "Test Golfer");
+assert.equal(database.latest().id, saved.id);
 assert.equal(database.remove(saved.id).id, saved.id);
 assert.equal(database.list().length, 0);
+assert.equal(database.latest(), null);
 
 database.close();
 fs.rmSync(directory, { recursive: true, force: true });

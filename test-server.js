@@ -46,8 +46,11 @@ async function createPlayerLogin(playerId, username, pin) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.11.1");
+  assert.equal(config.appVersion, "9.11.2");
   assert.equal(config.adminSetupRequired, true);
+  const emptyPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
+  assert.equal(emptyPublicLeaderboard.source, "empty");
+  assert.equal(emptyPublicLeaderboard.state.players.length, 0);
   const scorecardExportAsset = await fetch(`${base}/scorecard-export.js`);
   assert.equal(scorecardExportAsset.status, 200);
   const sortingAsset = await fetch(`${base}/leaderboard-sort.js`);
@@ -170,6 +173,9 @@ async function createPlayerLogin(playerId, username, pin) {
   const uniqueActiveState = await (await fetch(`${base}/api/state`)).json();
   assert.equal(uniqueActiveState.players.length, 2);
   assert.equal(uniqueActiveState.players.some((player) => player.id === "live-a-duplicate"), false);
+  const activePublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
+  assert.equal(activePublicLeaderboard.source, "active");
+  assert.equal(activePublicLeaderboard.state.players.length, 2);
   const liveALogin = await (await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "live.a", pin: "123456" }) })).json();
   const liveBLogin = await (await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "live.b", pin: "654321" }) })).json();
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 17, score: 4, expectedScore: "" }, { group: "A", authToken: liveALogin.token, noToken: true, status: 403 });
@@ -262,9 +268,16 @@ async function createPlayerLogin(playerId, username, pin) {
   assert.notEqual(reusedTokens.A, scoreTokens.A);
   await reader.cancel();
   await action("SET_LOCKED", { locked: true });
+  const latestRoundResponse = await fetch(`${base}/api/rounds`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: "{}" });
+  assert.equal(latestRoundResponse.status, 201);
+  const latestRound = (await latestRoundResponse.json()).round;
   await action("CLEAR_ROUND");
   const newRoundState = await (await fetch(`${base}/api/state`)).json();
   assert.equal(newRoundState.players.length, 0);
   assert.equal(newRoundState.settings.locked, false);
+  const savedPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
+  assert.equal(savedPublicLeaderboard.source, "saved");
+  assert.equal(savedPublicLeaderboard.savedRoundId, latestRound.id);
+  assert.equal(savedPublicLeaderboard.state.players.length, 2);
   console.log("Concurrent API and live-update tests passed.");
 })().catch((error) => { console.error(error); process.exit(1); });

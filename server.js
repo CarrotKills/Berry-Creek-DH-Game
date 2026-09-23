@@ -14,7 +14,7 @@ const IndexSheet = require("./index-sheet.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.11.1";
+const APP_VERSION = "9.11.2";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -436,6 +436,13 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   if (req.method === "GET" && url.pathname === "/api/state") return sendJson(res, 200, state);
   if (req.method === "GET" && url.pathname === "/api/config") return sendJson(res, 200, { appVersion: APP_VERSION, accountLogin: true, adminSetupRequired: adminDatabase.count() === 0 });
+  if (req.method === "GET" && url.pathname === "/api/public-leaderboard") {
+    if (state.players.length) return sendJson(res, 200, { source: "active", state, savedAt: null });
+    const latest = roundHistoryDatabase.latest();
+    return latest
+      ? sendJson(res, 200, { source: "saved", state: latest.state, savedAt: latest.savedAt, savedRoundId: latest.id })
+      : sendJson(res, 200, { source: "empty", state, savedAt: null });
+  }
 
   if (req.method === "POST" && url.pathname === "/api/auth/login") {
     try {
