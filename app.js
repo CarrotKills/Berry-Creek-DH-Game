@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.12.0";
+  const APP_VERSION = "9.12.1";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -125,6 +125,12 @@
   function hcpForValues(index, teeKey) { return E.playingHandicap(E.parseHandicapInput(index), state.settings, E.teeForPlayer(E.COURSE, { teeKey })); }
   function displayIndex(value) { return E.formatHandicap(value, 1); }
   function displayPlayingHandicap(value) { return E.formatHandicap(value, 0); }
+  function requiredHandicapValue(value) {
+    const text = String(value ?? "").trim().replace(/[−–—]/g, "-");
+    if (!/^[+-]?\d+(?:\.\d+)?$/.test(text)) return null;
+    const parsed = E.parseHandicapInput(text);
+    return Number.isFinite(parsed) && parsed >= -10 && parsed <= 54 ? parsed : null;
+  }
   function leaderboardIsSaved() { return !state.players.length && publicLeaderboard?.source === "saved" && Boolean(publicLeaderboard.state); }
   function leaderboardRound() { return leaderboardIsSaved() ? publicLeaderboard.state : state; }
   function isPlusHandicapInput(value) { return /^[+-]/.test(String(value ?? "").trim()); }
@@ -302,10 +308,9 @@
       `${summary.updated} updated`,
       `${summary.unchanged} already current`,
       `${summary.unmatched.length} not found`,
-      `${summary.ambiguous.length} ambiguous`,
-      `${summary.invalid.length + summary.invalidSheetRows} invalid`
+      `${summary.ambiguous.length} ambiguous`
     ];
-    const issues = [...summary.unmatched, ...summary.ambiguous, ...summary.invalid];
+    const issues = [...summary.unmatched, ...summary.ambiguous];
     const issueText = issues.length ? ` Review: ${issues.slice(0, 6).join(", ")}${issues.length > 6 ? ` and ${issues.length - 6} more` : ""}.` : "";
     return `Roster date ${displayRosterDate(summary.sheetDate)}: ${parts.join(" · ")}.${summary.activePlayersUpdated ? ` ${summary.activePlayersUpdated} active-round player${summary.activePlayersUpdated === 1 ? " was" : "s were"} refreshed.` : ""}${issueText}`;
   }
@@ -335,7 +340,7 @@
       savedPlayers = Array.isArray(body.players) ? body.players : savedPlayers;
       await refreshState().catch(() => {});
       indexUpdateMessage = indexUpdateSummary(body.summary);
-      indexUpdateError = Boolean(body.summary.unmatched.length || body.summary.ambiguous.length || body.summary.invalid.length || body.summary.invalidSheetRows);
+      indexUpdateError = Boolean(body.summary.unmatched.length || body.summary.ambiguous.length);
       showToast(body.summary.updated ? `${body.summary.updated} player index${body.summary.updated === 1 ? "" : "es"} updated.` : "All matched player indexes were already current.", "success");
     } catch (error) {
       indexUpdateMessage = error.message;
@@ -622,12 +627,13 @@
     const username = $("#guestPlayerUsername").value.trim();
     const pin = $("#guestPlayerPin").value.trim();
     if (!name) return showToast("Enter the guest's name.", "error");
-    if (!handicapText || !Number.isFinite(Number(handicapText))) return showToast("Enter the guest's Handicap Index, such as 12.4 or +4.2.", "error");
+    const ghin = requiredHandicapValue(handicapText);
+    if (ghin === null) return showToast("Enter the guest's Handicap Index from +10.0 through 54.0, such as 12.4 or +4.2.", "error");
     if (!R.GROUPS.includes(group) || groupPlayers(group).length >= R.MAX_GROUP_SIZE) return showValidation(`Group ${group} already has five players.`);
     const player = R.normalizePlayer({
       id: makeId(),
       name,
-      ghin: E.parseHandicapInput(handicapText),
+      ghin,
       isGuest: true,
       inGame: true,
       teeKey: $("#guestPlayerTee").value,
@@ -739,7 +745,11 @@
       syncPlusHandicapToggle(ghin, plusHandicap);
       name.addEventListener("change", () => updateSavedPlayer(saved.id, { name: name.value }));
       ghin.addEventListener("input", () => { syncPlusHandicapToggle(ghin, plusHandicap); handicap.textContent = displayPlayingHandicap(hcpForValues(ghin.value, tee.value)); });
-      ghin.addEventListener("change", () => updateSavedPlayer(saved.id, { ghin: E.parseHandicapInput(ghin.value) }));
+      ghin.addEventListener("change", () => {
+        const value = requiredHandicapValue(ghin.value);
+        if (value === null) { render(); return showToast("Enter a valid GHIN Index from +10.0 through 54.0.", "error"); }
+        updateSavedPlayer(saved.id, { ghin: value });
+      });
       plusHandicap.addEventListener("click", () => { togglePlusHandicapInput(ghin, plusHandicap); updateSavedPlayer(saved.id, { ghin: E.parseHandicapInput(ghin.value) }); });
       tee.addEventListener("change", () => { handicap.textContent = displayPlayingHandicap(hcpForValues(ghin.value, tee.value)); updateSavedPlayer(saved.id, { teeKey: tee.value }); });
       group.addEventListener("change", () => savedPlayerGroupSelections.set(saved.id, group.value));
@@ -753,15 +763,19 @@
   async function createSavedPlayer(event) {
     event.preventDefault();
     const name = $("#savedPlayerName").value.trim();
+    const ghin = requiredHandicapValue($("#savedPlayerGhin").value);
+    const teeKey = $("#savedPlayerTee").value;
     if (!name) return showToast("Enter a player name before saving.", "error");
+    if (ghin === null) return showToast("Enter a valid GHIN Index from +10.0 through 54.0 before saving.", "error");
+    if (!teeKey) return showToast("Choose a tee before saving.", "error");
     try {
       const body = await databaseRequest("/api/players", {
         method: "POST",
-        body: JSON.stringify({ name, ghin: E.parseHandicapInput($("#savedPlayerGhin").value), teeKey: $("#savedPlayerTee").value })
+        body: JSON.stringify({ name, ghin, teeKey })
       });
       savedPlayers = [...savedPlayers, body.player].sort((a, b) => a.name.localeCompare(b.name));
       $("#savedPlayerName").value = "";
-      $("#savedPlayerGhin").value = "0.0";
+      $("#savedPlayerGhin").value = "";
       playerEntryMode = "";
       render();
       await createPlayerInvitation(body.player.id, { newlySaved: true });

@@ -34,9 +34,9 @@ const plan = Sheet.buildIndexUpdatePlan([
 
 assert.deepEqual(plan.updates.map((player) => [player.id, player.ghin]), [["alice", 12.3]]);
 assert.deepEqual(plan.unchanged.map((player) => player.id), ["bob"]);
-assert.deepEqual(plan.unmatched.map((player) => player.id), ["missing"]);
+assert.deepEqual(plan.unmatched.map((player) => player.id), ["missing", "invalid"]);
 assert.deepEqual(plan.ambiguous.map((player) => player.id), ["duplicate"]);
-assert.deepEqual(plan.invalid.map((player) => player.id), ["invalid"]);
+assert.equal(Object.hasOwn(plan, "invalid"), false);
 
 const splitNames = Sheet.parseIndexSheet("As of,2026-09-21\nFirst Name,Last Name,Handicap Index\nCarol,Player,7.4");
 assert.equal(splitNames.updateDate, "2026-09-21");

@@ -46,7 +46,7 @@ async function createPlayerLogin(playerId, username, pin) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.12.0");
+  assert.equal(config.appVersion, "9.12.1");
   assert.equal(config.adminSetupRequired, true);
   const emptyPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
   assert.equal(emptyPublicLeaderboard.source, "empty");
@@ -114,6 +114,8 @@ async function createPlayerLogin(playerId, username, pin) {
   const createdSaved = await playerRequest("", { method: "POST", status: 201, body: { name: "Saved Golfer", ghin: 15.2, teeKey: "championship" } });
   assert.equal(createdSaved.player.ghin, 15.2);
   assert.equal(createdSaved.player.loginConfigured, false);
+  await playerRequest("", { method: "POST", status: 400, body: { name: "Incomplete Golfer", teeKey: "championship" } });
+  await playerRequest("", { method: "POST", status: 400, body: { name: "No Tee Golfer", ghin: 8.3 } });
   await playerRequest("", { method: "POST", status: 403, body: { name: "Admin-Credential Attempt", username: "not.allowed", pin: "1234", ghin: 5 } });
   const savedLogin = await createPlayerLogin(createdSaved.player.id, "saved.golfer", "97531");
   assert.equal(savedLogin.accepted.account.playerId, createdSaved.player.id);

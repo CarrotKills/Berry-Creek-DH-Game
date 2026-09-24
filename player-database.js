@@ -33,9 +33,12 @@ function hashPin(pin, salt) { return crypto.scryptSync(pin, salt, KEY_LENGTH, SC
 function normalizeInput(value) {
   const name = String(value?.name || "").trim().slice(0, 40);
   if (!name) throw new Error("Player name is required");
+  if (value?.ghin === undefined || value.ghin === null || String(value.ghin).trim() === "") throw new Error("GHIN Index is required");
   const rawGhin = Number(value?.ghin);
-  const ghin = Number.isFinite(rawGhin) ? Math.max(-10, Math.min(54, rawGhin)) : 0;
-  return { name, ghin, teeKey: normalizeTeeKey(value?.teeKey) };
+  if (!Number.isFinite(rawGhin) || rawGhin < -10 || rawGhin > 54) throw new Error("GHIN Index must be from +10.0 through 54.0");
+  const requestedTee = String(value?.teeKey || "").trim();
+  if (!requestedTee || (!TEE_KEYS.has(requestedTee) && !Object.hasOwn(TEE_KEY_ALIASES, requestedTee))) throw new Error("Tee selection is required");
+  return { name, ghin: Math.round(rawGhin * 10) / 10, teeKey: normalizeTeeKey(requestedTee) };
 }
 
 function publicAccount(row) {

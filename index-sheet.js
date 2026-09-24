@@ -192,22 +192,18 @@ function buildIndexUpdatePlan(savedPlayers, parsedSheet) {
       sheetByName.set(key, entries);
     });
   });
-  const invalidNames = new Set(parsedSheet.invalid.flatMap((entry) => nameKeys(entry.name)));
   const updates = [];
   const unchanged = [];
   const unmatched = [];
   const ambiguous = [];
-  const invalid = [];
 
   savedPlayers.forEach((player) => {
     const matches = new Map();
     nameKeys(player.name).forEach((key) => (sheetByName.get(key) || []).forEach((entry) => matches.set(entry.row, entry)));
     const candidates = [...matches.values()];
     const distinctIndexes = [...new Set(candidates.map((entry) => entry.ghin))];
-    if (!candidates.length) {
-      if (nameKeys(player.name).some((key) => invalidNames.has(key))) invalid.push({ id: player.id, name: player.name });
-      else unmatched.push({ id: player.id, name: player.name });
-    } else if (distinctIndexes.length !== 1) ambiguous.push({ id: player.id, name: player.name });
+    if (!candidates.length) unmatched.push({ id: player.id, name: player.name });
+    else if (distinctIndexes.length !== 1) ambiguous.push({ id: player.id, name: player.name });
     else {
       const ghin = distinctIndexes[0];
       const result = { id: player.id, name: player.name, previousGhin: Number(player.ghin), ghin };
@@ -221,7 +217,6 @@ function buildIndexUpdatePlan(savedPlayers, parsedSheet) {
     unchanged,
     unmatched,
     ambiguous,
-    invalid,
     invalidSheetRows: parsedSheet.invalid,
     validSheetRows: parsedSheet.valid.length
   };

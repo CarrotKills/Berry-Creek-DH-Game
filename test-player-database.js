@@ -15,6 +15,9 @@ try {
   const created = database.create({ name: "Alice Golfer", ghin: 12.4, teeKey: "championship" });
   assert.equal(created.name, "Alice Golfer");
   assert.equal(created.loginConfigured, false);
+  assert.throws(() => database.create({ name: "Missing Index", teeKey: "championship" }), /GHIN Index is required/);
+  assert.throws(() => database.create({ name: "Invalid Index", ghin: "not-a-number", teeKey: "championship" }), /GHIN Index must be/);
+  assert.throws(() => database.create({ name: "Missing Tee", ghin: 8.1 }), /Tee selection is required/);
   const invalidatedInvitation = database.createInvitation(created.id, "admin-1", 24);
   const invitation = database.createInvitation(created.id, "admin-1", 24);
   assert.throws(() => database.acceptInvitation(invalidatedInvitation.token, { username: "alice.old", pin: "111111" }), /already been used or is invalid/);
