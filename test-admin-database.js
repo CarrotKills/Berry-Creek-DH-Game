@@ -24,6 +24,14 @@ try {
   assert.equal(database.authenticate("8642").id, bob.id);
   assert.throws(() => database.acceptInvitation(invitation.token, { name: "Reuse", pin: "2468" }), /already been used|invalid/);
 
+  database.update(alice.id, { playerId: "saved-player-alice" });
+  assert.equal(database.find(alice.id).playerId, "saved-player-alice");
+  assert.equal(database.authenticateCredentials("alice.admin", "1357").playerId, "saved-player-alice");
+  assert.equal(database.findByPlayerId("saved-player-alice").id, alice.id);
+  assert.throws(() => database.update(bob.id, { playerId: "saved-player-alice" }), /already linked/);
+  database.update(alice.id, { playerId: "" });
+  assert.equal(database.find(alice.id).playerId, "");
+
   database.update(alice.id, { name: "Alice Updated", pin: "9753" });
   assert.equal(database.authenticate("1357"), null);
   assert.equal(database.authenticate("9753").name, "Alice Updated");

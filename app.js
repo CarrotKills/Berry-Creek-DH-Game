@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.11.3";
+  const APP_VERSION = "9.12.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -148,6 +148,7 @@
   function isLocked() { return Boolean(state.settings.locked); }
   function scorerLinkExpired() { return scorerLinkLocked && (!scorerToken || !scorerRoundId || scorerRoundId !== state.roundId); }
   function currentRoundPlayer() {
+    if (currentUser?.role === "admin") return currentUser.playerId ? state.players.find((player) => player.directoryId && player.directoryId === currentUser.playerId) || null : null;
     if (currentUser?.role !== "player") return null;
     if (currentUser.accountType === "guest") return currentUser.roundId === state.roundId ? state.players.find((player) => player.id === currentUser.activePlayerId) || null : null;
     return state.players.find((player) => player.directoryId && player.directoryId === currentUser.playerId) || null;
@@ -418,6 +419,8 @@
 
   async function loadAdminData() {
     await Promise.all([loadSavedPlayers(), loadSavedRounds(), loadShareTokens(), loadReadiness(), loadAdmins()]);
+    renderSavedPlayers();
+    renderAdminManagement();
   }
 
   async function loadPublicLeaderboard(options = {}) {
@@ -550,7 +553,10 @@
       await loadAdminData();
       eventSource?.close();
       const eventUrl = new URL("/api/events", location.origin);
-      if (currentUser?.role === "player") eventUrl.searchParams.set("account", currentUser.id);
+      if (currentUser?.id && !currentUser.bootstrap) {
+        eventUrl.searchParams.set("account", currentUser.id);
+        eventUrl.searchParams.set("role", currentUser.role);
+      }
       if (scorerLinkLocked) {
         eventUrl.searchParams.set("scorer", "1");
         eventUrl.searchParams.set("group", selectedGroup);
@@ -705,6 +711,7 @@
     }
     const canEdit = adminUnlocked && connectionMode === "live" && !isLocked();
     filtered.forEach((saved) => {
+      const linkedAdmin = admins.find((admin) => admin.playerId === saved.id);
       const activePlayer = state.players.find((player) => player.directoryId === saved.id);
       let selected = savedPlayerGroupSelections.get(saved.id) || nextAvailableGroup();
       if (groupPlayers(selected).length >= R.MAX_GROUP_SIZE) selected = nextAvailableGroup();
@@ -713,14 +720,16 @@
       const row = document.createElement("article");
       row.className = "saved-player-row";
       row.dataset.savedPlayerId = saved.id;
-      const loginDetail = saved.loginConfigured ? (saved.lastLoginAt ? `Last signed in ${new Date(saved.lastLoginAt).toLocaleString()}` : "Login created · Has not signed in yet") : "Setup link not yet accepted";
+      const loginDetail = linkedAdmin
+        ? `Uses ${linkedAdmin.name}'s admin login`
+        : saved.loginConfigured ? (saved.lastLoginAt ? `Last signed in ${new Date(saved.lastLoginAt).toLocaleString()}` : "Login created · Has not signed in yet") : "Setup link not yet accepted";
       row.innerHTML = `<label class="saved-player-name">Name<input class="saved-name" type="text" maxlength="40" value="${esc(saved.name)}" ${canEdit ? "" : "disabled"}></label>
         <div class="handicap-field saved-ghin-field"><span class="field-label">GHIN IDX</span><div class="handicap-input-row"><input class="saved-ghin" type="text" maxlength="6" inputmode="decimal" value="${displayIndex(saved.ghin)}" placeholder="12.4" aria-label="GHIN Index for ${esc(saved.name)}" ${canEdit ? "" : "disabled"}><button class="saved-ghin-plus plus-handicap-toggle" type="button" aria-pressed="false" aria-label="Mark ${esc(saved.name)} as plus handicap" ${canEdit ? "" : "disabled"}><span aria-hidden="true">+</span><span class="plus-label">HCP</span></button></div></div>
         <div class="playing-hcp form-hcp"><span>HDCP</span><strong>${displayPlayingHandicap(hcpForValues(saved.ghin, saved.teeKey))}</strong></div>
         <label class="saved-tee-field">Tee<select class="saved-tee" ${canEdit ? "" : "disabled"}>${teeOptions(saved.teeKey)}</select></label>
-        <div class="player-login-status"><span class="field-label">Player login</span><strong>${saved.loginConfigured ? esc(saved.username) : "Not configured"}</strong><small>${esc(loginDetail)}</small></div>
+        <div class="player-login-status"><span class="field-label">Player login</span><strong>${linkedAdmin ? `${esc(linkedAdmin.username)} · Admin` : saved.loginConfigured ? esc(saved.username) : "Not configured"}</strong><small>${esc(loginDetail)}</small></div>
         <label class="saved-group-field">Add to<select class="saved-group" ${addDisabled ? "disabled" : ""}>${savedGroupOptions(selected)}</select></label>
-        <div class="saved-player-actions"><button class="button button-quiet create-player-invite" type="button" ${canEdit ? "" : "disabled"}>${saved.loginConfigured ? "Create reset link" : "Create login link"}</button><button class="button button-primary add-saved-player" type="button" ${addDisabled ? "disabled" : ""}>${activePlayer ? `In Group ${activePlayer.group}` : "Add to group"}</button><button class="button button-quiet delete-saved-player" type="button" ${canEdit ? "" : "disabled"}>Delete</button></div>`;
+        <div class="saved-player-actions"><button class="button button-quiet create-player-invite" type="button" ${canEdit && !linkedAdmin ? "" : "disabled"}>${linkedAdmin ? "Admin-linked login" : saved.loginConfigured ? "Create reset link" : "Create login link"}</button><button class="button button-primary add-saved-player" type="button" ${addDisabled ? "disabled" : ""}>${activePlayer ? `In Group ${activePlayer.group}` : "Add to group"}</button><button class="button button-quiet delete-saved-player" type="button" ${canEdit && !linkedAdmin ? "" : "disabled"}>${linkedAdmin ? "Unlink before deleting" : "Delete"}</button></div>`;
       const name = row.querySelector(".saved-name");
       const ghin = row.querySelector(".saved-ghin");
       const plusHandicap = row.querySelector(".saved-ghin-plus");
@@ -1554,7 +1563,11 @@
     list.innerHTML = admins.length ? admins.map((admin) => {
       const isCurrent = admin.id === currentAdmin?.id;
       const lastLogin = admin.lastLoginAt ? `Last signed in ${new Date(admin.lastLoginAt).toLocaleString()}` : "Has not signed in yet";
-      return `<article class="admin-row ${isCurrent ? "is-current" : ""}" data-admin-id="${esc(admin.id)}"><label>Name<input class="admin-account-name admin-control" data-allow-locked="true" type="text" maxlength="40" value="${esc(admin.name)}"><span class="admin-last-login">${esc(lastLogin)}${isCurrent ? " · Your account" : ""}</span></label><label>Username<input class="admin-account-username admin-control" data-allow-locked="true" type="text" minlength="3" maxlength="30" value="${esc(admin.username || "")}"></label>${isCurrent ? '<label>New private PIN<input class="admin-account-pin admin-control" data-allow-locked="true" type="password" inputmode="numeric" minlength="4" maxlength="10" pattern="[0-9]{4,10}" autocomplete="new-password" placeholder="Leave blank to keep"></label>' : '<div class="admin-row-meta"><strong>PIN remains private</strong><span>Only this admin can change it.</span></div>'}<div class="admin-row-actions"><button class="button button-primary admin-control" data-allow-locked="true" data-admin-action="update" type="button">Save changes</button>${isCurrent ? "" : '<button class="button button-danger admin-control" data-allow-locked="true" data-admin-action="remove" type="button">Remove</button>'}</div></article>`;
+      const linkedOptions = savedPlayers.map((player) => {
+        const owner = admins.find((candidate) => candidate.id !== admin.id && candidate.playerId === player.id);
+        return `<option value="${esc(player.id)}" ${admin.playerId === player.id ? "selected" : ""} ${owner ? "disabled" : ""}>${esc(player.name)}${owner ? ` · linked to ${esc(owner.name)}` : ""}</option>`;
+      }).join("");
+      return `<article class="admin-row ${isCurrent ? "is-current" : ""}" data-admin-id="${esc(admin.id)}"><label>Name<input class="admin-account-name admin-control" data-allow-locked="true" type="text" maxlength="40" value="${esc(admin.name)}"><span class="admin-last-login">${esc(lastLogin)}${isCurrent ? " · Your account" : ""}</span></label><label>Username<input class="admin-account-username admin-control" data-allow-locked="true" type="text" minlength="3" maxlength="30" value="${esc(admin.username || "")}"></label><label class="admin-player-link">Linked player<select class="admin-linked-player admin-control" data-allow-locked="true"><option value="">No linked player</option>${linkedOptions}</select><span>One login provides both admin and player access. Any separate player login is retired.</span></label>${isCurrent ? '<label>New private PIN<input class="admin-account-pin admin-control" data-allow-locked="true" type="password" inputmode="numeric" minlength="4" maxlength="10" pattern="[0-9]{4,10}" autocomplete="new-password" placeholder="Leave blank to keep"></label>' : '<div class="admin-row-meta"><strong>PIN remains private</strong><span>Only this admin can change it.</span></div>'}<div class="admin-row-actions"><button class="button button-primary admin-control" data-allow-locked="true" data-admin-action="update" type="button">Save changes</button>${isCurrent ? "" : '<button class="button button-danger admin-control" data-allow-locked="true" data-admin-action="remove" type="button">Remove</button>'}</div></article>`;
     }).join("") : '<div class="empty-state">No named admins found.</div>';
     document.querySelectorAll("[data-admin-action='update']").forEach((button) => button.addEventListener("click", () => updateAdminAccount(button.closest(".admin-row"))));
     document.querySelectorAll("[data-admin-action='remove']").forEach((button) => button.addEventListener("click", () => removeAdminAccount(button.closest(".admin-row"))));
@@ -1600,16 +1613,21 @@
     const id = row?.dataset.adminId;
     const name = row?.querySelector(".admin-account-name")?.value.trim();
     const username = row?.querySelector(".admin-account-username")?.value.trim();
+    const playerId = row?.querySelector(".admin-linked-player")?.value || "";
     const pin = row?.querySelector(".admin-account-pin")?.value.trim() || "";
     try {
-      const body = await databaseRequest(`/api/admins/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ name, username, ...(pin ? { pin } : {}) }) });
+      const body = await databaseRequest(`/api/admins/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ name, username, playerId, ...(pin ? { pin } : {}) }) });
       if (id === currentAdmin?.id) {
         currentUser = body.sessionAdmin || body.admin;
         currentAdmin = currentUser;
         if (body.token) { authToken = body.token; localStorage.setItem(SESSION_KEY, authToken); }
+        applyUserGroupDefault(true);
       }
-      await loadAdmins();
-      showToast(`${body.admin.name}'s admin account was updated.`, "success");
+      await Promise.all([loadSavedPlayers(), loadAdmins()]);
+      renderSavedPlayers();
+      renderAdminManagement();
+      if (id === currentAdmin?.id) await connect();
+      showToast(`${body.admin.name}'s admin account was updated${body.retiredPlayerLogin ? "; the separate player login was retired" : ""}.`, "success");
     } catch (error) {
       showToast(error.message, "error");
     }

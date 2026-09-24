@@ -26,6 +26,8 @@ On the first launch, use username `admin` with the existing `ADMIN_PIN` environm
 
 Additional administrators create their own credentials privately. A signed-in admin selects **Create private setup link** and sends the single-use link to the new administrator. The link expires after 24 hours. The recipient enters their own name, username, and PIN over the hosted HTTPS connection; the inviting admin never sees the PIN.
 
+An administrator who also plays can use the same credentials for both roles. In **Settings → Admin access**, choose that administrator's saved profile under **Linked player** and save the change. The link is one-to-one: an admin can have one saved-player profile, and a saved-player profile can belong to only one admin. Linking retires any separate player-only login and unused setup links for that profile. The combined account keeps full admin rights, opens the player's assigned group by default, and can be selected as that group's scorekeeper. Unlinking does not recreate the retired player login; create a new private player setup link only if separate access is later needed.
+
 Every saved player creates their own credentials privately. After an admin saves the profile, the app creates a single-use setup link that expires after 24 hours. The player opens that link and chooses their own unique username and PIN; the admin never sees the PIN. A saved player without a completed login shows **Create login link**. An existing account shows **Create reset link**; its current credentials continue working until the player accepts the reset link. Creating another link invalidates any older unused link for that player. Guests continue to receive round-only temporary credentials when they are added and may use them only during that active round.
 
 The normal website opens on the Scoring page. After a player signs in, it defaults to that player's current group; a player not assigned to the active round starts on Group A. Everyone may use the group selector to browse. The Leaderboard tab is public and always shows the active round when it has players. After the active roster is cleared, it automatically shows the most recently saved round as read-only historical results. Each scoring card has an `SK` checkbox. If a group has no scorekeeper, any signed-in member of that group may choose one of its players. Once selected, only that scorekeeper or an admin may replace or clear the selection. At most one player can be selected per group, and only that account can enter the group's scores. Admins can enter scores and manage scorekeepers for every group.
@@ -42,11 +44,11 @@ The guest-entry form in the database panel creates a one-time, independent playe
 
 Enter and display better-than-scratch indexes using standard golf notation, such as `+4.2`. The app stores the value internally in the direction required for stroke calculations, so existing players previously entered as `-4.2` automatically display as `+4.2` after this update.
 
-Deleting a saved player does not delete that golfer's current-round scores. It only removes the reusable database record.
+Deleting a saved player does not delete that golfer's current-round scores. It only removes the reusable database record. A profile linked to an administrator must be unlinked under Admin access before it can be deleted.
 
 ## Event workflow
 
-1. Sign in as an admin, save or update golfers in the player database, and send each golfer their private login setup link. Existing players who forget their credentials can receive a new reset link.
+1. Sign in as an admin, save or update golfers in the player database, and send each non-admin golfer their private login setup link. For an admin who is also playing, select their saved profile under **Settings → Admin access → Linked player** instead.
 2. Add saved golfers to Groups A-F, use **Add player** for a one-time entry, or submit **Add guest** for an independent guest entry. The round supports up to 30 players, each group is limited to five, and the same saved player cannot be assigned to more than one active group.
 3. Send everyone the normal website address. Players sign in, and the app opens their assigned group automatically. No scoring or special leaderboard link is required.
 4. If an admin has not selected a scorekeeper, any signed-in member of that group checks `SK` beside the chosen player. That scorekeeper enters all five gross scores for the current hole and marks sand saves and par-3 KPs.

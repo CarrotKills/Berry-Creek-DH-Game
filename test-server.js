@@ -46,7 +46,7 @@ async function createPlayerLogin(playerId, username, pin) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.11.3");
+  assert.equal(config.appVersion, "9.12.0");
   assert.equal(config.adminSetupRequired, true);
   const emptyPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
   assert.equal(emptyPublicLeaderboard.source, "empty");
@@ -133,6 +133,17 @@ async function createPlayerLogin(playerId, username, pin) {
   assert.equal(listedSaved.players.some((player) => player.id === createdSaved.player.id), true);
   const updatedSaved = await playerRequest(`/${createdSaved.player.id}`, { method: "PUT", body: { ghin: 13.7 } });
   assert.equal(updatedSaved.player.ghin, 13.7);
+  const linkedAdmin = await adminRequest(`/${firstAdmin.admin.id}`, { method: "PUT", body: { playerId: createdSaved.player.id } });
+  assert.equal(linkedAdmin.admin.playerId, createdSaved.player.id);
+  assert.equal(linkedAdmin.retiredPlayerLogin, true);
+  const retiredSavedLogin = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "saved.golfer", pin: "86420" }) });
+  assert.equal(retiredSavedLogin.status, 401);
+  const linkedAdminLogin = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "alice.admin", pin: adminPin }) });
+  assert.equal(linkedAdminLogin.status, 200);
+  assert.equal((await linkedAdminLogin.json()).account.playerId, createdSaved.player.id);
+  const blockedPlayerInvite = await fetch(`${base}/api/player-invitations`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ playerId: createdSaved.player.id, hours: 24 }) });
+  assert.equal(blockedPlayerInvite.status, 409);
+  await playerRequest(`/${createdSaved.player.id}`, { method: "DELETE", status: 409 });
   const completeBackupResponse = await fetch(`${base}/api/system-backup`, { headers: { "X-Admin-Pin": adminPin } });
   assert.equal(completeBackupResponse.status, 200);
   const completeBackup = await completeBackupResponse.json();
@@ -147,6 +158,9 @@ async function createPlayerLogin(playerId, username, pin) {
   const restoredBackup = await fetch(`${base}/api/system-backup/restore`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ backup: completeBackup }) });
   assert.equal(restoredBackup.status, 200);
   assert.equal((await restoredBackup.json()).savedPlayerCount, 1);
+  const unlinkedAdmin = await adminRequest(`/${firstAdmin.admin.id}`, { method: "PUT", body: { playerId: "" } });
+  assert.equal(unlinkedAdmin.admin.playerId, "");
+  adminSession.token = unlinkedAdmin.token;
   await playerRequest(`/${createdSaved.player.id}`, { method: "DELETE" });
   const emptySaved = await playerRequest();
   assert.equal(emptySaved.players.some((player) => player.id === createdSaved.player.id), false);

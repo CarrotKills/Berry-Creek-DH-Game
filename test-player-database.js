@@ -52,6 +52,11 @@ try {
   const persisted = database.find(created.id);
   assert.equal(persisted.name, "Alice Golfer");
   assert.equal(persisted.ghin, -2.4);
+  assert.ok(database.accountForPlayer(created.id));
+  const retired = database.retirePlayerAccess(created.id);
+  assert.equal(retired.username, "alice.golfer");
+  assert.equal(database.accountForPlayer(created.id), null);
+  assert.equal(database.authenticate("alice.golfer", "246810", "round-1"), null);
   database.remove(created.id);
   assert.equal(database.list().length, 0);
   database.close();

@@ -14,7 +14,7 @@ const IndexSheet = require("./index-sheet.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.11.3";
+const APP_VERSION = "9.12.0";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -68,8 +68,8 @@ function broadcast() {
 function presencePayload() {
   const connectedGroups = [...clients.values()].map((client) => {
     if (client.accountId) {
-      const account = playerDatabase.findAccount(client.accountId);
-      const player = activePlayerForAccount(sessionAccount(account, "player"));
+      const account = client.accountRole === "admin" ? adminDatabase.find(client.accountId) : playerDatabase.findAccount(client.accountId);
+      const player = activePlayerForAccount(sessionAccount(account, client.accountRole === "admin" ? "admin" : "player"));
       if (player && state.settings.scorekeepers[player.group] === player.id) return player.group;
     }
     return client.scorer && scoringTokenMatches(client.group, client.token) ? client.group : "";
@@ -161,20 +161,29 @@ function createSnapshot(reason, bundle = buildCompleteBackup(reason)) {
 
 function restoreCompleteBackup(value) {
   const incoming = normalizeCompleteBackup(value);
+  const incomingPlayerIds = new Set(incoming.savedPlayers.map((player) => String(player?.id || "")));
+  const linkedAdmins = adminDatabase.list().filter((admin) => admin.playerId);
+  linkedAdmins.forEach((admin) => {
+    if (!incomingPlayerIds.has(admin.playerId)) throw new Error(`The backup does not contain ${admin.name}'s linked player profile. Unlink that admin before restoring this backup.`);
+  });
   (incoming.playerAccounts || []).forEach((account) => {
-    if (adminDatabase.findByUsername(account.username)) throw new Error(`Player username ${account.username} conflicts with an admin username`);
+    const matchingAdmin = adminDatabase.findByUsername(account.username);
+    const belongsToLinkedAdmin = matchingAdmin && account.accountType === "player" && matchingAdmin.playerId === account.playerId;
+    if (matchingAdmin && !belongsToLinkedAdmin) throw new Error(`Player username ${account.username} conflicts with an admin username`);
   });
   const previous = buildCompleteBackup("before-complete-restore");
   const snapshot = createSnapshot("before-complete-restore", previous);
   try {
     playerDatabase.replaceAll(incoming.savedPlayers);
     if (incoming.playerAccounts) playerDatabase.replaceAccounts(incoming.playerAccounts);
+    linkedAdmins.forEach((admin) => playerDatabase.retirePlayerAccess(admin.playerId));
     roundHistoryDatabase.replaceAll(incoming.savedRounds);
     state = incoming.activeRound;
     persist();
   } catch (error) {
     playerDatabase.replaceAll(previous.savedPlayers);
     playerDatabase.replaceAccounts(previous.playerAccounts || []);
+    linkedAdmins.forEach((admin) => playerDatabase.retirePlayerAccess(admin.playerId));
     roundHistoryDatabase.replaceAll(previous.savedRounds);
     state = Round.normalizeState(previous.activeRound);
     persist();
@@ -208,9 +217,10 @@ function readinessPayload(req) {
   const competingPlayers = state.players.filter((player) => player.inGame).length;
   const savedPlayerCount = playerDatabase.list().length;
   const playerAccounts = playerDatabase.exportAccounts();
+  const linkedPlayerIds = new Set(adminDatabase.list().map((admin) => admin.playerId).filter(Boolean));
   const activePlayersWithoutLogin = state.players.filter((player) => player.isGuest
     ? !playerAccounts.some((account) => account.accountType === "guest" && account.roundId === state.roundId && account.activePlayerId === player.id)
-    : !player.directoryId || !playerAccounts.some((account) => account.accountType === "player" && account.playerId === player.directoryId));
+    : !player.directoryId || (!linkedPlayerIds.has(player.directoryId) && !playerAccounts.some((account) => account.accountType === "player" && account.playerId === player.directoryId)));
   const groupsWithoutScorekeeper = activeGroups.filter((group) => !state.settings.scorekeepers[group]);
   const savedRoundCount = roundHistoryDatabase.list().length;
   const checks = [
@@ -222,7 +232,7 @@ function readinessPayload(req) {
     { key: "roster", label: "The active round has competing players", ok: competingPlayers > 0, severity: "warning", detail: `${state.players.length} assigned; ${competingPlayers} in the game across ${activeGroups.length} group${activeGroups.length === 1 ? "" : "s"}.` },
     { key: "logins", label: "Active players have login credentials", ok: activePlayersWithoutLogin.length === 0, severity: "warning", detail: activePlayersWithoutLogin.length ? `${activePlayersWithoutLogin.length} active player${activePlayersWithoutLogin.length === 1 ? " does" : "s do"} not have a usable login.` : `${state.players.length} active player login${state.players.length === 1 ? " is" : "s are"} ready.` },
     { key: "scorekeepers", label: "Active groups have scorekeepers", ok: groupsWithoutScorekeeper.length === 0, severity: "warning", detail: groupsWithoutScorekeeper.length ? `Group${groupsWithoutScorekeeper.length === 1 ? "" : "s"} ${groupsWithoutScorekeeper.join(", ")} can select a scorekeeper on the Scoring page.` : "Every active group has one scorekeeper." },
-    { key: "database", label: "Admin, player, and round databases are available", ok: true, severity: "error", detail: `${adminCount} admin${adminCount === 1 ? "" : "s"}; ${savedPlayerCount} saved player${savedPlayerCount === 1 ? "" : "s"}; ${playerAccounts.length} player login${playerAccounts.length === 1 ? "" : "s"}; ${savedRoundCount} saved round${savedRoundCount === 1 ? "" : "s"}.` },
+    { key: "database", label: "Admin, player, and round databases are available", ok: true, severity: "error", detail: `${adminCount} admin${adminCount === 1 ? "" : "s"}; ${savedPlayerCount} saved player${savedPlayerCount === 1 ? "" : "s"}; ${playerAccounts.length} player login${playerAccounts.length === 1 ? "" : "s"}; ${linkedPlayerIds.size} linked admin-player login${linkedPlayerIds.size === 1 ? "" : "s"}; ${savedRoundCount} saved round${savedRoundCount === 1 ? "" : "s"}.` },
     { key: "https", label: "The app is using a secure connection", ok: secureConnection, severity: "warning", detail: secureConnection ? "Usernames, PINs, and live scores are protected in transit." : "Use HTTPS before anyone signs in outside this device." }
   ];
   const failedErrors = checks.filter((check) => !check.ok && check.severity === "error").length;
@@ -302,12 +312,14 @@ function accountUsernameInUse(username, ignored = {}) {
   const admin = adminDatabase.findByUsername(username);
   if (admin && !(ignored.role === "admin" && ignored.id === admin.id)) return true;
   const player = playerDatabase.findAccountByUsername(username);
-  return Boolean(player && !(ignored.role === "player" && ignored.id === player.id));
+  return Boolean(player
+    && !(ignored.role === "player" && ignored.id === player.id)
+    && !(ignored.role === "admin" && ignored.playerId && player.accountType === "player" && ignored.playerId === player.playerId));
 }
 
 function sessionAccount(value, role) {
   if (!value) return null;
-  if (role === "admin") return { id: value.id, username: value.username || "admin", name: value.name, role: "admin", updatedAt: value.updatedAt, bootstrap: Boolean(value.bootstrap) };
+  if (role === "admin") return { id: value.id, username: value.username || "admin", name: value.name, role: "admin", playerId: value.playerId || "", updatedAt: value.updatedAt, bootstrap: Boolean(value.bootstrap) };
   return { id: value.id, username: value.username, name: value.name, role: "player", accountType: value.accountType, playerId: value.playerId || "", roundId: value.roundId || "", activePlayerId: value.activePlayerId || "", updatedAt: value.updatedAt };
 }
 
@@ -351,7 +363,9 @@ function authenticateAdminRequest(req) {
 }
 
 function activePlayerForAccount(account) {
-  if (!account || account.role !== "player") return null;
+  if (!account) return null;
+  if (account.role === "admin") return account.playerId ? state.players.find((player) => player.directoryId && player.directoryId === account.playerId) || null : null;
+  if (account.role !== "player") return null;
   if (account.accountType === "guest") return account.roundId === state.roundId ? state.players.find((player) => player.id === account.activePlayerId) || null : null;
   return state.players.find((player) => player.directoryId && player.directoryId === account.playerId) || null;
 }
@@ -528,6 +542,11 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       if (adminDatabase.findByUsername(body.username)) return sendJson(res, 409, { ok: false, error: "That username is already in use" });
       const accepted = playerDatabase.acceptInvitation(body.token, { username: body.username, pin: body.pin });
+      const linkedAdmin = adminDatabase.findByPlayerId(accepted.player.id);
+      if (linkedAdmin) {
+        playerDatabase.retirePlayerAccess(accepted.player.id);
+        return sendJson(res, 409, { ok: false, error: `${linkedAdmin.name}'s admin login is already linked to this player profile` });
+      }
       const account = sessionAccount(accepted.account, "player");
       recordSystemAudit(accepted.player.name, accepted.wasReset ? "PLAYER_ACCESS_RESET" : "PLAYER_ACCESS_SETUP", `${accepted.player.name} privately ${accepted.wasReset ? "reset" : "created"} player access`);
       return sendJson(res, 201, { ok: true, player: accepted.player, account, token: issueSession(account), wasReset: accepted.wasReset });
@@ -544,6 +563,8 @@ const server = http.createServer(async (req, res) => {
     if (!requestIsSecure(req)) return sendJson(res, 400, { ok: false, error: "Open the hosted HTTPS app before creating a private player link" });
     try {
       const body = await readBody(req);
+      const linkedAdmin = adminDatabase.findByPlayerId(body.playerId);
+      if (linkedAdmin) return sendJson(res, 409, { ok: false, error: `${linkedAdmin.name}'s admin login is already linked to this player profile` });
       const invitation = playerDatabase.createInvitation(body.playerId, adminIdentity.id, body.hours);
       recordSystemAudit(adminIdentity.name, "PLAYER_INVITE", `Created a private ${invitation.resetsExistingLogin ? "login reset" : "login setup"} link for ${invitation.playerName}`);
       return sendJson(res, 201, { ok: true, invitation });
@@ -575,13 +596,21 @@ const server = http.createServer(async (req, res) => {
         const body = await readBody(req);
         const targetId = decodeURIComponent(adminRoute[1]);
         const update = body.admin || body;
+        const previousAdmin = adminDatabase.find(targetId);
         if (update.pin && targetId !== adminIdentity.id) return sendJson(res, 403, { ok: false, error: "Only an admin can change their own private PIN" });
-        if (update.username && accountUsernameInUse(update.username, { role: "admin", id: targetId })) return sendJson(res, 409, { ok: false, error: "That username is already in use" });
+        const requestedPlayerId = Object.hasOwn(update, "playerId") ? String(update.playerId || "") : previousAdmin?.playerId || "";
+        if (update.username && accountUsernameInUse(update.username, { role: "admin", id: targetId, playerId: requestedPlayerId })) return sendJson(res, 409, { ok: false, error: "That username is already in use" });
+        if (Object.hasOwn(update, "playerId") && update.playerId && !playerDatabase.find(update.playerId)) return sendJson(res, 404, { ok: false, error: "Saved player not found" });
         const admin = adminDatabase.update(targetId, update);
+        const linkedPlayerChanged = Boolean(admin.playerId && admin.playerId !== previousAdmin?.playerId);
+        const retiredPlayerLogin = linkedPlayerChanged ? playerDatabase.retirePlayerAccess(admin.playerId) : null;
         adminAuthCache.clear();
-        recordSystemAudit(adminIdentity.name, "ADMIN_UPDATE", `Updated admin ${admin.name}`);
+        const linkDetail = admin.playerId !== (previousAdmin?.playerId || "")
+          ? admin.playerId ? ` and linked the ${playerDatabase.find(admin.playerId)?.name || "saved player"} profile` : " and removed the linked player profile"
+          : "";
+        recordSystemAudit(adminIdentity.name, "ADMIN_UPDATE", `Updated admin ${admin.name}${linkDetail}`);
         const account = sessionAccount(admin, "admin");
-        return sendJson(res, 200, { admin, sessionAdmin: account, ...(targetId === adminIdentity.id ? { token: issueSession(account) } : {}) });
+        return sendJson(res, 200, { admin, sessionAdmin: account, retiredPlayerLogin: Boolean(retiredPlayerLogin), ...(targetId === adminIdentity.id ? { token: issueSession(account) } : {}) });
       }
       if (req.method === "DELETE" && adminRoute) {
         const targetId = decodeURIComponent(adminRoute[1]);
@@ -593,7 +622,7 @@ const server = http.createServer(async (req, res) => {
       }
       return sendJson(res, 405, { ok: false, error: "Method not allowed" });
     } catch (error) {
-      const status = /already assigned/.test(error.message) ? 409 : /not found/.test(error.message) ? 404 : 400;
+      const status = /already assigned|already linked/.test(error.message) ? 409 : /not found/.test(error.message) ? 404 : 400;
       return sendJson(res, status, { ok: false, error: error.message });
     }
   }
@@ -736,8 +765,11 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 200, { player });
       }
       if (req.method === "DELETE" && playerRoute) {
+        const targetId = decodeURIComponent(playerRoute[1]);
+        const linkedAdmin = adminDatabase.findByPlayerId(targetId);
+        if (linkedAdmin) return sendJson(res, 409, { ok: false, error: `Unlink this player from ${linkedAdmin.name}'s admin account before deleting the profile` });
         createSnapshot("before-saved-player-delete");
-        const player = playerDatabase.remove(decodeURIComponent(playerRoute[1]));
+        const player = playerDatabase.remove(targetId);
         recordSystemAudit(adminIdentity.name, "PLAYER_DELETE", `Removed ${player.name} from the player database`);
         return sendJson(res, 200, { ok: true, player });
       }
@@ -773,12 +805,14 @@ const server = http.createServer(async (req, res) => {
     });
     const requestedGroup = String(url.searchParams.get("group") || "").toUpperCase();
     const token = String(url.searchParams.get("token") || "");
-    const account = playerDatabase.findAccount(String(url.searchParams.get("account") || ""));
-    const activeAccountPlayer = activePlayerForAccount(sessionAccount(account, "player"));
+    const accountId = String(url.searchParams.get("account") || "");
+    const accountRole = url.searchParams.get("role") === "admin" ? "admin" : "player";
+    const account = accountRole === "admin" ? adminDatabase.find(accountId) : playerDatabase.findAccount(accountId);
+    const activeAccountPlayer = activePlayerForAccount(sessionAccount(account, accountRole));
     const accountScorekeeper = Boolean(activeAccountPlayer && state.settings.scorekeepers[activeAccountPlayer.group] === activeAccountPlayer.id);
     const legacyScorer = url.searchParams.get("scorer") === "1" && scoringTokenMatches(requestedGroup, token);
     const scorer = accountScorekeeper || legacyScorer;
-    clients.set(res, { group: accountScorekeeper ? activeAccountPlayer.group : legacyScorer ? requestedGroup : "", scorer, token, accountId: account?.id || "" });
+    clients.set(res, { group: accountScorekeeper ? activeAccountPlayer.group : legacyScorer ? requestedGroup : "", scorer, token, accountId: account?.id || "", accountRole });
     res.write(`event: state\ndata: ${JSON.stringify(state)}\n\n`);
     res.write(`event: presence\ndata: ${JSON.stringify(presencePayload())}\n\n`);
     broadcastPresence();

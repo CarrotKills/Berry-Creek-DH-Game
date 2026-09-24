@@ -232,6 +232,19 @@ class PlayerDatabase {
   removeGuestAccount(roundId, activePlayerId) { this.deleteGuestAccountStatement.run(String(roundId || ""), String(activePlayerId || "")); }
   removeGuestAccountsForRound(roundId) { this.deleteGuestRoundAccountsStatement.run(String(roundId || "")); }
 
+  retirePlayerAccess(playerId) {
+    const id = String(playerId || "");
+    const current = this.accountForPlayer(id);
+    const retiredAt = new Date().toISOString();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.invalidatePlayerInvitationsStatement.run(retiredAt, id);
+      this.deletePlayerAccountStatement.run(id);
+      this.db.exec("COMMIT");
+    } catch (error) { this.db.exec("ROLLBACK"); throw error; }
+    return current;
+  }
+
   createInvitation(playerId, createdByAdminId, hours = 24) {
     const player = this.find(playerId);
     if (!player) throw new Error("Saved player not found");
