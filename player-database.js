@@ -268,6 +268,25 @@ class PlayerDatabase {
     return { token, playerId: player.id, playerName: player.name, createdAt, expiresAt, resetsExistingLogin: player.loginConfigured };
   }
 
+  invitationInfo(tokenValue) {
+    const token = String(tokenValue || "").trim();
+    if (!/^[A-Za-z0-9_-]{40,60}$/.test(token)) throw new Error("This player invitation is invalid");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const invitation = this.findInvitationStatement.get(tokenHash);
+    if (!invitation || invitation.used_at) throw new Error("This player invitation has already been used or is invalid");
+    if (Date.parse(invitation.expires_at) <= Date.now()) throw new Error("This player invitation has expired");
+    const player = this.find(invitation.player_id);
+    if (!player) throw new Error("Saved player not found");
+    const account = this.accountForPlayer(player.id);
+    return {
+      playerId: player.id,
+      playerName: player.name,
+      existingUsername: account?.username || "",
+      resetsExistingLogin: Boolean(account),
+      expiresAt: invitation.expires_at
+    };
+  }
+
   acceptInvitation(tokenValue, value) {
     const token = String(tokenValue || "").trim();
     if (!/^[A-Za-z0-9_-]{40,60}$/.test(token)) throw new Error("This player invitation is invalid");

@@ -39,14 +39,20 @@ async function createPlayerLogin(playerId, username, pin) {
   const invitationResponse = await fetch(`${base}/api/player-invitations`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ playerId, hours: 24 }) });
   assert.equal(invitationResponse.status, 201);
   const invitation = (await invitationResponse.json()).invitation;
-  const acceptResponse = await fetch(`${base}/api/player-invitations/accept`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: invitation.token, username, pin }) });
+  const previewResponse = await fetch(`${base}/api/player-invitations/preview?token=${encodeURIComponent(invitation.token)}`);
+  assert.equal(previewResponse.status, 200);
+  const preview = await previewResponse.json();
+  assert.equal(preview.username, username);
+  const acceptResponse = await fetch(`${base}/api/player-invitations/accept`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: invitation.token, username: "attempted.override", pin }) });
   assert.equal(acceptResponse.status, 201);
-  return { invitation, accepted: await acceptResponse.json() };
+  const accepted = await acceptResponse.json();
+  assert.equal(accepted.account.username, username);
+  return { invitation, preview, accepted };
 }
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.12.1");
+  assert.equal(config.appVersion, "9.13.0");
   assert.equal(config.adminSetupRequired, true);
   const emptyPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
   assert.equal(emptyPublicLeaderboard.source, "empty");
@@ -189,6 +195,19 @@ async function createPlayerLogin(playerId, username, pin) {
   const uniqueActiveState = await (await fetch(`${base}/api/state`)).json();
   assert.equal(uniqueActiveState.players.length, 2);
   assert.equal(uniqueActiveState.players.some((player) => player.id === "live-a-duplicate"), false);
+  await action("ADD_PLAYER", { player: { id: "guest-auto-1", name: "Guest Golfer", group: "C", teeKey: "member", ghin: 14.2, isGuest: true } });
+  const guestAccountResponse = await fetch(`${base}/api/guest-accounts`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ activePlayerId: "guest-auto-1", username: "ignored.username", pin: "9999" }) });
+  assert.equal(guestAccountResponse.status, 201);
+  const guestAccount = (await guestAccountResponse.json()).account;
+  assert.equal(guestAccount.username, "guest.golfer");
+  const guestLogin = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "guest.golfer", pin: "1234" }) });
+  assert.equal(guestLogin.status, 200);
+  await action("ADD_PLAYER", { player: { id: "guest-auto-2", name: "Guest Golfer", group: "D", teeKey: "member", ghin: 15.1, isGuest: true } });
+  const duplicateGuestResponse = await fetch(`${base}/api/guest-accounts`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ activePlayerId: "guest-auto-2" }) });
+  assert.equal(duplicateGuestResponse.status, 201);
+  assert.equal((await duplicateGuestResponse.json()).account.username, "guest.golfer.2");
+  await action("REMOVE_PLAYER", { playerId: "guest-auto-1" });
+  await action("REMOVE_PLAYER", { playerId: "guest-auto-2" });
   const activePublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
   assert.equal(activePublicLeaderboard.source, "active");
   assert.equal(activePublicLeaderboard.state.players.length, 2);

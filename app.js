@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.12.1";
+  const APP_VERSION = "9.13.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -624,8 +624,6 @@
     const name = $("#guestPlayerName").value.trim();
     const handicapText = $("#guestPlayerGhin").value.trim();
     const group = $("#guestPlayerGroup").value;
-    const username = $("#guestPlayerUsername").value.trim();
-    const pin = $("#guestPlayerPin").value.trim();
     if (!name) return showToast("Enter the guest's name.", "error");
     const ghin = requiredHandicapValue(handicapText);
     if (ghin === null) return showToast("Enter the guest's Handicap Index from +10.0 through 54.0, such as 12.4 or +4.2.", "error");
@@ -642,15 +640,13 @@
     const accepted = await dispatch({ type: "ADD_PLAYER", payload: { player } });
     if (!accepted) return;
     try {
-      await databaseRequest("/api/guest-accounts", { method: "POST", body: JSON.stringify({ activePlayerId: player.id, username, pin }) });
+      const body = await databaseRequest("/api/guest-accounts", { method: "POST", body: JSON.stringify({ activePlayerId: player.id }) });
       $("#guestPlayerName").value = "";
       $("#guestPlayerGhin").value = "";
-      $("#guestPlayerUsername").value = "";
-      $("#guestPlayerPin").value = "";
       playerEntryMode = "";
       render();
       renderDraftHandicaps();
-      showToast(`${name} added to Group ${group} with a temporary login.`, "success");
+      showToast(`${name} added to Group ${group}. Login: ${body.account.username} · PIN 1234.`, "success");
     } catch (error) {
       await dispatch({ type: "REMOVE_PLAYER", payload: { playerId: player.id } });
       showToast(`${error.message} The guest was not added.`, "error");
@@ -726,14 +722,10 @@
       const row = document.createElement("article");
       row.className = "saved-player-row";
       row.dataset.savedPlayerId = saved.id;
-      const loginDetail = linkedAdmin
-        ? `Uses ${linkedAdmin.name}'s admin login`
-        : saved.loginConfigured ? (saved.lastLoginAt ? `Last signed in ${new Date(saved.lastLoginAt).toLocaleString()}` : "Login created · Has not signed in yet") : "Setup link not yet accepted";
       row.innerHTML = `<label class="saved-player-name">Name<input class="saved-name" type="text" maxlength="40" value="${esc(saved.name)}" ${canEdit ? "" : "disabled"}></label>
         <div class="handicap-field saved-ghin-field"><span class="field-label">GHIN IDX</span><div class="handicap-input-row"><input class="saved-ghin" type="text" maxlength="6" inputmode="decimal" value="${displayIndex(saved.ghin)}" placeholder="12.4" aria-label="GHIN Index for ${esc(saved.name)}" ${canEdit ? "" : "disabled"}><button class="saved-ghin-plus plus-handicap-toggle" type="button" aria-pressed="false" aria-label="Mark ${esc(saved.name)} as plus handicap" ${canEdit ? "" : "disabled"}><span aria-hidden="true">+</span><span class="plus-label">HCP</span></button></div></div>
         <div class="playing-hcp form-hcp"><span>HDCP</span><strong>${displayPlayingHandicap(hcpForValues(saved.ghin, saved.teeKey))}</strong></div>
         <label class="saved-tee-field">Tee<select class="saved-tee" ${canEdit ? "" : "disabled"}>${teeOptions(saved.teeKey)}</select></label>
-        <div class="player-login-status"><span class="field-label">Player login</span><strong>${linkedAdmin ? `${esc(linkedAdmin.username)} · Admin` : saved.loginConfigured ? esc(saved.username) : "Not configured"}</strong><small>${esc(loginDetail)}</small></div>
         <label class="saved-group-field">Add to<select class="saved-group" ${addDisabled ? "disabled" : ""}>${savedGroupOptions(selected)}</select></label>
         <div class="saved-player-actions"><button class="button button-quiet create-player-invite" type="button" ${canEdit && !linkedAdmin ? "" : "disabled"}>${linkedAdmin ? "Admin-linked login" : saved.loginConfigured ? "Create reset link" : "Create login link"}</button><button class="button button-primary add-saved-player" type="button" ${addDisabled ? "disabled" : ""}>${activePlayer ? `In Group ${activePlayer.group}` : "Add to group"}</button><button class="button button-quiet delete-saved-player" type="button" ${canEdit && !linkedAdmin ? "" : "disabled"}>${linkedAdmin ? "Unlink before deleting" : "Delete"}</button></div>`;
       const name = row.querySelector(".saved-name");
@@ -1715,16 +1707,33 @@
     return match ? match[1] : "";
   }
 
-  function openPlayerInvitation() {
-    if (!playerInvitationToken()) return;
-    $("#playerInviteError").hidden = true;
+  async function openPlayerInvitation() {
+    const token = playerInvitationToken();
+    if (!token) return;
+    const errorBox = $("#playerInviteError");
+    const usernameInput = $("#invitedPlayerUsername");
+    const submitButton = $("#acceptPlayerInviteBtn");
+    errorBox.hidden = true;
+    usernameInput.value = "Loading…";
+    submitButton.disabled = true;
     $("#playerInviteDialog").showModal();
+    try {
+      const response = await fetch(`/api/player-invitations/preview?token=${encodeURIComponent(token)}`, { cache: "no-store" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "The invitation could not be opened");
+      usernameInput.value = body.username;
+      submitButton.disabled = false;
+      requestAnimationFrame(() => $("#invitedPlayerPin").focus());
+    } catch (error) {
+      usernameInput.value = "";
+      errorBox.textContent = error.message;
+      errorBox.hidden = false;
+    }
   }
 
   async function acceptPlayerInvitation(event) {
     event.preventDefault();
     const token = playerInvitationToken();
-    const username = $("#invitedPlayerUsername").value.trim();
     const pin = $("#invitedPlayerPin").value.trim();
     const confirmation = $("#invitedPlayerPinConfirm").value.trim();
     const errorBox = $("#playerInviteError");
@@ -1734,7 +1743,7 @@
       return;
     }
     try {
-      const response = await fetch("/api/player-invitations/accept", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, username, pin }) });
+      const response = await fetch("/api/player-invitations/accept", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, pin }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "The invitation could not be accepted");
       authToken = body.token;
@@ -2228,7 +2237,7 @@
   $("#sharePlayerInviteBtn").addEventListener("click", async () => {
     if (!playerInviteLink) return;
     const name = playerInvitePlayer?.name || "a Berry Creek player";
-    if (navigator.share) await navigator.share({ title: "Berry Creek player login", text: `${name}: privately create or reset your Berry Creek DH Game login. This single-use link expires after 24 hours.`, url: playerInviteLink }).catch(() => {});
+    if (navigator.share) await navigator.share({ title: "Berry Creek player login", text: `${name}: create or reset your Berry Creek DH Game access with your assigned username and private PIN. This single-use link expires after 24 hours.`, url: playerInviteLink }).catch(() => {});
     else { await copyText(playerInviteLink); showToast("Private player setup link copied.", "success"); }
   });
   $("#acceptPlayerInviteForm").addEventListener("submit", acceptPlayerInvitation);

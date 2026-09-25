@@ -14,7 +14,7 @@ const IndexSheet = require("./index-sheet.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.12.1";
+const APP_VERSION = "9.13.0";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -317,6 +317,31 @@ function accountUsernameInUse(username, ignored = {}) {
     && !(ignored.role === "admin" && ignored.playerId && player.accountType === "player" && ignored.playerId === player.playerId));
 }
 
+function usernameBaseFromName(nameValue) {
+  const parts = String(nameValue || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  let base = parts.length > 1 ? `${parts[0]}.${parts.at(-1)}` : (parts[0] || "player");
+  if (base.length < 3) base = `player.${base}`;
+  return base.slice(0, 30).replace(/[._-]+$/g, "") || "player";
+}
+
+function availableUsernameForName(nameValue) {
+  const base = usernameBaseFromName(nameValue);
+  if (!accountUsernameInUse(base)) return base;
+  for (let number = 2; number < 10000; number += 1) {
+    const suffix = `.${number}`;
+    const candidate = `${base.slice(0, 30 - suffix.length).replace(/[._-]+$/g, "")}${suffix}`;
+    if (!accountUsernameInUse(candidate)) return candidate;
+  }
+  throw new Error("A unique username could not be assigned");
+}
+
 function sessionAccount(value, role) {
   if (!value) return null;
   if (role === "admin") return { id: value.id, username: value.username || "admin", name: value.name, role: "admin", playerId: value.playerId || "", updatedAt: value.updatedAt, bootstrap: Boolean(value.bootstrap) };
@@ -536,17 +561,31 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  if (req.method === "GET" && url.pathname === "/api/player-invitations/preview") {
+    try {
+      if (!requestIsSecure(req)) return sendJson(res, 400, { ok: false, error: "Open the hosted HTTPS app to create private player access" });
+      const invitation = playerDatabase.invitationInfo(url.searchParams.get("token"));
+      const linkedAdmin = adminDatabase.findByPlayerId(invitation.playerId);
+      if (linkedAdmin) return sendJson(res, 409, { ok: false, error: `${linkedAdmin.name}'s admin login is already linked to this player profile` });
+      const username = invitation.existingUsername || availableUsernameForName(invitation.playerName);
+      return sendJson(res, 200, { ok: true, playerName: invitation.playerName, username, resetsExistingLogin: invitation.resetsExistingLogin, expiresAt: invitation.expiresAt });
+    } catch (error) {
+      const status = /expired|already been used|invalid/.test(error.message) ? 410 : error.message === "Saved player not found" ? 404 : 400;
+      return sendJson(res, status, { ok: false, error: error.message });
+    }
+  }
+
   if (req.method === "POST" && url.pathname === "/api/player-invitations/accept") {
     try {
       if (!requestIsSecure(req)) return sendJson(res, 400, { ok: false, error: "Open the hosted HTTPS app to create private player access" });
       const body = await readBody(req);
-      if (adminDatabase.findByUsername(body.username)) return sendJson(res, 409, { ok: false, error: "That username is already in use" });
-      const accepted = playerDatabase.acceptInvitation(body.token, { username: body.username, pin: body.pin });
-      const linkedAdmin = adminDatabase.findByPlayerId(accepted.player.id);
+      const invitation = playerDatabase.invitationInfo(body.token);
+      const linkedAdmin = adminDatabase.findByPlayerId(invitation.playerId);
       if (linkedAdmin) {
-        playerDatabase.retirePlayerAccess(accepted.player.id);
         return sendJson(res, 409, { ok: false, error: `${linkedAdmin.name}'s admin login is already linked to this player profile` });
       }
+      const username = invitation.existingUsername || availableUsernameForName(invitation.playerName);
+      const accepted = playerDatabase.acceptInvitation(body.token, { username, pin: body.pin });
       const account = sessionAccount(accepted.account, "player");
       recordSystemAudit(accepted.player.name, accepted.wasReset ? "PLAYER_ACCESS_RESET" : "PLAYER_ACCESS_SETUP", `${accepted.player.name} privately ${accepted.wasReset ? "reset" : "created"} player access`);
       return sendJson(res, 201, { ok: true, player: accepted.player, account, token: issueSession(account), wasReset: accepted.wasReset });
@@ -704,7 +743,7 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST" && url.pathname === "/api/players") {
         const body = await readBody(req);
         const candidate = body.player || body;
-        if (Object.hasOwn(candidate, "username") || Object.hasOwn(candidate, "pin")) return sendJson(res, 403, { ok: false, error: "Use a private player setup link so the player can choose their own username and PIN" });
+        if (Object.hasOwn(candidate, "username") || Object.hasOwn(candidate, "pin")) return sendJson(res, 403, { ok: false, error: "Use a private player setup link so the app can assign the username and the player can choose their PIN" });
         const player = playerDatabase.create(candidate);
         recordSystemAudit(adminIdentity.name, "PLAYER_SAVE", `Saved ${player.name} to the player database`);
         return sendJson(res, 201, { player });
@@ -757,7 +796,7 @@ const server = http.createServer(async (req, res) => {
         const body = await readBody(req);
         const targetId = decodeURIComponent(playerRoute[1]);
         const candidate = body.player || body;
-        if (Object.hasOwn(candidate, "username") || Object.hasOwn(candidate, "pin")) return sendJson(res, 403, { ok: false, error: "Use a private player reset link so the player can choose their own username and PIN" });
+        if (Object.hasOwn(candidate, "username") || Object.hasOwn(candidate, "pin")) return sendJson(res, 403, { ok: false, error: "Use a private player reset link so the player can privately choose a new PIN" });
         const player = playerDatabase.update(targetId, candidate);
         recordSystemAudit(adminIdentity.name, "PLAYER_UPDATE", `Updated saved player ${player.name}`);
         return sendJson(res, 200, { player });
@@ -785,8 +824,8 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const player = state.players.find((item) => item.id === String(body.activePlayerId || "") && item.isGuest);
       if (!player) return sendJson(res, 404, { ok: false, error: "Active guest not found" });
-      if (accountUsernameInUse(body.username)) return sendJson(res, 409, { ok: false, error: "That username is already in use" });
-      const account = playerDatabase.createGuestAccount(state.roundId, player.id, player.name, { username: body.username, pin: body.pin });
+      const username = availableUsernameForName(player.name);
+      const account = playerDatabase.createGuestAccount(state.roundId, player.id, player.name, { username, pin: "1234" });
       recordSystemAudit(adminIdentity.name, "GUEST_LOGIN", `Created temporary login for ${player.name}`);
       return sendJson(res, 201, { account });
     } catch (error) {

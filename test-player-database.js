@@ -20,6 +20,10 @@ try {
   assert.throws(() => database.create({ name: "Missing Tee", ghin: 8.1 }), /Tee selection is required/);
   const invalidatedInvitation = database.createInvitation(created.id, "admin-1", 24);
   const invitation = database.createInvitation(created.id, "admin-1", 24);
+  const invitationInfo = database.invitationInfo(invitation.token);
+  assert.equal(invitationInfo.playerName, "Alice Golfer");
+  assert.equal(invitationInfo.existingUsername, "");
+  assert.equal(invitationInfo.resetsExistingLogin, false);
   assert.throws(() => database.acceptInvitation(invalidatedInvitation.token, { username: "alice.old", pin: "111111" }), /already been used or is invalid/);
   const accepted = database.acceptInvitation(invitation.token, { username: "alice.golfer", pin: "123456" });
   assert.equal(accepted.player.loginConfigured, true);
@@ -27,6 +31,9 @@ try {
   assert.throws(() => database.acceptInvitation(invitation.token, { username: "alice.again", pin: "111111" }), /already been used or is invalid/);
   assert.equal(database.authenticate("alice.golfer", "123456", "round-1").playerId, created.id);
   const resetInvitation = database.createInvitation(created.id, "admin-1", 24);
+  const resetInvitationInfo = database.invitationInfo(resetInvitation.token);
+  assert.equal(resetInvitationInfo.existingUsername, "alice.golfer");
+  assert.equal(resetInvitationInfo.resetsExistingLogin, true);
   const reset = database.acceptInvitation(resetInvitation.token, { username: "alice.golfer", pin: "246810" });
   assert.equal(reset.wasReset, true);
   assert.equal(database.authenticate("alice.golfer", "123456", "round-1"), null);
