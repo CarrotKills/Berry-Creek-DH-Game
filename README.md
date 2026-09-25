@@ -24,9 +24,9 @@ Admin-only controls protect the roster, handicaps, reset/import tools, account s
 
 On the first launch, use username `admin` with the existing `ADMIN_PIN` environment value, then open **Settings → Admin access** and create the first named administrator. The setup PIN is disabled as soon as that account is created. Existing named admins upgrading from an earlier release may leave Username blank once and sign in with their existing private PIN; their generated username is then visible under Admin access.
 
-Additional administrators create their own credentials privately. A signed-in admin selects **Create private setup link** and sends the single-use link to the new administrator. The link expires after 24 hours. The recipient enters their own name, username, and PIN over the hosted HTTPS connection; the inviting admin never sees the PIN.
+Additional administrators create their own credentials privately. A signed-in admin selects **Create private setup link** and sends the single-use link to the new administrator. The link expires after 24 hours. The recipient enters their GHIN-matching name and private PIN over the hosted HTTPS connection; the app assigns the login as `first.last`, and the inviting admin never sees the PIN.
 
-An administrator who also plays can use the same credentials for both roles. In **Settings → Admin access**, choose that administrator's saved profile under **Linked player** and save the change. The link is one-to-one: an admin can have one saved-player profile, and a saved-player profile can belong to only one admin. Linking retires any separate player-only login and unused setup links for that profile. The combined account keeps full admin rights, opens the player's assigned group by default, and can be selected as that group's scorekeeper. Unlinking does not recreate the retired player login; create a new private player setup link only if separate access is later needed.
+An administrator who also plays can use the same credentials for both roles. In **Settings → Named accountability**, choose that administrator's saved profile under **Linked player** and save the change. The saved player's GHIN name becomes the account name and automatically determines the `first.last` username. Later edits to that single Settings name field update the linked saved-player name and login together. The link is one-to-one: an admin can have one saved-player profile, and a saved-player profile can belong to only one admin. Linking retires any separate player-only login and unused setup links for that profile. The combined account keeps full admin rights, opens the player's assigned group by default, and can be selected as that group's scorekeeper. Unlinking does not recreate the retired player login; create a new private player setup link only if separate access is later needed.
 
 Every saved player creates their private PIN through a single-use setup link that expires after 24 hours. The app assigns the username from the saved name in `first.last` form and shows it as read-only; if that username is already used, a number is appended. The admin never sees the player's PIN. A saved player without a completed login shows **Create login link**. An existing account shows **Create reset link**; its username stays the same and its current credentials continue working until the player accepts the reset link. Creating another link invalidates any older unused link for that player. Guests receive an automatic round-only username and the default PIN `1234` when added and may use them only during that active round.
 
@@ -55,7 +55,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 5. Everyone can view the live Leaderboard. A new KP claim on the same hole automatically replaces the previous holder while retaining the earlier player's scorecard mark.
 6. Use Show group scorecard at the bottom of the scoring page to open the group's live-updating scorecard. Out, In, and Total show gross/net; incomplete totals are red and final totals are black. The scorecard uses S for skins, KP for the qualifying holder, KPM for marked claims that earned no tic, and an outlined KP while the result is pending.
 7. Finalize and lock the round when scoring is complete. Only the admin can unlock it.
-8. Select Save current round to preserve a historical snapshot before resetting for the next event.
+8. Select **Save round** to preserve a historical snapshot before resetting for the next event.
 9. Before play, open Event readiness in Settings, run the checks, and create a current server snapshot.
 
 ## Handicap and tic rules
@@ -81,6 +81,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 
 ## Settings and admin controls
 
+- Settings begins with the frequently used event controls in this order: Device preferences, Start a new round, Finalize and lock round, and Save round. Event readiness and Live event status follow. Historical reference, Named accountability, and Change history are grouped below for less frequent access; backup, import/export, and version tools remain available inside Historical reference.
 - The connection badge shows Live, Reconnecting, or Offline. Offline score changes are queued on the device and sent when the connection returns.
 - Each score briefly shows Saving, Saved, Waiting to sync, or Sync problem so the scorekeeper can verify that entry.
 - Score updates include the score the device last saw. If another device changed the same player and hole first, the scorekeeper must choose whether to keep the server score or replace it, preventing silent overwrites.

@@ -52,7 +52,7 @@ async function createPlayerLogin(playerId, username, pin) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.13.0");
+  assert.equal(config.appVersion, "9.14.0");
   assert.equal(config.adminSetupRequired, true);
   const emptyPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
   assert.equal(emptyPublicLeaderboard.source, "empty");
@@ -66,8 +66,9 @@ async function createPlayerLogin(playerId, username, pin) {
   const rightPin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "2468" }) });
   assert.equal(rightPin.status, 200);
   assert.equal((await rightPin.json()).admin.bootstrap, true);
-  const firstAdmin = await adminRequest("", { method: "POST", status: 201, pin: "2468", body: { name: "Alice Admin", username: "alice.admin", pin: "1357" } });
+  const firstAdmin = await adminRequest("", { method: "POST", status: 201, pin: "2468", body: { name: "Alice Admin", username: "attempted.override", pin: "1357" } });
   assert.equal(firstAdmin.admin.name, "Alice Admin");
+  assert.equal(firstAdmin.admin.username, "alice.admin");
   adminPin = "1357";
   const disabledSetupPin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "2468" }) });
   assert.equal(disabledSetupPin.status, 401);
@@ -86,8 +87,9 @@ async function createPlayerLogin(playerId, username, pin) {
   const inviteResponse = await fetch(`${base}/api/admin-invitations`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ hours: 24 }) });
   assert.equal(inviteResponse.status, 201);
   const invitation = (await inviteResponse.json()).invitation;
-  const acceptInvite = await fetch(`${base}/api/admin-invitations/accept`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: invitation.token, name: "Bob Admin", username: "bob.admin", pin: "8642" }) });
+  const acceptInvite = await fetch(`${base}/api/admin-invitations/accept`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: invitation.token, name: "Bob Admin", username: "attempted.override", pin: "8642" }) });
   assert.equal(acceptInvite.status, 201);
+  assert.equal((await acceptInvite.clone().json()).admin.username, "bob.admin");
   const reuseInvite = await fetch(`${base}/api/admin-invitations/accept`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: invitation.token, name: "Reuse", pin: "1111" }) });
   assert.equal(reuseInvite.status, 410);
   const bobLogin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "8642" }) });
@@ -143,12 +145,20 @@ async function createPlayerLogin(playerId, username, pin) {
   assert.equal(updatedSaved.player.ghin, 13.7);
   const linkedAdmin = await adminRequest(`/${firstAdmin.admin.id}`, { method: "PUT", body: { playerId: createdSaved.player.id } });
   assert.equal(linkedAdmin.admin.playerId, createdSaved.player.id);
+  assert.equal(linkedAdmin.admin.name, "Saved Golfer");
+  assert.equal(linkedAdmin.admin.username, "saved.golfer");
   assert.equal(linkedAdmin.retiredPlayerLogin, true);
   const retiredSavedLogin = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "saved.golfer", pin: "86420" }) });
   assert.equal(retiredSavedLogin.status, 401);
-  const linkedAdminLogin = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "alice.admin", pin: adminPin }) });
+  const linkedAdminLogin = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "saved.golfer", pin: adminPin }) });
   assert.equal(linkedAdminLogin.status, 200);
   assert.equal((await linkedAdminLogin.json()).account.playerId, createdSaved.player.id);
+  const renamedLinkedAdmin = await adminRequest(`/${firstAdmin.admin.id}`, { method: "PUT", body: { name: "Roy Faltesek", username: "ignored.override", playerId: createdSaved.player.id } });
+  assert.equal(renamedLinkedAdmin.admin.name, "Roy Faltesek");
+  assert.equal(renamedLinkedAdmin.admin.username, "roy.faltesek");
+  assert.equal((await playerRequest()).players.find((player) => player.id === createdSaved.player.id).name, "Roy Faltesek");
+  const renamedAdminLogin = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "Roy.Faltesek", pin: adminPin }) });
+  assert.equal(renamedAdminLogin.status, 200);
   const blockedPlayerInvite = await fetch(`${base}/api/player-invitations`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ playerId: createdSaved.player.id, hours: 24 }) });
   assert.equal(blockedPlayerInvite.status, 409);
   await playerRequest(`/${createdSaved.player.id}`, { method: "DELETE", status: 409 });

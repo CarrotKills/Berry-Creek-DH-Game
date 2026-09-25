@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.13.0";
+  const APP_VERSION = "9.14.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -1557,7 +1557,10 @@
       return;
     }
     const setupRequired = Boolean(currentAdmin?.bootstrap);
-    status.textContent = setupRequired ? "Create the first named admin. The setup PIN will stop working immediately afterward." : `Signed in as ${currentAdmin?.name || "Admin"}. Each admin action is recorded under that name.`;
+    const signedInAdmin = admins.find((admin) => admin.id === currentAdmin?.id);
+    const signedInPlayer = savedPlayers.find((player) => player.id === signedInAdmin?.playerId);
+    const signedInName = signedInPlayer?.name || signedInAdmin?.name || currentAdmin?.name || "Admin";
+    status.textContent = setupRequired ? "Create the first named admin. The setup PIN will stop working immediately afterward." : `Signed in as ${signedInName}. Each admin action is recorded under that name.`;
     setupForm.hidden = !setupRequired;
     inviteControls.hidden = setupRequired;
     inviteResult.hidden = !adminInviteLink;
@@ -1569,23 +1572,28 @@
     list.innerHTML = admins.length ? admins.map((admin) => {
       const isCurrent = admin.id === currentAdmin?.id;
       const lastLogin = admin.lastLoginAt ? `Last signed in ${new Date(admin.lastLoginAt).toLocaleString()}` : "Has not signed in yet";
+      const linkedPlayer = savedPlayers.find((player) => player.id === admin.playerId);
+      const displayName = linkedPlayer?.name || admin.name;
       const linkedOptions = savedPlayers.map((player) => {
         const owner = admins.find((candidate) => candidate.id !== admin.id && candidate.playerId === player.id);
         return `<option value="${esc(player.id)}" ${admin.playerId === player.id ? "selected" : ""} ${owner ? "disabled" : ""}>${esc(player.name)}${owner ? ` · linked to ${esc(owner.name)}` : ""}</option>`;
       }).join("");
-      return `<article class="admin-row ${isCurrent ? "is-current" : ""}" data-admin-id="${esc(admin.id)}"><label>Name<input class="admin-account-name admin-control" data-allow-locked="true" type="text" maxlength="40" value="${esc(admin.name)}"><span class="admin-last-login">${esc(lastLogin)}${isCurrent ? " · Your account" : ""}</span></label><label>Username<input class="admin-account-username admin-control" data-allow-locked="true" type="text" minlength="3" maxlength="30" value="${esc(admin.username || "")}"></label><label class="admin-player-link">Linked player<select class="admin-linked-player admin-control" data-allow-locked="true"><option value="">No linked player</option>${linkedOptions}</select><span>One login provides both admin and player access. Any separate player login is retired.</span></label>${isCurrent ? '<label>New private PIN<input class="admin-account-pin admin-control" data-allow-locked="true" type="password" inputmode="numeric" minlength="4" maxlength="10" pattern="[0-9]{4,10}" autocomplete="new-password" placeholder="Leave blank to keep"></label>' : '<div class="admin-row-meta"><strong>PIN remains private</strong><span>Only this admin can change it.</span></div>'}<div class="admin-row-actions"><button class="button button-primary admin-control" data-allow-locked="true" data-admin-action="update" type="button">Save changes</button>${isCurrent ? "" : '<button class="button button-danger admin-control" data-allow-locked="true" data-admin-action="remove" type="button">Remove</button>'}</div></article>`;
+      return `<article class="admin-row ${isCurrent ? "is-current" : ""}" data-admin-id="${esc(admin.id)}"><label>Name (match GHIN)<input class="admin-account-name admin-control" data-allow-locked="true" type="text" maxlength="40" value="${esc(displayName)}" required><span class="admin-last-login">Saving sets the login to first.last · ${esc(lastLogin)}${isCurrent ? " · Your account" : ""}</span></label><label class="admin-player-link">Linked player<select class="admin-linked-player admin-control" data-allow-locked="true"><option value="">No linked player</option>${linkedOptions}</select><span>One login provides both admin and player access. The account name stays synchronized with this saved player.</span></label>${isCurrent ? '<label>New private PIN<input class="admin-account-pin admin-control" data-allow-locked="true" type="password" inputmode="numeric" minlength="4" maxlength="10" pattern="[0-9]{4,10}" autocomplete="new-password" placeholder="Leave blank to keep"></label>' : '<div class="admin-row-meta"><strong>PIN remains private</strong><span>Only this admin can change it.</span></div>'}<div class="admin-row-actions"><button class="button button-primary admin-control" data-allow-locked="true" data-admin-action="update" type="button">Save changes</button>${isCurrent ? "" : '<button class="button button-danger admin-control" data-allow-locked="true" data-admin-action="remove" type="button">Remove</button>'}</div></article>`;
     }).join("") : '<div class="empty-state">No named admins found.</div>';
     document.querySelectorAll("[data-admin-action='update']").forEach((button) => button.addEventListener("click", () => updateAdminAccount(button.closest(".admin-row"))));
     document.querySelectorAll("[data-admin-action='remove']").forEach((button) => button.addEventListener("click", () => removeAdminAccount(button.closest(".admin-row"))));
+    document.querySelectorAll(".admin-linked-player").forEach((select) => select.addEventListener("change", () => {
+      const linkedPlayer = savedPlayers.find((player) => player.id === select.value);
+      if (linkedPlayer) select.closest(".admin-row").querySelector(".admin-account-name").value = linkedPlayer.name;
+    }));
   }
 
   async function createFirstAdmin(event) {
     event.preventDefault();
     const name = $("#bootstrapAdminName").value.trim();
-    const username = $("#bootstrapAdminUsername").value.trim();
     const pin = $("#bootstrapAdminPin").value.trim();
     try {
-      const body = await databaseRequest("/api/admins", { method: "POST", body: JSON.stringify({ name, username, pin }) });
+      const body = await databaseRequest("/api/admins", { method: "POST", body: JSON.stringify({ name, pin }) });
       authToken = body.token;
       currentUser = body.sessionAdmin || body.admin;
       currentAdmin = currentUser;
@@ -1618,11 +1626,11 @@
   async function updateAdminAccount(row) {
     const id = row?.dataset.adminId;
     const name = row?.querySelector(".admin-account-name")?.value.trim();
-    const username = row?.querySelector(".admin-account-username")?.value.trim();
     const playerId = row?.querySelector(".admin-linked-player")?.value || "";
     const pin = row?.querySelector(".admin-account-pin")?.value.trim() || "";
+    if (!name) return showToast("Enter the GHIN-matching account name before saving.", "error");
     try {
-      const body = await databaseRequest(`/api/admins/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ name, username, playerId, ...(pin ? { pin } : {}) }) });
+      const body = await databaseRequest(`/api/admins/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ name, playerId, ...(pin ? { pin } : {}) }) });
       if (id === currentAdmin?.id) {
         currentUser = body.sessionAdmin || body.admin;
         currentAdmin = currentUser;
@@ -1633,7 +1641,7 @@
       renderSavedPlayers();
       renderAdminManagement();
       if (id === currentAdmin?.id) await connect();
-      showToast(`${body.admin.name}'s admin account was updated${body.retiredPlayerLogin ? "; the separate player login was retired" : ""}.`, "success");
+      showToast(`${body.admin.name}'s account was updated. Login: ${body.admin.username}${body.retiredPlayerLogin ? "; the separate player login was retired" : ""}.`, "success");
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -1669,7 +1677,6 @@
     event.preventDefault();
     const token = adminInvitationToken();
     const name = $("#invitedAdminName").value.trim();
-    const username = $("#invitedAdminUsername").value.trim();
     const pin = $("#invitedAdminPin").value.trim();
     const confirmation = $("#invitedAdminPinConfirm").value.trim();
     const errorBox = $("#adminInviteError");
@@ -1679,7 +1686,7 @@
       return;
     }
     try {
-      const response = await fetch("/api/admin-invitations/accept", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, name, username, pin }) });
+      const response = await fetch("/api/admin-invitations/accept", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, name, pin }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "The invitation could not be accepted");
       authToken = body.token;

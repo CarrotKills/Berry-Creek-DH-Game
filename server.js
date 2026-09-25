@@ -14,7 +14,7 @@ const IndexSheet = require("./index-sheet.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.13.0";
+const APP_VERSION = "9.14.0";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -331,13 +331,13 @@ function usernameBaseFromName(nameValue) {
   return base.slice(0, 30).replace(/[._-]+$/g, "") || "player";
 }
 
-function availableUsernameForName(nameValue) {
+function availableUsernameForName(nameValue, ignored = {}) {
   const base = usernameBaseFromName(nameValue);
-  if (!accountUsernameInUse(base)) return base;
+  if (!accountUsernameInUse(base, ignored)) return base;
   for (let number = 2; number < 10000; number += 1) {
     const suffix = `.${number}`;
     const candidate = `${base.slice(0, 30 - suffix.length).replace(/[._-]+$/g, "")}${suffix}`;
-    if (!accountUsernameInUse(candidate)) return candidate;
+    if (!accountUsernameInUse(candidate, ignored)) return candidate;
   }
   throw new Error("A unique username could not be assigned");
 }
@@ -534,8 +534,8 @@ const server = http.createServer(async (req, res) => {
     try {
       if (!requestIsSecure(req)) return sendJson(res, 400, { ok: false, error: "Open the hosted HTTPS app to create private admin access" });
       const body = await readBody(req);
-      if (accountUsernameInUse(body.username)) return sendJson(res, 409, { ok: false, error: "That username is already in use" });
-      const admin = adminDatabase.acceptInvitation(body.token, { name: body.name, username: body.username, pin: body.pin });
+      const username = availableUsernameForName(body.name);
+      const admin = adminDatabase.acceptInvitation(body.token, { name: body.name, username, pin: body.pin });
       adminAuthCache.clear();
       recordSystemAudit(admin.name, "ADMIN_ACCEPT", `${admin.name} joined as an admin through a private invitation`);
       const account = sessionAccount(admin, "admin");
@@ -624,8 +624,8 @@ const server = http.createServer(async (req, res) => {
         if (!adminIdentity.bootstrap) return sendJson(res, 403, { ok: false, error: "Use a private setup link so each new admin can choose their own PIN" });
         const body = await readBody(req);
         const candidate = body.admin || body;
-        if (accountUsernameInUse(candidate.username)) return sendJson(res, 409, { ok: false, error: "That username is already in use" });
-        const admin = adminDatabase.create(candidate);
+        const username = availableUsernameForName(candidate.name);
+        const admin = adminDatabase.create({ ...candidate, username });
         adminAuthCache.clear();
         recordSystemAudit(adminIdentity.name, "ADMIN_CREATE", `Added admin ${admin.name}`);
         const account = sessionAccount(admin, "admin");
@@ -638,10 +638,18 @@ const server = http.createServer(async (req, res) => {
         const previousAdmin = adminDatabase.find(targetId);
         if (update.pin && targetId !== adminIdentity.id) return sendJson(res, 403, { ok: false, error: "Only an admin can change their own private PIN" });
         const requestedPlayerId = Object.hasOwn(update, "playerId") ? String(update.playerId || "") : previousAdmin?.playerId || "";
-        if (update.username && accountUsernameInUse(update.username, { role: "admin", id: targetId, playerId: requestedPlayerId })) return sendJson(res, 409, { ok: false, error: "That username is already in use" });
-        if (Object.hasOwn(update, "playerId") && update.playerId && !playerDatabase.find(update.playerId)) return sendJson(res, 404, { ok: false, error: "Saved player not found" });
-        const admin = adminDatabase.update(targetId, update);
-        const linkedPlayerChanged = Boolean(admin.playerId && admin.playerId !== previousAdmin?.playerId);
+        const linkedPlayer = requestedPlayerId ? playerDatabase.find(requestedPlayerId) : null;
+        if (requestedPlayerId && !linkedPlayer) return sendJson(res, 404, { ok: false, error: "Saved player not found" });
+        const linkedPlayerChanged = Boolean(linkedPlayer && requestedPlayerId !== previousAdmin?.playerId);
+        const name = linkedPlayerChanged
+          ? linkedPlayer.name
+          : Object.hasOwn(update, "name") ? update.name : linkedPlayer?.name || previousAdmin?.name;
+        const username = availableUsernameForName(name, { role: "admin", id: targetId, playerId: requestedPlayerId });
+        const admin = adminDatabase.update(targetId, { ...update, name, username });
+        if (linkedPlayer && linkedPlayer.name !== admin.name) {
+          playerDatabase.update(linkedPlayer.id, { name: admin.name });
+          state.players = state.players.map((player) => player.directoryId === linkedPlayer.id ? { ...player, name: admin.name } : player);
+        }
         const retiredPlayerLogin = linkedPlayerChanged ? playerDatabase.retirePlayerAccess(admin.playerId) : null;
         adminAuthCache.clear();
         const linkDetail = admin.playerId !== (previousAdmin?.playerId || "")
