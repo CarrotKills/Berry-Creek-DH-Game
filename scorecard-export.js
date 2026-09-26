@@ -50,7 +50,7 @@
       const tee = scoring.teeForPlayer(course, player);
       const holes = scoring.holesForPlayer(course, player);
       const handicap = scoring.playingHandicap(player.ghin, settings, tee);
-      const totals = scoring.playerTotals(player, course, settings);
+      const totals = scoring.playerTotals(player, course, settings, competitors);
       const scores = Array.from({ length: 18 }, (_, holeIndex) => player.scores?.[holeIndex] ?? "");
       const frontCount = countScores(scores, 0, 9);
       const backCount = countScores(scores, 9, 18);
@@ -61,7 +61,7 @@
         handicap,
         scores,
         marks: scores.map((score, holeIndex) => scoring.scoreMark(score, course.holes[holeIndex].par)),
-        strokes: holes.map((hole) => Math.max(0, scoring.strokesForHole(handicap, hole.strokeIndex))),
+        strokes: holes.map((hole, holeIndex) => Math.max(0, scoring.strokesForPlayerHole(player, competitors, course, settings, holeIndex))),
         kpStatuses: holes.map((hole) => {
           const status = scoring.kpClaimStatus(player, course, settings, hole.number - 1, competitors);
           return status === "none" ? "" : status;
@@ -346,7 +346,7 @@
     ctx.font = "600 24px Arial, sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText("Red dots show handicap strokes received.", margin, backBottom + 50);
+    ctx.fillText("Red dots show game-relative handicap strokes received.", margin, backBottom + 50);
     ctx.fillText("Birdie: circle  ·  Eagle or better: double circle  ·  Bogey: square  ·  Double bogey or higher: double square", margin, backBottom + 91);
     ctx.fillText("S: skin  ·  Filled KP: qualifying holder (1 tic)  ·  KPM: marked but not awarded (0)  ·  Outlined KP: pending (0)", margin, backBottom + 132);
 

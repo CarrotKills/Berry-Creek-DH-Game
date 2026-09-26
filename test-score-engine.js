@@ -38,6 +38,26 @@ for (const handicap of [-36, -19, -2, 0, 7, 18, 23, 54]) {
   const allocated = E.COURSE.strokeIndexes.upper.reduce((sum, si) => sum + E.strokesForHole(handicap, si), 0);
   assert.equal(allocated, handicap);
 }
+
+const fieldLow = { id: "field-low", group: "A", ghin: 0, teeKey: "championship", scores: Array(18).fill("") };
+const fieldHigh = { id: "field-high", group: "F", ghin: 15, teeKey: "championship", scores: Array(18).fill("") };
+const scoreOnlyPlus = { id: "score-only-plus", group: "C", ghin: -10, teeKey: "championship", inGame: false, scores: Array(18).fill("") };
+const fieldPlayers = [fieldLow, fieldHigh, scoreOnlyPlus];
+assert.equal(E.lowestPlayingHandicap(fieldPlayers, E.COURSE, settings), E.playingHandicap(fieldLow.ghin, settings, E.COURSE.tees.championship));
+assert.equal(E.gameHandicap(fieldLow, fieldPlayers, E.COURSE, settings), 0);
+assert.equal(E.gameHandicap(fieldHigh, fieldPlayers, E.COURSE, settings), E.playingHandicap(fieldHigh.ghin, settings, E.COURSE.tees.championship) - E.playingHandicap(fieldLow.ghin, settings, E.COURSE.tees.championship));
+assert.equal(E.strokesForPlayerHole(fieldHigh, fieldPlayers, E.COURSE, settings, 1), 1, "The Group F player receives a stroke based on the game-wide Group A baseline");
+assert.equal(E.skinStrokesForPlayerHole(fieldHigh, fieldPlayers, E.COURSE, settings, 1), 0.5, "A par-3 stroke counts as one-half for skins");
+
+const noStrokeBirdie = { ...fieldLow, scores: Array(18).fill("") };
+const receivingPar = { ...fieldHigh, scores: Array(18).fill("") };
+noStrokeBirdie.scores[1] = 2;
+receivingPar.scores[1] = 3;
+assert.deepEqual(E.skinResult([noStrokeBirdie, receivingPar], E.COURSE, settings, 1), { status: "awarded", winnerId: "field-low", lowNet: 2 });
+assert.equal(E.playerTotals(receivingPar, E.COURSE, settings, [noStrokeBirdie, receivingPar]).total.net, 2, "The full stroke still counts toward ordinary net totals");
+noStrokeBirdie.scores[1] = 3;
+assert.deepEqual(E.skinResult([noStrokeBirdie, receivingPar], E.COURSE, settings, 1), { status: "awarded", winnerId: "field-high", lowNet: 2.5 });
+
 assert.equal(E.netScore(5, 2), 3);
 assert.equal(E.isEagle(3, 5), true);
 assert.equal(E.isEagle(2, 4), true);

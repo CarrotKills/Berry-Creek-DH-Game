@@ -65,10 +65,11 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 
 - Course Handicap = Handicap Index x (Slope / 113) + (Course Rating - Par), rounded.
 - Playing Handicap = Course Handicap x the event allowance, rounded.
-- Strokes use the current scorecard's tee-specific stroke-index sequence.
+- Every competing player's strokes are based on the difference between their tee-adjusted Playing Handicap and the lowest tee-adjusted Playing Handicap among all players currently in the game across every group. Players marked Not in game do not establish the baseline.
+- Strokes use each player's selected tee-specific stroke-index sequence. Full strokes count toward front, back, and total net scores and appear as scorecard dots.
 - Birdie tics are automatic for gross birdies or better.
 - Front, back, and total net tics are automatic once the relevant holes are complete. The leaderboard labels them FN, BN, and TN. An outright winner receives 2 tics; tied leaders each receive 1 tic.
-- Net skins are automatic after every player has a score for the hole. The single lowest handicap-adjusted net score wins; a tie awards no skin.
+- Net skins are automatic after every competing player across all groups has a score for the hole. The single lowest handicap-adjusted net score wins; a tie awards no skin. On par 3s only, every allocated stroke counts as one-half stroke for the skin comparison (full strokes still apply to all other net calculations).
 - A marked sand save at par or better earns one Sandy tic. A Sandy birdie also earns its separate birdie tic.
 - Sand Save is available only after a par-or-better gross score. Changing that score to bogey or worse automatically clears the sand save.
 - Group scorecards use traditional score shapes: birdies are circled, eagles or better are double-circled, bogeys are squared, and double bogeys or worse are double-squared.
@@ -101,7 +102,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - Event readiness checks storage write access, persistent-disk configuration, the session secret, admin setup, player logins, group scorekeepers, backup freshness, roster setup, database access, and secure hosting.
 - Complete backup files contain the active event, reusable player database, hashed player-login credentials, temporary active-round guest logins, and every saved historical round. Pending single-use invitation links are intentionally excluded and can be recreated afterward. A restore first creates a server-side recovery snapshot of the current data.
 - Group QR images require an internet connection; Copy link remains available if the QR image service is unavailable.
-- Live and printed scorecards show one dot for every handicap stroke a player receives on each hole.
+- Live and printed scorecards show one dot for every game-relative handicap stroke a player receives on each hole.
 - The leaderboard uses non-cash points: ordinary tics are 0.5 point; eagles and unique front/back/overall net wins are 1 point; tied net wins are 0.5 point.
 - Every leaderboard column is sortable in either direction. Use Reset sort to return to the live standings order.
 - Points + credits each earned point once for every other player. Points − shows the corresponding losses from all other players, and Net points shows the difference.

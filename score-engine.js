@@ -135,28 +135,52 @@
     return (Array.isArray(players) ? players : []).filter(isInGame);
   }
 
-  function segmentTotals(player, course, settings, start, end) {
+  function lowestPlayingHandicap(players, course, settings) {
+    const eligiblePlayers = gamePlayers(players);
+    if (!eligiblePlayers.length) return null;
+    return Math.min(...eligiblePlayers.map((player) => playingHandicap(player.ghin, settings, teeForPlayer(course, player))));
+  }
+
+  function gameHandicap(player, players, course, settings) {
+    const baseline = lowestPlayingHandicap(players, course, settings);
+    if (baseline === null) return 0;
+    const playerHandicap = playingHandicap(player.ghin, settings, teeForPlayer(course, player));
+    return Math.max(0, playerHandicap - baseline);
+  }
+
+  function strokesForPlayerHole(player, players, course, settings, holeIndex) {
+    const hole = holesForPlayer(course, player)[holeIndex];
+    if (!hole) return 0;
+    return strokesForHole(gameHandicap(player, players, course, settings), hole.strokeIndex);
+  }
+
+  function skinStrokesForPlayerHole(player, players, course, settings, holeIndex) {
+    const hole = holesForPlayer(course, player)[holeIndex];
+    if (!hole) return 0;
+    const strokes = strokesForPlayerHole(player, players, course, settings, holeIndex);
+    return hole.par === 3 ? strokes * 0.5 : strokes;
+  }
+
+  function segmentTotals(player, course, settings, start, end, players = [player]) {
     let gross = 0;
     let net = 0;
     let completed = true;
-    const holes = holesForPlayer(course, player);
-    const tee = teeForPlayer(course, player);
     for (let i = start; i < end; i += 1) {
       const score = player.scores[i];
       if (!Number.isFinite(Number(score)) || Number(score) < 1) {
         completed = false;
         continue;
       }
-      const strokes = strokesForHole(playingHandicap(player.ghin, settings, tee), holes[i].strokeIndex);
+      const strokes = strokesForPlayerHole(player, players, course, settings, i);
       gross += Number(score);
       net += netScore(score, strokes);
     }
     return { gross, net, completed };
   }
 
-  function playerTotals(player, course, settings) {
-    const front = segmentTotals(player, course, settings, 0, 9);
-    const back = segmentTotals(player, course, settings, 9, 18);
+  function playerTotals(player, course, settings, players = [player]) {
+    const front = segmentTotals(player, course, settings, 0, 9, players);
+    const back = segmentTotals(player, course, settings, 9, 18, players);
     return {
       front,
       back,
@@ -169,8 +193,9 @@
   }
 
   function leaders(players, course, settings, segment) {
-    const eligible = gamePlayers(players)
-      .map((player) => ({ player, totals: playerTotals(player, course, settings) }))
+    const eligiblePlayers = gamePlayers(players);
+    const eligible = eligiblePlayers
+      .map((player) => ({ player, totals: playerTotals(player, course, settings, eligiblePlayers) }))
       .filter((item) => item.totals[segment].completed);
     if (!eligible.length) return [];
     const low = Math.min(...eligible.map((item) => item.totals[segment].net));
@@ -184,8 +209,7 @@
     for (const player of eligiblePlayers) {
       const gross = Number(player.scores[holeIndex]);
       if (!Number.isFinite(gross) || gross < 1) return { status: "pending", winnerId: null, lowNet: null };
-      const hole = holesForPlayer(course, player)[holeIndex];
-      const strokes = strokesForHole(playingHandicap(player.ghin, settings, teeForPlayer(course, player)), hole.strokeIndex);
+      const strokes = skinStrokesForPlayerHole(player, eligiblePlayers, course, settings, holeIndex);
       entries.push({ playerId: player.id, net: netScore(gross, strokes) });
     }
     const lowNet = Math.min(...entries.map((entry) => entry.net));
@@ -198,8 +222,7 @@
     const entries = gamePlayers(players).flatMap((player) => {
       const gross = Number(player.scores?.[holeIndex]);
       if (!Number.isFinite(gross) || gross < 1) return [];
-      const hole = holesForPlayer(course, player)[holeIndex];
-      const strokes = strokesForHole(playingHandicap(player.ghin, settings, teeForPlayer(course, player)), hole.strokeIndex);
+      const strokes = skinStrokesForPlayerHole(player, players, course, settings, holeIndex);
       return [{ playerId: player.id, net: netScore(gross, strokes) }];
     });
     if (!entries.length) return [];
@@ -313,6 +336,10 @@
     steppedScore,
     isInGame,
     gamePlayers,
+    lowestPlayingHandicap,
+    gameHandicap,
+    strokesForPlayerHole,
+    skinStrokesForPlayerHole,
     segmentTotals,
     playerTotals,
     leaders,

@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.14.0";
+  const APP_VERSION = "9.15.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -1044,7 +1044,7 @@
       const hole = E.holesForPlayer(E.COURSE, player)[index];
       const gross = player.scores[index];
       const competitive = E.isInGame(player);
-      const strokes = E.strokesForHole(hcp(player), hole.strokeIndex);
+      const strokes = E.strokesForPlayerHole(player, state.players, E.COURSE, state.settings, index);
       const net = E.netScore(gross, strokes);
       const achievement = competitive ? (E.isEagle(gross, hole.par) ? "Eagle" : E.isBirdie(gross, hole.par) ? "Birdie" : Number(gross) > 0 && Number(gross) <= hole.par - 3 ? "Albatross" : "") : "";
       const canMarkSandy = competitive && Number(gross) >= 1 && Number(gross) <= hole.par;
@@ -1093,8 +1093,7 @@
   }
 
   function strokesReceivedFor(player, holeIndex, round) {
-    const hole = E.holesForPlayer(E.COURSE, player)[holeIndex];
-    return Math.max(0, E.strokesForHole(hcpForRound(player, round), hole.strokeIndex));
+    return Math.max(0, E.strokesForPlayerHole(player, round.players, E.COURSE, round.settings, holeIndex));
   }
 
   function strokesReceived(player, holeIndex) { return strokesReceivedFor(player, holeIndex, state); }
@@ -1138,7 +1137,7 @@
     const backHead = E.COURSE.holes.slice(9).map((hole) => `<th>${hole.number}</th>`).join("");
     $("#groupScorecardHead").innerHTML = `<tr><th>Player</th>${frontHead}<th class="scorecard-segment-heading">Out<small>Gross/Net</small></th>${backHead}<th class="scorecard-segment-heading">In<small>Gross/Net</small></th><th class="scorecard-segment-heading">Total<small>Gross/Net</small></th></tr>`;
     $("#groupScorecardBody").innerHTML = players.map((player) => {
-      const totals = E.playerTotals(player, E.COURSE, state.settings);
+      const totals = E.playerTotals(player, E.COURSE, state.settings, state.players);
       const front = scorecardSegment(player, totals.front, 0, 9);
       const back = scorecardSegment(player, totals.back, 9, 18);
       const total = scorecardSegment(player, totals.total, 0, 18);
@@ -1172,7 +1171,7 @@
   function leaderboardItems(round = leaderboardRound()) {
     return E.gamePlayers(round.players).map((player) => {
       const index = round.players.indexOf(player);
-      const totals = E.playerTotals(player, E.COURSE, round.settings);
+      const totals = E.playerTotals(player, E.COURSE, round.settings, round.players);
       const tics = E.ticSummary(player, round.players, E.COURSE, round.settings);
       const ledger = E.pointsLedger(player, round.players, E.COURSE, round.settings);
       return {
@@ -1373,7 +1372,7 @@
       const index = roundState.players.indexOf(player);
       const tee = E.teeForPlayer(E.COURSE, player);
       const handicap = E.playingHandicap(player.ghin, roundState.settings, tee);
-      const totals = E.playerTotals(player, E.COURSE, roundState.settings);
+      const totals = E.playerTotals(player, E.COURSE, roundState.settings, roundState.players);
       const tics = E.ticSummary(player, roundState.players, E.COURSE, roundState.settings);
       const ledger = E.pointsLedger(player, roundState.players, E.COURSE, roundState.settings);
       const netClass = ledger.net > 0 ? "is-positive" : ledger.net < 0 ? "is-negative" : "";
@@ -2115,7 +2114,7 @@
     const reportState = leaderboardRound();
     const headers = ["Player", "Guest", "In Game", "Group", "GHIN Index", "Tee", "Playing Handicap", ...E.COURSE.holes.map((hole) => `Hole ${hole.number}`), "Gross", "Net", "Birdies", "Eagles or Better", "Skins", "FN Tics", "BN Tics", "TN Tics", "Sandy", "KP Code (2/8/12/17)", "KPM Code (2/8/12/17)", "Raw Tics", "Weighted Tics", "Achievement Points", "Points Positive", "Points Negative", "Net Points"];
     const rows = reportState.players.map((player, index) => {
-      const totals = E.playerTotals(player, E.COURSE, reportState.settings);
+      const totals = E.playerTotals(player, E.COURSE, reportState.settings, reportState.players);
       const tics = E.ticSummary(player, reportState.players, E.COURSE, reportState.settings);
       const ledger = E.pointsLedger(player, reportState.players, E.COURSE, reportState.settings);
       const kpCode = E.kpCode(player, reportState.players, E.COURSE, reportState.settings, "kp");
@@ -2141,7 +2140,7 @@
       return `<tr><td>${hole.number}</td><td>${resultText}</td></tr>`;
     }).join("");
     const groupPlayersForReport = (group) => reportState.players.filter((player) => player.group === group);
-    const groupTables = R.GROUPS.filter((group) => groupPlayersForReport(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>Dots show handicap strokes. S marks a skin, KP marks the qualifying holder, KPM marks a claim that earned no tic, and an outlined KP is pending. Out, In, and Total show gross/net.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.slice(0, 9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>Out</th>${E.COURSE.holes.slice(9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>In</th><th>Total</th></tr></thead><tbody>${groupPlayersForReport(group).map((player) => { const totals = E.playerTotals(player, E.COURSE, reportState.settings); const front = scorecardSegment(player, totals.front, 0, 9); const back = scorecardSegment(player, totals.back, 9, 18); const total = scorecardSegment(player, totals.total, 0, 18); const cells = player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceivedFor(player, holeIndex, reportState))}</span>${scorecardIndicators(player, holeIndex, reportState)}</td>`); return `<tr class="${player.inGame ? "" : "score-only-row"}"><td>${esc(playerExportName(player, reportState.players.indexOf(player)))}</td>${cells.slice(0, 9).join("")}<td>${front.text}</td>${cells.slice(9).join("")}<td>${back.text}</td><td>${total.text}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
+    const groupTables = R.GROUPS.filter((group) => groupPlayersForReport(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>Dots show game-relative handicap strokes. S marks a skin, KP marks the qualifying holder, KPM marks a claim that earned no tic, and an outlined KP is pending. Out, In, and Total show gross/net.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.slice(0, 9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>Out</th>${E.COURSE.holes.slice(9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>In</th><th>Total</th></tr></thead><tbody>${groupPlayersForReport(group).map((player) => { const totals = E.playerTotals(player, E.COURSE, reportState.settings, reportState.players); const front = scorecardSegment(player, totals.front, 0, 9); const back = scorecardSegment(player, totals.back, 9, 18); const total = scorecardSegment(player, totals.total, 0, 18); const cells = player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceivedFor(player, holeIndex, reportState))}</span>${scorecardIndicators(player, holeIndex, reportState)}</td>`); return `<tr class="${player.inGame ? "" : "score-only-row"}"><td>${esc(playerExportName(player, reportState.players.indexOf(player)))}</td>${cells.slice(0, 9).join("")}<td>${front.text}</td>${cells.slice(9).join("")}<td>${back.text}</td><td>${total.text}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
     const leaders = rankedPlayers(reportState).map((item, rank) => { const kpCode = E.kpCode(item.player, reportState.players, E.COURSE, reportState.settings, "kp"); const kpmCode = E.kpCode(item.player, reportState.players, E.COURSE, reportState.settings, "marked"); return `<tr><td>${rank + 1}</td><td>${playerNameHtml(item.player, item.index)}</td><td>${item.player.group}</td><td>${item.player.scores.filter(Boolean).length}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.birdies}</td><td>${item.tics.eagles}</td><td>${item.tics.skins}</td><td>${item.tics.frontWeight}</td><td>${item.tics.backWeight}</td><td>${item.tics.totalNetWeight}</td><td>${item.tics.sandies}</td><td class="kp-code">${kpCode}</td><td class="kp-code">${kpmCode}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${item.ledger.net.toFixed(1)}</td></tr>`; }).join("");
     $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(reportState.roundName)}</h1><p>${esc(reportState.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table><thead><tr><th>Place</th><th>Player</th><th>Group</th><th>Thru</th><th>Gross</th><th>Net</th><th>Birdies</th><th>Eagles+</th><th>Skins</th><th>FN</th><th>BN</th><th>TN</th><th>Sandy</th><th>KP</th><th>KPM</th><th>Points +</th><th>Points −</th><th>Net points</th></tr></thead><tbody>${leaders}</tbody></table><div class="print-columns"><section><h2>KPs</h2><table><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
   }
