@@ -58,6 +58,21 @@ assert.equal(E.playerTotals(receivingPar, E.COURSE, settings, [noStrokeBirdie, r
 noStrokeBirdie.scores[1] = 3;
 assert.deepEqual(E.skinResult([noStrokeBirdie, receivingPar], E.COURSE, settings, 1), { status: "awarded", winnerId: "field-high", lowNet: 2.5 });
 
+const plusBaseline = { ...fieldLow, id: "plus-baseline", ghin: -4, scores: E.COURSE.holes.map((hole) => hole.par) };
+const fullHandicapPlayer = { ...fieldHigh, scores: E.COURSE.holes.map((hole) => hole.par) };
+const fullPlayingHandicap = E.playingHandicap(fullHandicapPlayer.ghin, settings, E.COURSE.tees.championship);
+assert.ok(E.gameHandicap(fullHandicapPlayer, [plusBaseline, fullHandicapPlayer], E.COURSE, settings) > fullPlayingHandicap, "The match handicap includes the low-player baseline");
+const fullHandicapTotals = E.playerTotals(fullHandicapPlayer, E.COURSE, settings, [plusBaseline, fullHandicapPlayer]);
+assert.equal(fullHandicapTotals.total.net, 72 - fullPlayingHandicap, "TN uses the player's full handicap instead of the game-relative match handicap");
+assert.equal(fullHandicapTotals.front.net + fullHandicapTotals.back.net, 72 - fullPlayingHandicap, "FN and BN allocate the entire full handicap between both nines");
+
+const highHandicapPlayer = { ...fieldHigh, id: "high-handicap", ghin: 54, scores: E.COURSE.holes.map((hole) => hole.par) };
+const highPlayingHandicap = E.playingHandicap(highHandicapPlayer.ghin, settings, E.COURSE.tees.championship);
+const allocatedFullStrokes = E.COURSE.holes.reduce((total, hole, holeIndex) => total + E.fullHandicapStrokesForPlayerHole(highHandicapPlayer, E.COURSE, settings, holeIndex), 0);
+assert.ok(highPlayingHandicap > 54);
+assert.equal(allocatedFullStrokes, highPlayingHandicap, "Full-handicap net calculations do not cap allocated strokes");
+assert.equal(E.playerTotals(highHandicapPlayer, E.COURSE, settings).total.net, 72 - highPlayingHandicap);
+
 assert.equal(E.netScore(5, 2), 3);
 assert.equal(E.isEagle(3, 5), true);
 assert.equal(E.isEagle(2, 4), true);

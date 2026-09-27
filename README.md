@@ -53,7 +53,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 3. Send everyone the normal website address. Players sign in, and the app opens their assigned group automatically. No scoring or special leaderboard link is required.
 4. If an admin has not selected a scorekeeper, any signed-in member of that group checks `SK` beside the chosen player. That scorekeeper enters all five gross scores for the current hole and marks sand saves and par-3 KPs.
 5. Everyone can view the live Leaderboard. A new KP claim on the same hole automatically replaces the previous holder while retaining the earlier player's scorecard mark.
-6. Use Show group scorecard at the bottom of the scoring page to open the group's live-updating scorecard. Out, In, and Total show gross/net; incomplete totals are red and final totals are black. The scorecard uses S for skins, KP for the qualifying holder, KPM for marked claims that earned no tic, and an outlined KP while the result is pending.
+6. Use Show group scorecard at the bottom of the scoring page to open the group's live-updating scorecard. Out, In, and Total show gross/full-handicap net; incomplete totals are red and final totals are black. The scorecard uses S for skins, KP for the qualifying holder, KPM for marked claims that earned no tic, and an outlined KP while the result is pending.
 7. Finalize and lock the round when scoring is complete. Only the admin can unlock it.
 8. Select **Save round** to preserve a historical snapshot before resetting for the next event.
 9. Before play, open Event readiness in Settings, run the checks, and create a current server snapshot.
@@ -65,10 +65,10 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 
 - Course Handicap = Handicap Index x (Slope / 113) + (Course Rating - Par), rounded.
 - Playing Handicap = Course Handicap x the event allowance, rounded.
-- Every competing player's strokes are based on the difference between their tee-adjusted Playing Handicap and the lowest tee-adjusted Playing Handicap among all players currently in the game across every group. Players marked Not in game do not establish the baseline.
-- Strokes use each player's selected tee-specific stroke-index sequence. Full strokes count toward front, back, and total net scores and appear as scorecard dots.
+- Match strokes are based on the difference between each competing player's tee-adjusted Playing Handicap and the lowest tee-adjusted Playing Handicap among all players currently in the game across every group. Players marked Not in game do not establish the match baseline.
+- Match strokes use each player's selected tee-specific stroke-index sequence and appear as scorecard dots.
 - Birdie tics are automatic for gross birdies or better.
-- Front, back, and total net tics are automatic once the relevant holes are complete. The leaderboard labels them FN, BN, and TN. An outright winner receives 2 tics; tied leaders each receive 1 tic.
+- Front, back, and total net tics are automatic once the relevant holes are complete. FN, BN, and TN use each player's entire tee-adjusted Playing Handicap independently of the game-wide low-handicap baseline, with no handicap or stroke cap. Full strokes—including full par-3 strokes—are distributed using that player's tee-specific stroke indexes. The leaderboard labels them FN, BN, and TN. An outright winner receives 2 tics; tied leaders each receive 1 tic.
 - Net skins are automatic after every competing player across all groups has a score for the hole. The single lowest handicap-adjusted net score wins; a tie awards no skin. On par 3s only, every allocated stroke counts as one-half stroke for the skin comparison (full strokes still apply to all other net calculations).
 - A marked sand save at par or better earns one Sandy tic. A Sandy birdie also earns its separate birdie tic.
 - Sand Save is available only after a par-or-better gross score. Changing that score to bogey or worse automatically clears the sand save.

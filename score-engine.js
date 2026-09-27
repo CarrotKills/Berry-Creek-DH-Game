@@ -161,7 +161,14 @@
     return hole.par === 3 ? strokes * 0.5 : strokes;
   }
 
-  function segmentTotals(player, course, settings, start, end, players = [player]) {
+  function fullHandicapStrokesForPlayerHole(player, course, settings, holeIndex) {
+    const hole = holesForPlayer(course, player)[holeIndex];
+    if (!hole) return 0;
+    const handicap = playingHandicap(player.ghin, settings, teeForPlayer(course, player));
+    return strokesForHole(handicap, hole.strokeIndex);
+  }
+
+  function segmentTotals(player, course, settings, start, end) {
     let gross = 0;
     let net = 0;
     let completed = true;
@@ -171,16 +178,16 @@
         completed = false;
         continue;
       }
-      const strokes = strokesForPlayerHole(player, players, course, settings, i);
+      const strokes = fullHandicapStrokesForPlayerHole(player, course, settings, i);
       gross += Number(score);
       net += netScore(score, strokes);
     }
     return { gross, net, completed };
   }
 
-  function playerTotals(player, course, settings, players = [player]) {
-    const front = segmentTotals(player, course, settings, 0, 9, players);
-    const back = segmentTotals(player, course, settings, 9, 18, players);
+  function playerTotals(player, course, settings) {
+    const front = segmentTotals(player, course, settings, 0, 9);
+    const back = segmentTotals(player, course, settings, 9, 18);
     return {
       front,
       back,
@@ -340,6 +347,7 @@
     gameHandicap,
     strokesForPlayerHole,
     skinStrokesForPlayerHole,
+    fullHandicapStrokesForPlayerHole,
     segmentTotals,
     playerTotals,
     leaders,

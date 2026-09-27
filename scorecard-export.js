@@ -346,7 +346,7 @@
     ctx.font = "600 24px Arial, sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText("Red dots show game-relative handicap strokes received.", margin, backBottom + 50);
+    ctx.fillText("Red dots show game-relative match strokes; net totals use full HDCP.", margin, backBottom + 50);
     ctx.fillText("Birdie: circle  ·  Eagle or better: double circle  ·  Bogey: square  ·  Double bogey or higher: double square", margin, backBottom + 91);
     ctx.fillText("S: skin  ·  Filled KP: qualifying holder (1 tic)  ·  KPM: marked but not awarded (0)  ·  Outlined KP: pending (0)", margin, backBottom + 132);
 
