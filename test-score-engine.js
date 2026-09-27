@@ -49,6 +49,12 @@ assert.equal(E.gameHandicap(fieldHigh, fieldPlayers, E.COURSE, settings), E.play
 assert.equal(E.strokesForPlayerHole(fieldHigh, fieldPlayers, E.COURSE, settings, 1), 1, "The Group F player receives a stroke based on the game-wide Group A baseline");
 assert.equal(E.skinStrokesForPlayerHole(fieldHigh, fieldPlayers, E.COURSE, settings, 1), 0.5, "A par-3 stroke counts as one-half for skins");
 
+const cappedMatchPlayer = { ...fieldHigh, id: "capped-match", ghin: 54 };
+assert.ok(E.gameHandicap(cappedMatchPlayer, [fieldLow, cappedMatchPlayer], E.COURSE, settings) > 18);
+assert.equal(E.COURSE.holes.reduce((total, hole, holeIndex) => total + E.strokesForPlayerHole(cappedMatchPlayer, [fieldLow, cappedMatchPlayer], E.COURSE, settings, holeIndex), 0), 18, "Match strokes are capped at one per hole");
+assert.ok(E.COURSE.holes.every((hole, holeIndex) => E.strokesForPlayerHole(cappedMatchPlayer, [fieldLow, cappedMatchPlayer], E.COURSE, settings, holeIndex) <= 1));
+assert.equal(E.skinStrokesForPlayerHole(cappedMatchPlayer, [fieldLow, cappedMatchPlayer], E.COURSE, settings, 1), 0.5, "The capped par-3 match stroke still counts as one-half for skins");
+
 const noStrokeBirdie = { ...fieldLow, scores: Array(18).fill("") };
 const receivingPar = { ...fieldHigh, scores: Array(18).fill("") };
 noStrokeBirdie.scores[1] = 2;

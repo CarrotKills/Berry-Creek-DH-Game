@@ -66,7 +66,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - Course Handicap = Handicap Index x (Slope / 113) + (Course Rating - Par), rounded.
 - Playing Handicap = Course Handicap x the event allowance, rounded.
 - Match strokes are based on the difference between each competing player's tee-adjusted Playing Handicap and the lowest tee-adjusted Playing Handicap among all players currently in the game across every group. Players marked Not in game do not establish the match baseline.
-- Match strokes use each player's selected tee-specific stroke-index sequence and appear as scorecard dots.
+- Match strokes use each player's selected tee-specific stroke-index sequence and are capped at one stroke per hole. Live, printed, JPEG, and PDF scorecards therefore show no more than one match-stroke dot on any hole.
 - Birdie tics are automatic for gross birdies or better.
 - Front, back, and total net tics are automatic once the relevant holes are complete. FN, BN, and TN use each player's entire tee-adjusted Playing Handicap independently of the game-wide low-handicap baseline, with no handicap or stroke cap. Full strokes—including full par-3 strokes—are distributed using that player's tee-specific stroke indexes. The leaderboard labels them FN, BN, and TN. An outright winner receives 2 tics; tied leaders each receive 1 tic.
 - Net skins are automatic after every competing player across all groups has a score for the hole. The single lowest handicap-adjusted net score wins; a tie awards no skin. On par 3s only, every allocated stroke counts as one-half stroke for the skin comparison (full strokes still apply to all other net calculations).

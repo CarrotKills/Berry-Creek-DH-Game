@@ -151,7 +151,7 @@
   function strokesForPlayerHole(player, players, course, settings, holeIndex) {
     const hole = holesForPlayer(course, player)[holeIndex];
     if (!hole) return 0;
-    return strokesForHole(gameHandicap(player, players, course, settings), hole.strokeIndex);
+    return Math.min(1, Math.max(0, strokesForHole(gameHandicap(player, players, course, settings), hole.strokeIndex)));
   }
 
   function skinStrokesForPlayerHole(player, players, course, settings, holeIndex) {
