@@ -106,7 +106,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - The leaderboard uses non-cash points: ordinary tics are 0.5 point; eagles and unique front/back/overall net wins are 1 point; tied net wins are 0.5 point.
 - Every leaderboard column is sortable in either direction. Use Reset sort to return to the live standings order.
 - Points + credits each earned point once for every other player. Points − shows the corresponding losses from all other players, and Net points shows the difference. Half-points remain visible while the round is underway.
-- Once every competing player has all 18 scores, positive fractional Net points truncate to the lower whole number and negative fractional Net points round to the next more-negative whole number. Both half-point remainders are added to BCC Tips so the final ledger balances to zero. For example, +1.5 settles at +1, −1.5 settles at −2, and BCC Tips receives +1.
+- Once every competing player has all 18 scores, fractional Net points round away from zero: +1.5 becomes +2 and −1.5 becomes −2. If the settled losses exceed the settled winnings, the difference is recorded as BCCC Tips. If winnings exceed losses, the difference is deducted from the largest winner so the final ledger balances to zero.
 
 Under Settings, **Start new round** clears the active roster, group assignments, scores, KPs, and tics, then returns the admin to Players and Groups to build the next event. It remains available after a round is finalized and locked. Saved players and historical saved rounds are not deleted.
 

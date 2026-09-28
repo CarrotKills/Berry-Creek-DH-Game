@@ -334,22 +334,40 @@
   function settleNetPoints(value, complete = true) {
     const points = Number(value) || 0;
     if (!complete || Number.isInteger(points)) return points;
-    return Math.floor(points);
+    return points > 0 ? Math.ceil(points) : Math.floor(points);
+  }
+
+  function settlePointValues(values, complete = true) {
+    const rawValues = (Array.isArray(values) ? values : []).map((value) => Number(value) || 0);
+    const settledValues = rawValues.map((value) => settleNetPoints(value, complete));
+    if (!complete) return { settledValues, winnersTotal: 0, losersTotal: 0, winnerReduction: 0, tips: 0 };
+
+    const totalWinners = () => Number(settledValues.reduce((sum, value) => sum + Math.max(0, value), 0).toFixed(10));
+    const losersTotal = Number(settledValues.reduce((sum, value) => sum + Math.max(0, -value), 0).toFixed(10));
+    const originalWinnersTotal = totalWinners();
+    let remainingReduction = Math.max(0, Number((originalWinnersTotal - losersTotal).toFixed(10)));
+    const winnerReduction = remainingReduction;
+
+    if (remainingReduction > 0) {
+      const winnerIndexes = settledValues.map((value, index) => ({ value, raw: rawValues[index], index }))
+        .filter((entry) => entry.value > 0)
+        .sort((a, b) => b.value - a.value || b.raw - a.raw || a.index - b.index);
+      winnerIndexes.forEach((entry) => {
+        if (remainingReduction <= 0) return;
+        const deduction = Math.min(settledValues[entry.index], remainingReduction);
+        settledValues[entry.index] = Number((settledValues[entry.index] - deduction).toFixed(10));
+        remainingReduction = Number((remainingReduction - deduction).toFixed(10));
+      });
+    }
+
+    const winnersTotal = totalWinners();
+    const tips = Math.max(0, Number((losersTotal - winnersTotal).toFixed(10)));
+    return { settledValues, winnersTotal, losersTotal, winnerReduction, tips };
   }
 
   function pointsRoundingTotals(values, complete = true) {
-    if (!complete) return { positiveExcess: 0, negativeExcess: 0, balance: 0, tips: 0 };
-    const totals = (Array.isArray(values) ? values : []).reduce((result, value) => {
-      const points = Number(value) || 0;
-      const settled = settleNetPoints(points, true);
-      if (points > 0) result.positiveExcess += points - settled;
-      if (points < 0) result.negativeExcess += points - settled;
-      return result;
-    }, { positiveExcess: 0, negativeExcess: 0 });
-    const positiveExcess = Number(totals.positiveExcess.toFixed(10));
-    const negativeExcess = Number(totals.negativeExcess.toFixed(10));
-    const balance = Number((positiveExcess + negativeExcess).toFixed(10));
-    return { positiveExcess, negativeExcess, balance, tips: Math.max(0, balance) };
+    const { winnersTotal, losersTotal, winnerReduction, tips } = settlePointValues(values, complete);
+    return { winnersTotal, losersTotal, winnerReduction, tips };
   }
 
   function bccTipsFromNetPoints(values, complete = true) {
@@ -359,12 +377,16 @@
   function pointsSettlement(players, course, settings) {
     const eligiblePlayers = gamePlayers(players);
     const complete = isRoundComplete(eligiblePlayers);
-    const entries = eligiblePlayers.map((player) => {
+    const rawEntries = eligiblePlayers.map((player) => {
       const ledger = pointsLedger(player, eligiblePlayers, course, settings);
-      const settledNet = settleNetPoints(ledger.net, complete);
-      return { playerId: player.id, ...ledger, settledNet, roundingAdjustment: Number((ledger.net - settledNet).toFixed(10)) };
+      return { playerId: player.id, ...ledger };
     });
-    const rounding = pointsRoundingTotals(entries.map((entry) => entry.net), complete);
+    const settled = settlePointValues(rawEntries.map((entry) => entry.net), complete);
+    const entries = rawEntries.map((entry, index) => {
+      const settledNet = settled.settledValues[index];
+      return { ...entry, settledNet, roundingAdjustment: Number((entry.net - settledNet).toFixed(10)) };
+    });
+    const rounding = { winnersTotal: settled.winnersTotal, losersTotal: settled.losersTotal, winnerReduction: settled.winnerReduction, tips: settled.tips };
     return { complete, ...rounding, entries };
   }
 
@@ -401,6 +423,7 @@
     pointsLedger,
     isRoundComplete,
     settleNetPoints,
+    settlePointValues,
     pointsRoundingTotals,
     bccTipsFromNetPoints,
     pointsSettlement

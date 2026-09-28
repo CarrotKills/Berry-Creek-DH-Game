@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.1";
+  const APP_VERSION = "9.16.2";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -1175,7 +1175,7 @@
 
   function bccTipsRow(settlement, columnCount) {
     if (!settlement.complete) return "";
-    return `<tr class="bcc-tips-row"><td colspan="${columnCount - 1}">BCC Tips</td><td class="points-net is-positive">${settlement.tips > 0 ? "+" : ""}${settlement.tips.toFixed(0)}</td></tr>`;
+    return `<tr class="bcc-tips-row"><td colspan="${columnCount - 1}">BCCC Tips</td><td class="points-net is-positive">${settlement.tips > 0 ? "+" : ""}${settlement.tips.toFixed(0)}</td></tr>`;
   }
 
   function leaderboardItems(round = leaderboardRound()) {
@@ -2141,7 +2141,7 @@
     });
     if (settlement.complete) {
       const tipsRow = Array(headers.length).fill("");
-      tipsRow[0] = "BCC Tips";
+      tipsRow[0] = "BCCC Tips";
       tipsRow[tipsRow.length - 1] = settlement.tips.toFixed(0);
       rows.push(tipsRow.map(csvCell).join(","));
     }

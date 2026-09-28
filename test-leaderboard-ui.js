@@ -36,7 +36,7 @@ assert.match(css, /\.leaderboard-round-status\.is-saved/);
 assert.match(app, /function bccTipsRow\(settlement, columnCount\)/);
 assert.match(app, /E\.pointsSettlement\(round\.players, E\.COURSE, round\.settings\)/);
 assert.match(app, /ledger\.settledNet/);
-assert.match(app, /"BCC Tips"/);
+assert.match(app, /"BCCC Tips"/);
 assert.match(css, /\.leaderboard \.bcc-tips-row td/);
 
 console.log("Leaderboard display tests passed.");
