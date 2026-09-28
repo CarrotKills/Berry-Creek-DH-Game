@@ -343,7 +343,7 @@
       const points = Number(value) || 0;
       const settled = settleNetPoints(points, true);
       if (points > 0) result.positiveExcess += points - settled;
-      if (points < 0) result.negativeExcess += settled - points;
+      if (points < 0) result.negativeExcess += points - settled;
       return result;
     }, { positiveExcess: 0, negativeExcess: 0 });
     const positiveExcess = Number(totals.positiveExcess.toFixed(10));
