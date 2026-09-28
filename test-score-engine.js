@@ -25,6 +25,12 @@ assert.deepEqual(Object.values(E.COURSE.tees).filter((tee) => tee.selectable !==
 ]);
 assert.equal(E.normalizeTeeKey(E.COURSE, "creekWomen"), "creekMen");
 assert.equal(E.teeForPlayer(E.COURSE, { teeKey: "berryMen" }).name, "Creek/White/3");
+assert.deepEqual(E.holesForPlayer(E.COURSE, { teeKey: "creekMen" }).map((hole) => hole.strokeIndex), E.COURSE.strokeIndexes.upper, "Creek/White/3 uses the standard Upper hole handicap ratings");
+assert.equal(E.holesForPlayer(E.COURSE, { teeKey: "creekMen" })[12].strokeIndex, 6, "Hole 13 uses Upper handicap 6 rather than Lower handicap 3");
+const creekLow = { id: "creek-low", ghin: 0, teeKey: "creekMen", scores: Array(18).fill("") };
+const creekFive = { id: "creek-five", ghin: 5, teeKey: "creekMen", scores: Array(18).fill("") };
+assert.equal(E.gameHandicap(creekFive, [creekLow, creekFive], E.COURSE, settings), 5);
+assert.equal(E.strokesForPlayerHole(creekFive, [creekLow, creekFive], E.COURSE, settings, 12), 0, "A Creek/White player receiving five strokes does not receive one on Upper handicap 6 Hole 13");
 assert.equal(E.courseHandicap(10, 130, 72.1, 72), 12);
 assert.equal(E.playingHandicap(10, { ...settings, allowance: 90 }, E.COURSE.tees.championship), 11);
 assert.deepEqual(E.COURSE.strokeIndexes.upper, [15,17,1,5,13,3,7,11,9,8,4,10,6,12,16,14,18,2]);
@@ -169,6 +175,15 @@ assert.equal(tieTics.backWeight, 1);
 assert.equal(tieTics.totalNetWeight, 1);
 assert.equal(tieTics.pointsEarned, 1.5);
 
+const tieC = { ...tieA, id: "tie-c" };
+const threeWayTiePlayers = [tieA, tieB, tieC];
+threeWayTiePlayers.forEach((player) => {
+  const threeWayTieTics = E.ticSummary(player, threeWayTiePlayers, E.COURSE, { ...settings, kpWinners: {} });
+  assert.equal(threeWayTieTics.frontWeight, 1, "Every player in a three-way FN tie receives one tic");
+  assert.equal(threeWayTieTics.backWeight, 1, "Every player in a three-way BN tie receives one tic");
+  assert.equal(threeWayTieTics.totalNetWeight, 1, "Every player in a three-way TN tie receives one tic");
+});
+
 const eaglePlayer = { ...alice, id: "eagle", scores: Array(18).fill(""), sandies: Array(18).fill(false) };
 const incompletePlayer = { ...bob, id: "incomplete", scores: Array(18).fill(""), sandies: Array(18).fill(false) };
 eaglePlayer.scores[2] = 3;
@@ -194,4 +209,19 @@ assert.deepEqual(E.skinResult([alice, bob, { ...scoreOnly, scores: Array(18).fil
 assert.deepEqual(E.ticSummary(scoreOnly, [alice, bob, scoreOnly], E.COURSE, settings), { birdies: 0, eagles: 0, skins: 0, front: 0, frontWeight: 0, back: 0, backWeight: 0, totalNet: 0, totalNetWeight: 0, sandies: 0, kps: 0, kpMarked: 0, total: 0, weightedTics: 0, pointsEarned: 0 });
 assert.deepEqual(E.pointsLedger(scoreOnly, [alice, bob, scoreOnly], E.COURSE, settings), { achievementPoints: 0, positive: 0, negative: 0, net: 0 });
 assert.deepEqual(E.pointsLedger(alice, [alice, bob, scoreOnly], E.COURSE, settings), E.pointsLedger(alice, [alice, bob], E.COURSE, settings));
+assert.equal(E.settleNetPoints(12.5, true), 12);
+assert.equal(E.settleNetPoints(-3.5, true), -4);
+assert.equal(E.settleNetPoints(12.5, false), 12.5, "Half points remain visible while the round is in progress");
+assert.equal(E.settleNetPoints(-4, true), -4);
+assert.deepEqual(E.pointsRoundingTotals([12.5, -3.5, -9], true), { positiveExcess: 0.5, negativeExcess: -0.5, balance: 0, tips: 0 });
+assert.equal(E.bccTipsFromNetPoints([12.5, -3.5, -9], true), 0, "Equal positive and negative rounding excesses offset before BCC Tips");
+assert.deepEqual(E.pointsRoundingTotals([12.5, 4.5, -17], true), { positiveExcess: 1, negativeExcess: 0, balance: 1, tips: 1 });
+assert.equal(E.bccTipsFromNetPoints([12.5, 4.5, -17], true), 1, "Only the excess positive rounding balance is credited to BCC Tips");
+assert.deepEqual(E.pointsRoundingTotals([...Array(12).fill(1.5), ...Array(6).fill(-1.5)], true), { positiveExcess: 6, negativeExcess: -3, balance: 3, tips: 3 });
+assert.equal(E.bccTipsFromNetPoints([12.5, -3.5, -9], false), 0);
+assert.equal(E.isRoundComplete([tieA, tieB, tieC]), true);
+assert.equal(E.isRoundComplete([{ ...tieA, scores: ["", ...tieA.scores.slice(1)] }, tieB]), false);
+const tieSettlement = E.pointsSettlement([tieA, tieB, tieC], E.COURSE, { ...settings, kpWinners: {} });
+assert.equal(tieSettlement.complete, true);
+assert.ok(tieSettlement.entries.every((entry) => Number.isInteger(entry.settledNet)));
 console.log("All score engine tests passed.");

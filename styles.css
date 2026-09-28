@@ -237,6 +237,8 @@ tbody tr:last-child td { border-bottom: 0; }
 .leaderboard .points-net { font-weight: 900; }
 .leaderboard .points-net.is-positive { color: #176c31; }
 .leaderboard .points-net.is-negative { color: #a30d20; }
+.leaderboard .bcc-tips-row td { border-top: 3px solid var(--forest); background: var(--gold-soft); font-weight: 900; }
+.leaderboard .bcc-tips-row td:first-child { position: static; color: var(--forest); background: var(--gold-soft); text-align: right; }
 .leader-row-leading td:first-child::before { content: "◆ "; color: var(--gold); }
 .guest-marker { margin-left: 0.12rem; color: var(--forest); font-size: 0.58em; font-weight: 900; vertical-align: super; }
 .score-only-row { opacity: 0.82; }

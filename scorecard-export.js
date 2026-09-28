@@ -41,11 +41,7 @@
         total: sum(tee.yards)
       };
     });
-    const strokeSets = [...new Set(roster.map((player) => scoring.teeForPlayer(course, player).strokeSet))];
-    const strokeRows = strokeSets.map((set) => ({
-      name: strokeSets.length === 1 ? "Handicap" : `Hcp (${set === "upper" ? "Upper" : "Lower"})`,
-      indexes: course.strokeIndexes[set]
-    }));
+    const strokeRows = [{ name: "Handicap", indexes: course.strokeIndexes.upper }];
     const playerRows = roster.map((player, index) => {
       const tee = scoring.teeForPlayer(course, player);
       const holes = scoring.holesForPlayer(course, player);
@@ -346,7 +342,7 @@
     ctx.font = "600 24px Arial, sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText("Match strokes are capped at one red dot per hole; net totals use full HDCP.", margin, backBottom + 50);
+    ctx.fillText("Upper HCP ratings apply to every tee; match strokes max one dot; net totals use full HDCP.", margin, backBottom + 50);
     ctx.fillText("Birdie: circle  ·  Eagle or better: double circle  ·  Bogey: square  ·  Double bogey or higher: double square", margin, backBottom + 91);
     ctx.fillText("S: skin  ·  Filled KP: qualifying holder (1 tic)  ·  KPM: marked but not awarded (0)  ·  Outlined KP: pending (0)", margin, backBottom + 132);
 

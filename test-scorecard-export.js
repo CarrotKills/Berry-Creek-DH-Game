@@ -34,6 +34,16 @@ assert.equal(model.playerRows[0].kpStatuses[7], "pending");
 assert.equal(model.playerRows[0].kpStatuses[11], "kp");
 assert.equal(model.playerRows[0].kpStatuses[16], "marked");
 assert.equal(model.playerRows[0].skins[0], true);
+const mixedTeeModel = X.buildScorecardModel({
+  course: E.COURSE,
+  settings: { par: 72, allowance: 100, kpWinners: {}, kpClaims: {} },
+  players: [player, { ...player, id: "creek-player", name: "Creek Player", teeKey: "creekMen" }],
+  group: "A",
+  scoring: E
+});
+assert.equal(mixedTeeModel.strokeRows.length, 1);
+assert.equal(mixedTeeModel.strokeRows[0].name, "Handicap");
+assert.deepEqual(mixedTeeModel.strokeRows[0].indexes, E.COURSE.strokeIndexes.upper);
 const guestModel = X.buildScorecardModel({
   course: E.COURSE,
   settings: { par: 72, allowance: 100, kpWinners: {}, kpClaims: {} },

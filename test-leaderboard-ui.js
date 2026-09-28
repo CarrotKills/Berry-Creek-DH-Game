@@ -33,5 +33,10 @@ assert.match(app, /Most recent saved round/);
 assert.match(app, /Read-only results/);
 assert.match(app, /const reportState = leaderboardRound\(\)/);
 assert.match(css, /\.leaderboard-round-status\.is-saved/);
+assert.match(app, /function bccTipsRow\(settlement, columnCount\)/);
+assert.match(app, /E\.pointsSettlement\(round\.players, E\.COURSE, round\.settings\)/);
+assert.match(app, /ledger\.settledNet/);
+assert.match(app, /"BCC Tips"/);
+assert.match(css, /\.leaderboard \.bcc-tips-row td/);
 
 console.log("Leaderboard display tests passed.");

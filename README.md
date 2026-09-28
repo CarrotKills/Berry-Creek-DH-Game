@@ -66,9 +66,9 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - Course Handicap = Handicap Index x (Slope / 113) + (Course Rating - Par), rounded.
 - Playing Handicap = Course Handicap x the event allowance, rounded.
 - Match strokes are based on the difference between each competing player's tee-adjusted Playing Handicap and the lowest tee-adjusted Playing Handicap among all players currently in the game across every group. Players marked Not in game do not establish the match baseline.
-- Match strokes use each player's selected tee-specific stroke-index sequence and are capped at one stroke per hole. Live, printed, JPEG, and PDF scorecards therefore show no more than one match-stroke dot on any hole.
+- Match strokes use the standard Upper hole handicap sequence for every player, regardless of tee selection, and are capped at one stroke per hole. Live, printed, JPEG, and PDF scorecards therefore show no more than one match-stroke dot on any hole.
 - Birdie tics are automatic for gross birdies or better.
-- Front, back, and total net tics are automatic once the relevant holes are complete. FN, BN, and TN use each player's entire tee-adjusted Playing Handicap independently of the game-wide low-handicap baseline, with no handicap or stroke cap. Full strokes—including full par-3 strokes—are distributed using that player's tee-specific stroke indexes. The leaderboard labels them FN, BN, and TN. An outright winner receives 2 tics; tied leaders each receive 1 tic.
+- Front, back, and total net tics are automatic once the relevant holes are complete. FN, BN, and TN use each player's entire tee-adjusted Playing Handicap independently of the game-wide low-handicap baseline, with no handicap or stroke cap. Full strokes—including full par-3 strokes—are distributed using the standard Upper hole handicap sequence for every tee. The leaderboard labels them FN, BN, and TN. An outright winner receives 2 tics; in any tie involving two or more leaders, every qualifying tied player receives 1 tic.
 - Net skins are automatic after every competing player across all groups has a score for the hole. The single lowest handicap-adjusted net score wins; a tie awards no skin. On par 3s only, every allocated stroke counts as one-half stroke for the skin comparison (full strokes still apply to all other net calculations).
 - A marked sand save at par or better earns one Sandy tic. A Sandy birdie also earns its separate birdie tic.
 - Sand Save is available only after a par-or-better gross score. Changing that score to bogey or worse automatically clears the sand save.
@@ -105,7 +105,8 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - Live and printed scorecards show one dot for every game-relative handicap stroke a player receives on each hole.
 - The leaderboard uses non-cash points: ordinary tics are 0.5 point; eagles and unique front/back/overall net wins are 1 point; tied net wins are 0.5 point.
 - Every leaderboard column is sortable in either direction. Use Reset sort to return to the live standings order.
-- Points + credits each earned point once for every other player. Points − shows the corresponding losses from all other players, and Net points shows the difference.
+- Points + credits each earned point once for every other player. Points − shows the corresponding losses from all other players, and Net points shows the difference. Half-points remain visible while the round is underway.
+- Once every competing player has all 18 scores, positive fractional Net points round down and negative fractional Net points round to the next more-negative whole number. The positive and negative rounding excesses offset each other; only a remaining positive balance is recorded as BCC Tips. For example, positive excess of 6 points and negative excess of −3 points produces 3 BCC Tips.
 
 Under Settings, **Start new round** clears the active roster, group assignments, scores, KPs, and tics, then returns the admin to Players and Groups to build the next event. It remains available after a round is finalized and locked. Saved players and historical saved rounds are not deleted.
 

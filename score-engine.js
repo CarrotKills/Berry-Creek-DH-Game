@@ -25,11 +25,11 @@
       championship: { name: "Championship/Gold/1", rating: 72.1, slope: 130, yards: [373,172,548,436,321,457,544,175,326,374,529,181,547,308,334,385,169,421], strokeSet: "upper" },
       member: { name: "Member/Blue/2", rating: 70.0, slope: 128, yards: [342,164,502,414,278,421,506,159,316,368,503,161,508,271,298,341,153,399], strokeSet: "upper" },
       memberCreekCombo: { name: "Combo/23", rating: 68.1, slope: 121, yards: [342,164,450,346,278,385,506,159,231,312,475,161,473,271,298,341,153,362], strokeSet: "upper" },
-      creekMen: { name: "Creek/White/3", rating: 67.1, slope: 118, yards: [288,152,450,346,260,385,454,134,231,312,475,135,473,256,280,328,148,362], strokeSet: "lower" },
-      creekWomen: { name: "Legacy Creek (Women)", rating: 72.0, slope: 123, yards: [288,152,450,346,260,385,454,134,231,312,475,135,473,256,280,328,148,362], strokeSet: "lower", selectable: false },
-      creekBerryCombo: { name: "Legacy Creek/Berry Combo", rating: 71.0, slope: 122, yards: [288,126,450,346,250,359,438,134,231,297,475,121,452,256,280,302,148,338], strokeSet: "lower", selectable: false },
-      berryMen: { name: "Legacy Berry (Men)", rating: 64.7, slope: 114, yards: [255,126,400,245,250,359,438,120,212,297,453,121,452,247,266,302,136,338], strokeSet: "lower", selectable: false },
-      berryWomen: { name: "Legacy Berry (Women)", rating: 70.0, slope: 120, yards: [255,126,400,245,250,359,438,120,212,297,453,121,452,247,266,302,136,338], strokeSet: "lower", selectable: false }
+      creekMen: { name: "Creek/White/3", rating: 67.1, slope: 118, yards: [288,152,450,346,260,385,454,134,231,312,475,135,473,256,280,328,148,362], strokeSet: "upper" },
+      creekWomen: { name: "Legacy Creek (Women)", rating: 72.0, slope: 123, yards: [288,152,450,346,260,385,454,134,231,312,475,135,473,256,280,328,148,362], strokeSet: "upper", selectable: false },
+      creekBerryCombo: { name: "Legacy Creek/Berry Combo", rating: 71.0, slope: 122, yards: [288,126,450,346,250,359,438,134,231,297,475,121,452,256,280,302,148,338], strokeSet: "upper", selectable: false },
+      berryMen: { name: "Legacy Berry (Men)", rating: 64.7, slope: 114, yards: [255,126,400,245,250,359,438,120,212,297,453,121,452,247,266,302,136,338], strokeSet: "upper", selectable: false },
+      berryWomen: { name: "Legacy Berry (Women)", rating: 70.0, slope: 120, yards: [255,126,400,245,250,359,438,120,212,297,453,121,452,247,266,302,136,338], strokeSet: "upper", selectable: false }
     }
   });
 
@@ -53,7 +53,7 @@
 
   function holesForPlayer(course, player) {
     const tee = teeForPlayer(course, player);
-    const indexes = course.strokeIndexes[tee.strokeSet];
+    const indexes = course.strokeIndexes.upper;
     return course.holes.map((hole, i) => ({ ...hole, yards: tee.yards[i], strokeIndex: indexes[i] }));
   }
 
@@ -326,6 +326,48 @@
     return { achievementPoints: ownPoints, positive, negative, net: positive + negative };
   }
 
+  function isRoundComplete(players) {
+    const eligiblePlayers = gamePlayers(players);
+    return eligiblePlayers.length > 0 && eligiblePlayers.every((player) => Array.from({ length: 18 }, (_, holeIndex) => Number(player.scores?.[holeIndex])).every((score) => Number.isFinite(score) && score >= 1));
+  }
+
+  function settleNetPoints(value, complete = true) {
+    const points = Number(value) || 0;
+    if (!complete || Number.isInteger(points)) return points;
+    return Math.floor(points);
+  }
+
+  function pointsRoundingTotals(values, complete = true) {
+    if (!complete) return { positiveExcess: 0, negativeExcess: 0, balance: 0, tips: 0 };
+    const totals = (Array.isArray(values) ? values : []).reduce((result, value) => {
+      const points = Number(value) || 0;
+      const settled = settleNetPoints(points, true);
+      if (points > 0) result.positiveExcess += points - settled;
+      if (points < 0) result.negativeExcess += settled - points;
+      return result;
+    }, { positiveExcess: 0, negativeExcess: 0 });
+    const positiveExcess = Number(totals.positiveExcess.toFixed(10));
+    const negativeExcess = Number(totals.negativeExcess.toFixed(10));
+    const balance = Number((positiveExcess + negativeExcess).toFixed(10));
+    return { positiveExcess, negativeExcess, balance, tips: Math.max(0, balance) };
+  }
+
+  function bccTipsFromNetPoints(values, complete = true) {
+    return pointsRoundingTotals(values, complete).tips;
+  }
+
+  function pointsSettlement(players, course, settings) {
+    const eligiblePlayers = gamePlayers(players);
+    const complete = isRoundComplete(eligiblePlayers);
+    const entries = eligiblePlayers.map((player) => {
+      const ledger = pointsLedger(player, eligiblePlayers, course, settings);
+      const settledNet = settleNetPoints(ledger.net, complete);
+      return { playerId: player.id, ...ledger, settledNet, roundingAdjustment: Number((ledger.net - settledNet).toFixed(10)) };
+    });
+    const rounding = pointsRoundingTotals(entries.map((entry) => entry.net), complete);
+    return { complete, ...rounding, entries };
+  }
+
   return {
     COURSE,
     normalizeTeeKey,
@@ -356,6 +398,11 @@
     kpClaimStatus,
     kpCode,
     ticSummary,
-    pointsLedger
+    pointsLedger,
+    isRoundComplete,
+    settleNetPoints,
+    pointsRoundingTotals,
+    bccTipsFromNetPoints,
+    pointsSettlement
   };
 });
