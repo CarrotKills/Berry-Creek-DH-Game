@@ -109,6 +109,11 @@
     return Number(gross) >= 1 && Number(gross) === Number(par) - 1;
   }
 
+  function sandyAllowedForHole(course, holeIndex) {
+    const holeNumber = Number(course?.holes?.[holeIndex]?.number || holeIndex + 1);
+    return ![4, 12].includes(holeNumber);
+  }
+
   function scoreMark(gross, par) {
     if (gross === "" || gross === null || gross === undefined) return "";
     const score = Number(gross);
@@ -280,7 +285,7 @@
       if (gross > 0 && gross <= hole.par - 1) birdies += 1;
       if (gross > 0 && gross <= hole.par - 2) eagles += 1;
       if (skinResult(eligiblePlayers, course, settings, i).winnerId === player.id) skins += 1;
-      if (player.sandies[i] && gross > 0 && gross <= hole.par) sandies += 1;
+      if (sandyAllowedForHole(course, i) && player.sandies[i] && gross > 0 && gross <= hole.par) sandies += 1;
       const kpStatus = kpClaimStatus(player, course, settings, i, eligiblePlayers);
       if (kpStatus === "kp") kps += 1;
       if (kpStatus === "marked") kpMarked += 1;
@@ -403,6 +408,7 @@
     netScore,
     isEagle,
     isBirdie,
+    sandyAllowedForHole,
     scoreMark,
     steppedScore,
     isInGame,

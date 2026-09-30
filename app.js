@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.3";
+  const APP_VERSION = "9.16.4";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -1058,7 +1058,7 @@
       const skinPops = E.skinStrokesForPlayerHole(player, state.players, E.COURSE, state.settings, index);
       const net = E.netScore(gross, strokes);
       const achievement = competitive ? (E.isEagle(gross, hole.par) ? "Eagle" : E.isBirdie(gross, hole.par) ? "Birdie" : Number(gross) > 0 && Number(gross) <= hole.par - 3 ? "Albatross" : "") : "";
-      const canMarkSandy = competitive && Number(gross) >= 1 && Number(gross) <= hole.par;
+      const canMarkSandy = competitive && E.sandyAllowedForHole(E.COURSE, index) && Number(gross) >= 1 && Number(gross) <= hole.par;
       const isKpHole = competitive && KP_HOLES.includes(selectedHole);
       const hasKp = (state.settings.kpClaims[String(selectedHole)] || []).includes(player.id);
       const kpClaimState = E.kpClaimStatus(player, E.COURSE, state.settings, index, state.players);

@@ -11,6 +11,7 @@
   const MAX_UNDO_ENTRIES = 100;
   const GROUPS = ["A", "B", "C", "D", "E", "F"];
   const KP_HOLES = [2, 8, 12, 17];
+  const SANDY_DISABLED_HOLES = new Set([4, 12]);
   const HOLE_PARS = [4, 3, 5, 4, 4, 4, 5, 3, 4, 4, 5, 3, 5, 4, 4, 4, 3, 4];
   const TEE_KEY_ALIASES = Object.freeze({ creekWomen: "creekMen", creekBerryCombo: "creekMen", berryMen: "creekMen", berryWomen: "creekMen" });
   const TEE_KEYS = new Set(["championship", "member", "memberCreekCombo", "creekMen"]);
@@ -53,7 +54,7 @@
       skins: Array.from({ length: 18 }, (_, i) => Boolean(player.skins?.[i])),
       sandies: Array.from({ length: 18 }, (_, i) => {
         const gross = Number(player.scores?.[i]);
-        return Boolean(player.sandies?.[i]) && gross >= 1 && gross <= HOLE_PARS[i];
+        return !SANDY_DISABLED_HOLES.has(i + 1) && Boolean(player.sandies?.[i]) && gross >= 1 && gross <= HOLE_PARS[i];
       })
     };
   }
@@ -252,11 +253,11 @@
       const player = state.players.find((item) => item.id === entry.playerId && item.group === group);
       if (!player || entry.holeIndex < 0 || entry.holeIndex > 17) return false;
       player.scores[entry.holeIndex] = entry.beforeValue;
-      player.sandies[entry.holeIndex] = entry.beforeSandy;
+      player.sandies[entry.holeIndex] = !SANDY_DISABLED_HOLES.has(entry.holeIndex + 1) && entry.beforeSandy;
     } else if (entry.kind === "sandy") {
       const player = state.players.find((item) => item.id === entry.playerId && item.group === group);
       if (!player || entry.holeIndex < 0 || entry.holeIndex > 17) return false;
-      player.sandies[entry.holeIndex] = Boolean(entry.beforeValue);
+      player.sandies[entry.holeIndex] = !SANDY_DISABLED_HOLES.has(entry.holeIndex + 1) && Boolean(entry.beforeValue);
     } else if (entry.kind === "kp") {
       if (entry.beforeValue && state.players.some((player) => player.id === entry.beforeValue && player.inGame)) state.settings.kpWinners[String(entry.hole)] = entry.beforeValue;
       else delete state.settings.kpWinners[String(entry.hole)];
@@ -355,7 +356,7 @@
         const player = state.players.find((item) => item.id === p.playerId);
         const holeIndex = Number(p.holeIndex);
         const gross = Number(player?.scores[holeIndex]);
-        if (!player || holeIndex < 0 || holeIndex > 17) { changed = false; break; }
+        if (!player || holeIndex < 0 || holeIndex > 17 || SANDY_DISABLED_HOLES.has(holeIndex + 1)) { changed = false; break; }
         if (Boolean(p.value) && HOLE_PARS[holeIndex] === 3 && (state.settings.kpClaims[String(holeIndex + 1)] || []).includes(player.id)) { changed = false; break; }
         const previous = player.sandies[holeIndex];
         player.sandies[holeIndex] = Boolean(p.value) && gross >= 1 && gross <= HOLE_PARS[holeIndex];
