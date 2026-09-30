@@ -14,7 +14,7 @@ const IndexSheet = require("./index-sheet.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.16.2";
+const APP_VERSION = "9.16.3";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -757,7 +757,7 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 201, { player });
       }
       if (req.method === "POST" && url.pathname === "/api/players/update-indexes") {
-        if (state.settings.locked) return sendJson(res, 423, { ok: false, error: "Unlock the finalized round before updating indexes" });
+        if (state.settings.locked) return sendJson(res, 423, { ok: false, error: "Unlock the round before updating indexes" });
         const body = await readBody(req);
         const { parsed, plan } = await fetchIndexUpdatePlan();
         const today = centralDate();
@@ -882,7 +882,7 @@ const server = http.createServer(async (req, res) => {
       const scorerAuthorized = Boolean(assignedScorekeeper || legacyScorerAuthorized);
 
       if (Round.isAdminAction(action.type) && !adminAuthorized) return sendJson(res, 401, { ok: false, error: "Admin sign-in required" });
-      if (state.settings.locked && !["SET_LOCKED", "CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type)) return sendJson(res, 423, { ok: false, error: "This round is finalized and locked" });
+      if (state.settings.locked && !["SET_LOCKED", "CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type)) return sendJson(res, 423, { ok: false, error: "This round is locked" });
       const duplicatePlayer = duplicateActivePlayer(action);
       if (duplicatePlayer) return sendJson(res, 409, { ok: false, error: `${duplicatePlayer.name.trim() || "That player"} is already active in Group ${duplicatePlayer.group}` });
       if (Round.isScoringAction(action.type) && !adminOverride && (!scorerAuthorized || !scoringGroupAllowed(action, scoringGroup))) {

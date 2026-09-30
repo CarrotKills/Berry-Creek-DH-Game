@@ -52,7 +52,7 @@ async function createPlayerLogin(playerId, username, pin) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.16.2");
+  assert.equal(config.appVersion, "9.16.3");
   assert.equal(config.adminSetupRequired, true);
   const emptyPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
   assert.equal(emptyPublicLeaderboard.source, "empty");
@@ -276,6 +276,14 @@ async function createPlayerLogin(playerId, username, pin) {
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 0, score: 4, expectedScore: 5 }, { group: "A" });
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 1, score: 3 }, { group: "A", noToken: true, status: 403 });
   await action("SET_SCORE", { playerId: "live-b", holeIndex: 1, score: 3 }, { group: "A", status: 403 });
+  const incompleteRoundResponse = await fetch(`${base}/api/rounds`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: "{}" });
+  assert.equal(incompleteRoundResponse.status, 400);
+  assert.match((await incompleteRoundResponse.json()).error, /Complete every player's 18-hole scorecard/);
+  for (const [playerId, group] of [["live-a", "A"], ["live-b", "B"]]) {
+    for (let holeIndex = 0; holeIndex < 18; holeIndex += 1) {
+      await action("SET_SCORE", { playerId, holeIndex, score: 4, force: true }, { group });
+    }
+  }
   const savedRoundResponse = await fetch(`${base}/api/rounds`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: "{}" });
   assert.equal(savedRoundResponse.status, 201);
   const savedRound = (await savedRoundResponse.json()).round;
@@ -312,6 +320,11 @@ async function createPlayerLogin(playerId, username, pin) {
   const reusedTokens = (await reusedTokenResponse.json()).tokens;
   assert.notEqual(reusedTokens.A, scoreTokens.A);
   await reader.cancel();
+  for (const [playerId, group] of [["live-a", "A"], ["live-b", "B"]]) {
+    for (let holeIndex = 0; holeIndex < 18; holeIndex += 1) {
+      await action("SET_SCORE", { playerId, holeIndex, score: 4, force: true }, { group, token: reusedTokens[group] });
+    }
+  }
   await action("SET_LOCKED", { locked: true });
   const latestRoundResponse = await fetch(`${base}/api/rounds`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: "{}" });
   assert.equal(latestRoundResponse.status, 201);

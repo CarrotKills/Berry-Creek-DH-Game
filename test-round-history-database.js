@@ -10,14 +10,18 @@ const database = new RoundHistoryDatabase(path.join(directory, "rounds.sqlite"))
 let state = R.defaultState();
 state.roundName = "History Test";
 state.date = "2026-09-02";
+const incompleteState = R.applyAction(state, { type: "ADD_PLAYER", payload: { player: { id: "incomplete", name: "Incomplete Golfer", group: "A" } } });
+assert.throws(() => database.create(incompleteState), /Complete every player's 18-hole scorecard/);
 state = R.applyAction(state, { type: "ADD_PLAYER", payload: { player: { id: "p1", name: "Test Golfer", group: "A", scores: Array(18).fill(4) } } });
 
 const saved = database.create(state);
 assert.equal(saved.roundName, "History Test");
+assert.equal(saved.roundId, state.roundId);
 assert.equal(saved.playerCount, 1);
 assert.equal(saved.completed, true);
 assert.equal(saved.state.players[0].scores.length, 18);
 assert.equal(database.list().length, 1);
+assert.equal(database.list()[0].roundId, state.roundId);
 assert.equal(database.find(saved.id).state.players[0].name, "Test Golfer");
 assert.equal(database.latest().id, saved.id);
 assert.equal(database.remove(saved.id).id, saved.id);

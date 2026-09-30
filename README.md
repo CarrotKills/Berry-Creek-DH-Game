@@ -54,8 +54,8 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 4. If an admin has not selected a scorekeeper, any signed-in member of that group checks `SK` beside the chosen player. That scorekeeper enters all five gross scores for the current hole and marks sand saves and par-3 KPs.
 5. Everyone can view the live Leaderboard. A new KP claim on the same hole automatically replaces the previous holder while retaining the earlier player's scorecard mark.
 6. Use Show group scorecard at the bottom of the scoring page to open the group's live-updating scorecard. Out, In, and Total show gross/full-handicap net; incomplete totals are red and final totals are black. The scorecard uses S for skins, KP for the qualifying holder, KPM for marked claims that earned no tic, and an outlined KP while the result is pending.
-7. Finalize and lock the round when scoring is complete. Only the admin can unlock it.
-8. Select **Save round** to preserve a historical snapshot before resetting for the next event.
+7. Select **Lock & Save Round** when every player's 18-hole scorecard is complete. The app identifies any unusual scores by player, hole, score, and par before it locks and saves the historical snapshot. Only an admin can unlock it.
+8. A separate **Save Round** option remains available only after every player has all 18 scores; incomplete rounds cannot be saved.
 9. Before play, open Event readiness in Settings, run the checks, and create a current server snapshot.
 
 ## Handicap and tic rules
@@ -82,7 +82,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 
 ## Settings and admin controls
 
-- Settings begins with the frequently used event controls in this order: Device preferences, Start a new round, Finalize and lock round, and Save round. Event readiness and Live event status follow. Historical reference, Named accountability, and Change history are grouped below for less frequent access; backup, import/export, and version tools remain available inside Historical reference.
+- Settings begins with the frequently used event controls in this order: Device preferences, Start a new round, Lock & Save Round, and Save Round. Event readiness and Live event status follow. Historical reference, Named accountability, and Change history are grouped below for less frequent access; backup, import/export, and version tools remain available inside Historical reference.
 - The connection badge shows Live, Reconnecting, or Offline. Offline score changes are queued on the device and sent when the connection returns.
 - Each score briefly shows Saving, Saved, Waiting to sync, or Sync problem so the scorekeeper can verify that entry.
 - Score updates include the score the device last saw. If another device changed the same player and hole first, the scorekeeper must choose whether to keep the server score or replace it, preventing silent overwrites.
@@ -96,19 +96,19 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 - The Settings tab can save durable historical snapshots containing the full roster, scorecards, tics, KPs, and results. Saved rounds can be viewed, downloaded, reused as a clean roster for a new round, or deleted without changing the active round.
 - Saved-round group scorecards can be exported individually as JPEGs or PDFs, together as JPEGs in one ZIP file, or together as a multi-page PDF.
 - The normal website provides public, read-only group browsing and a leaderboard without requiring a separate viewing link. The Leaderboard tab displays the active round live, then falls back to the newest saved round after the active event is cleared. Signing in activates only the controls allowed for that account, so separate scoring and leaderboard links are no longer necessary.
-- Finalizing a round opens a checklist for missing scores, KPs, unusual scores, and roster-name issues before the admin locks it.
+- Lock & Save Round opens a checklist for missing scores, KPs, unusual scores, and roster-name issues. Unusual entries identify the player, hole, score, and par. A round with missing scores cannot be locked and saved.
 - Celebration sounds can be muted per device. Normal, outdoor high-contrast, and dark display modes are also device-specific.
 - The visible app version, automatic startup check, and update banner make cached versions easier to identify and replace without a separate manual check button.
 - Event readiness checks storage write access, persistent-disk configuration, the session secret, admin setup, player logins, group scorekeepers, backup freshness, roster setup, database access, and secure hosting.
 - Complete backup files contain the active event, reusable player database, hashed player-login credentials, temporary active-round guest logins, and every saved historical round. Pending single-use invitation links are intentionally excluded and can be recreated afterward. A restore first creates a server-side recovery snapshot of the current data.
 - Group QR images require an internet connection; Copy link remains available if the QR image service is unavailable.
-- Live and printed scorecards show one dot for every game-relative handicap stroke a player receives on each hole.
+- Live and printed scorecards show the game-relative skin pop. Skin pops are capped at one stroke per hole and count as 1/2 on par 3s; Out, In, and Total net scores continue to use each player's full handicap without that cap.
 - The leaderboard uses non-cash points: ordinary tics are 0.5 point; eagles and unique front/back/overall net wins are 1 point; tied net wins are 0.5 point.
 - Every leaderboard column is sortable in either direction. Use Reset sort to return to the live standings order.
 - Points + credits each earned point once for every other player. Points − shows the corresponding losses from all other players, and Net points shows the difference. Half-points remain visible while the round is underway.
 - Once every competing player has all 18 scores, fractional Net points round away from zero: +1.5 becomes +2 and −1.5 becomes −2. If the settled losses exceed the settled winnings, the difference is recorded as BCCC Tips. If winnings exceed losses, the difference is deducted from the largest winner so the final ledger balances to zero.
 
-Under Settings, **Start new round** clears the active roster, group assignments, scores, KPs, and tics, then returns the admin to Players and Groups to build the next event. It remains available after a round is finalized and locked. Saved players and historical saved rounds are not deleted.
+Under Settings, **Start new round** clears the active roster, group assignments, scores, KPs, and tics, then returns the admin to Players and Groups to build the next event. A locked-and-saved round starts the next round immediately; otherwise the app warns that the current data will be lost and requires Continue. Saved players and historical saved rounds are not deleted.
 
 The Reset button on the Players tab can also clear only scores and tics while keeping the active roster, or clear the entire active event.
 

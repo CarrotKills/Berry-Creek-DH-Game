@@ -253,12 +253,14 @@ dialog::backdrop { background: rgba(10, 24, 17, 0.55); }
 .reset-actions { flex-wrap: wrap; }
 
 .status-pill { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 34px; padding: 0.35rem 0.65rem; border-radius: 999px; font-size: 0.78rem; font-weight: 800; white-space: nowrap; }
+.status-pill[hidden] { display: none !important; }
 .connection-pill { color: #3d3d3d; background: #ededed; }
 .status-dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: currentColor; }
 .is-live { color: #176c31; background: #e2f5e6; }
 .is-connecting, .is-reconnecting { color: #8a4800; background: #fff0cc; }
 .is-offline { color: #8b1724; background: #f8dfe3; }
 .lock-pill { color: #fff; background: var(--danger); }
+.lock-pill.is-active { background: #176c31; }
 .viewer-pill { color: #fff; background: var(--forest); }
 .update-banner { position: sticky; top: 61px; z-index: 25; display: flex; justify-content: center; align-items: center; gap: 1rem; padding: 0.55rem 1rem; color: #fff; background: #232323; font-weight: 800; }
 .update-banner[hidden] { display: none; }

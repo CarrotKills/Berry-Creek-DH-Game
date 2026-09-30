@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.2";
+  const APP_VERSION = "9.16.3";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -152,6 +152,14 @@
   function complete(value, done) { return done ? String(value) : "—"; }
   function groupPlayers(group = selectedGroup) { return state.players.filter((player) => player.group === group); }
   function isLocked() { return Boolean(state.settings.locked); }
+  function roundHasCompleteScores(round = state) {
+    return Array.isArray(round.players) && round.players.length > 0 && round.players.every((player) =>
+      Array.isArray(player.scores) && player.scores.length === 18 && player.scores.every((score) => Number(score) >= 1)
+    );
+  }
+  function currentRoundIsLockedAndSaved() {
+    return isLocked() && savedRounds.some((round) => round.roundId === state.roundId && round.completed && round.locked);
+  }
   function scorerLinkExpired() { return scorerLinkLocked && (!scorerToken || !scorerRoundId || scorerRoundId !== state.roundId); }
   function currentRoundPlayer() {
     if (currentUser?.role === "admin") return currentUser.playerId ? state.players.find((player) => player.directoryId && player.directoryId === currentUser.playerId) || null : null;
@@ -362,6 +370,8 @@
       const body = await databaseRequest("/api/rounds", { cache: "no-store" });
       savedRounds = Array.isArray(body.rounds) ? body.rounds : [];
       renderSavedRounds();
+      renderRoundControls();
+      renderAdminState();
     } catch (error) {
       savedRounds = [];
       renderSavedRounds(error.message);
@@ -477,7 +487,7 @@
     const admin = options.admin ?? R.isAdminAction(action.type);
     if (spectatorMode) { showToast("This leaderboard link is view only.", "error"); return false; }
     if (R.ACCESS_ACTIONS.has(action.type) && !currentUser) { openAdminDialog(); showToast("Sign in to choose a group scorekeeper.", "error"); return false; }
-    if (isLocked() && !["SET_LOCKED", "CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type)) { showToast("The round is finalized and locked.", "error"); return false; }
+    if (isLocked() && !["SET_LOCKED", "CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type)) { showToast("The round is locked.", "error"); return false; }
     if (admin && !adminUnlocked) {
       openAdminDialog();
       showToast("Admin access is required for that change.", "error");
@@ -1000,7 +1010,7 @@
   }
 
   async function setScore(playerId, score) {
-    if (!canScore()) return showToast(isLocked() ? "The round is finalized and locked." : scorerLinkExpired() ? "This legacy scorekeeper link has expired." : currentUser ? "Only this group's selected scorekeeper or an admin can enter scores." : "Sign in as the selected scorekeeper or an admin to enter scores.", "error");
+    if (!canScore()) return showToast(isLocked() ? "The round is locked." : scorerLinkExpired() ? "This legacy scorekeeper link has expired." : currentUser ? "Only this group's selected scorekeeper or an admin can enter scores." : "Sign in as the selected scorekeeper or an admin to enter scores.", "error");
     const player = state.players.find((item) => item.id === playerId);
     const holeIndex = selectedHole - 1;
     const par = E.COURSE.holes[holeIndex].par;
@@ -1045,6 +1055,7 @@
       const gross = player.scores[index];
       const competitive = E.isInGame(player);
       const strokes = E.strokesForPlayerHole(player, state.players, E.COURSE, state.settings, index);
+      const skinPops = E.skinStrokesForPlayerHole(player, state.players, E.COURSE, state.settings, index);
       const net = E.netScore(gross, strokes);
       const achievement = competitive ? (E.isEagle(gross, hole.par) ? "Eagle" : E.isBirdie(gross, hole.par) ? "Birdie" : Number(gross) > 0 && Number(gross) <= hole.par - 3 ? "Albatross" : "") : "";
       const canMarkSandy = competitive && Number(gross) >= 1 && Number(gross) <= hole.par;
@@ -1064,7 +1075,7 @@
       const signedInPlayer = currentRoundPlayer();
       const canChangeScorekeeper = adminUnlocked || (signedInPlayer?.group === selectedGroup && (!scorekeeperId || scorekeeperId === signedInPlayer.id));
       return `<article class="group-score-card ${competitive ? "" : "is-score-only"}" data-player-id="${player.id}">
-        <div class="score-player"><div class="score-player-heading"><label class="scorekeeper-toggle" title="Group scorekeeper"><input data-kind="scorekeeper" type="checkbox" ${scorekeeperId === player.id ? "checked" : ""} ${canChangeScorekeeper ? "" : "disabled"}>SK</label><strong>${playerNameHtml(player, state.players.indexOf(player))}</strong></div><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${strokes > 0 ? `gets ${strokes}` : strokes < 0 ? `gives ${Math.abs(strokes)}` : "no stroke"}</span>${competitive ? "" : '<span class="score-only-note">Not in the game · score only</span>'}</div>
+        <div class="score-player"><div class="score-player-heading"><label class="scorekeeper-toggle" title="Group scorekeeper"><input data-kind="scorekeeper" type="checkbox" ${scorekeeperId === player.id ? "checked" : ""} ${canChangeScorekeeper ? "" : "disabled"}>SK</label><strong>${playerNameHtml(player, state.players.indexOf(player))}</strong></div><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${skinPops > 0 ? `gets ${skinPops === 0.5 ? "1/2" : skinPops}` : skinPops < 0 ? `gives ${Math.abs(skinPops) === 0.5 ? "1/2" : Math.abs(skinPops)}` : "no stroke"}</span>${competitive ? "" : '<span class="score-only-note">Not in the game · score only</span>'}</div>
         <div class="score-entry-wrap"><div class="score-stepper"><button type="button" data-delta="-1" ${disabled} aria-label="Decrease score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" ${disabled} aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" ${disabled} aria-label="Increase score">+</button></div>${syncLabel ? `<span class="score-sync score-sync--${syncState}" role="status">${syncLabel}</span>` : ""}</div>
         <div class="net-box"><span>Match net</span><strong>${net ?? "—"}</strong></div>
         <div class="card-tics">${achievement ? `<span class="auto-tic">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle" title="${hasKp ? "Remove KP before marking a Sandy" : "Mark Sandy"}"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${sandyDisabled}>Sandy</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle" title="${player.sandies[index] ? "Remove Sandy before marking KP" : "Mark KP"}"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${kpDisabled}>KP</label>` : ""}${kpNote}</div>
@@ -1370,13 +1381,24 @@
 
   async function saveCurrentRound() {
     if (!state.players.length) return showToast("Add at least one player before saving the round.", "error");
+    if (!roundHasCompleteScores()) {
+      showToast("Complete every player's 18-hole scorecard before saving the round.", "error");
+      return null;
+    }
+    if (currentRoundIsLockedAndSaved()) {
+      showToast("This locked round is already saved in round history.");
+      return savedRounds.find((round) => round.roundId === state.roundId) || null;
+    }
     try {
       const body = await databaseRequest("/api/rounds", { method: "POST", body: JSON.stringify({}) });
       savedRounds = [body.round, ...savedRounds];
       renderSavedRounds();
-      showToast(`${body.round.roundName} saved to round history.`, "success");
+      renderRoundControls();
+      renderAdminState();
+      return body.round;
     } catch (error) {
       showToast(error.message, "error");
+      return null;
     }
   }
 
@@ -1493,8 +1515,18 @@
     if (pendingKps.length) items.push({ ok: false, text: `KP score${pendingKps.length === 1 ? " is" : "s are"} pending on Hole${pendingKps.length === 1 ? "" : "s"} ${pendingKps.join(", ")}.` });
     if (noAwardKps.length) items.push({ ok: true, text: `No KP tic is awarded on Hole${noAwardKps.length === 1 ? "" : "s"} ${noAwardKps.join(", ")} because the latest marked player scored over par.` });
     if (!missingKps.length && !pendingKps.length && !noAwardKps.length) items.push({ ok: true, text: "All KPs are assigned and qualifying." });
-    const unusual = state.players.reduce((total, player) => total + player.scores.filter((score, index) => score !== "" && (Number(score) <= E.COURSE.holes[index].par - 3 || Number(score) >= E.COURSE.holes[index].par + 5)).length, 0);
-    items.push({ ok: unusual === 0, text: unusual ? `${unusual} unusual score${unusual === 1 ? " needs" : "s need"} a final review.` : "No unusual scores need review." });
+    const unusualScores = state.players.flatMap((player, playerIndex) => player.scores.flatMap((score, holeIndex) => {
+      const par = E.COURSE.holes[holeIndex].par;
+      return score !== "" && (Number(score) <= par - 3 || Number(score) >= par + 5)
+        ? [{ player: nameOf(player, playerIndex), hole: holeIndex + 1, score: Number(score), par }]
+        : [];
+    }));
+    items.push({
+      ok: unusualScores.length === 0,
+      text: unusualScores.length
+        ? `${unusualScores.length} unusual score${unusualScores.length === 1 ? " needs" : "s need"} final review: ${unusualScores.map((item) => `${item.player} — Hole ${item.hole}: ${item.score} (par ${item.par})`).join("; ")}.`
+        : "No unusual scores need review."
+    });
     const namedPlayers = state.players.filter((player) => player.name.trim());
     const reusableNames = state.players.filter((player) => !player.isGuest).map((player) => player.name.trim().toLowerCase()).filter(Boolean);
     const namesReady = namedPlayers.length === state.players.length && new Set(reusableNames).size === reusableNames.length;
@@ -1505,9 +1537,23 @@
   function openFinalizeDialog() {
     const items = finalizationChecklistItems();
     $("#finalizeChecklist").innerHTML = items.map((item) => `<li class="${item.ok ? "check-ok" : "check-warning"}"><span aria-hidden="true">${item.ok ? "✓" : "!"}</span>${esc(item.text)}</li>`).join("");
+    const complete = roundHasCompleteScores();
+    $("#finalizeConfirmBtn").disabled = !complete;
+    $("#finalizeBlockingMessage").hidden = complete;
     const dialog = $("#finalizeDialog");
     dialog.returnValue = "cancel";
     dialog.showModal();
+  }
+
+  async function lockAndSaveCurrentRound() {
+    if (!roundHasCompleteScores()) return showToast("Complete every player's 18-hole scorecard before locking and saving the round.", "error");
+    if (!await dispatch({ type: "SET_LOCKED", payload: { locked: true } })) return;
+    const saved = await saveCurrentRound();
+    if (!saved) {
+      await dispatch({ type: "SET_LOCKED", payload: { locked: false } });
+      return showToast("The round could not be saved, so it remains active and unlocked.", "error");
+    }
+    showToast(`${saved.roundName} was locked and saved to round history.`, "success");
   }
 
   function renderReadiness() {
@@ -1793,12 +1839,26 @@
     }
   }
 
-  function renderTournament() {
+  function renderRoundControls() {
     const locked = isLocked();
-    $("#roundStatusText").textContent = locked ? "The round is finalized. Scorecards and results remain available to view." : "The round is open for live scoring.";
-    $("#toggleRoundLockBtn").textContent = locked ? "Unlock round" : "Finalize and lock round";
+    const saved = currentRoundIsLockedAndSaved();
+    const complete = roundHasCompleteScores();
+    $("#roundStatusText").textContent = locked
+      ? saved ? "The round is locked and saved. Scorecards and results remain available to view." : "The round is locked but has not yet been saved."
+      : "The round is active and open for live scoring.";
+    $("#toggleRoundLockBtn").textContent = locked ? "Unlock round" : "Lock & Save Round";
     $("#toggleRoundLockBtn").classList.toggle("button-danger", !locked);
     $("#toggleRoundLockBtn").classList.toggle("button-primary", locked);
+    $("#saveRoundBtn").textContent = saved ? "Round Saved" : "Save Round";
+    $("#saveRoundStatusText").textContent = saved
+      ? "This locked round is preserved in historical reference."
+      : complete
+        ? "All scorecards are complete. Save a historical copy, or use Lock & Save Round."
+        : "Complete every player's 18-hole scorecard before saving a historical copy.";
+  }
+
+  function renderTournament() {
+    renderRoundControls();
     $("#soundToggle").checked = preferences.sound;
     $("#autoAdvanceToggle").checked = preferences.autoAdvance;
     $("#displayMode").value = preferences.display;
@@ -1820,10 +1880,12 @@
       const isNewRoundControl = control.id === "startNewRoundBtn";
       const availableWhenLocked = control.dataset.allowLocked === "true" || ["toggleRoundLockBtn", "saveRoundBtn", "startNewRoundBtn", "completeBackupBtn", "completeRestoreInput", "createSnapshotBtn", "refreshReadinessBtn"].includes(control.id);
       const atPlayerLimit = ["addGuestBtn", "saveGuestBtn"].includes(control.id) && state.players.length >= R.MAX_PLAYERS;
-      const noRoundToSave = isSaveRoundControl && !state.players.length;
+      const noRoundToSave = isSaveRoundControl && (!roundHasCompleteScores() || currentRoundIsLockedAndSaved());
       control.disabled = !adminUnlocked || (isLocked() && !availableWhenLocked) || atPlayerLimit || noRoundToSave;
     });
-    $("#lockStatus").hidden = !isLocked();
+    $("#lockStatus").hidden = false;
+    $("#lockStatus").textContent = isLocked() ? "Round Locked" : "Round Active";
+    $("#lockStatus").classList.toggle("is-active", !isLocked());
     $("#spectatorStatus").hidden = !spectatorMode;
     document.body.classList.toggle("round-locked", isLocked());
     document.body.classList.toggle("spectator-mode", spectatorMode);
@@ -2165,7 +2227,7 @@
       return `<tr><td>${hole.number}</td><td>${resultText}</td></tr>`;
     }).join("");
     const groupPlayersForReport = (group) => reportState.players.filter((player) => player.group === group);
-    const groupTables = R.GROUPS.filter((group) => groupPlayersForReport(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>All tees use the standard Upper hole handicap ratings. Game-relative match strokes are capped at one dot per hole; Out, In, and Total net scores use each player's full HDCP. S marks a skin, KP marks the qualifying holder, KPM marks a claim that earned no tic, and an outlined KP is pending.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.slice(0, 9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>Out</th>${E.COURSE.holes.slice(9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>In</th><th>Total</th></tr></thead><tbody>${groupPlayersForReport(group).map((player) => { const totals = E.playerTotals(player, E.COURSE, reportState.settings, reportState.players); const front = scorecardSegment(player, totals.front, 0, 9); const back = scorecardSegment(player, totals.back, 9, 18); const total = scorecardSegment(player, totals.total, 0, 18); const cells = player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceivedFor(player, holeIndex, reportState))}</span>${scorecardIndicators(player, holeIndex, reportState)}</td>`); return `<tr class="${player.inGame ? "" : "score-only-row"}"><td>${esc(playerExportName(player, reportState.players.indexOf(player)))}</td>${cells.slice(0, 9).join("")}<td>${front.text}</td>${cells.slice(9).join("")}<td>${back.text}</td><td>${total.text}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
+    const groupTables = R.GROUPS.filter((group) => groupPlayersForReport(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>All tees use the standard Upper hole handicap ratings. Skin pops are capped at one stroke per hole, 1/2 on par 3s; Out, In, and Total net scores use each player's full HDCP. S marks a skin, KP marks the qualifying holder, KPM marks a claim that earned no tic, and an outlined KP is pending.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.slice(0, 9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>Out</th>${E.COURSE.holes.slice(9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>In</th><th>Total</th></tr></thead><tbody>${groupPlayersForReport(group).map((player) => { const totals = E.playerTotals(player, E.COURSE, reportState.settings, reportState.players); const front = scorecardSegment(player, totals.front, 0, 9); const back = scorecardSegment(player, totals.back, 9, 18); const total = scorecardSegment(player, totals.total, 0, 18); const cells = player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceivedFor(player, holeIndex, reportState))}</span>${scorecardIndicators(player, holeIndex, reportState)}</td>`); return `<tr class="${player.inGame ? "" : "score-only-row"}"><td>${esc(playerExportName(player, reportState.players.indexOf(player)))}</td>${cells.slice(0, 9).join("")}<td>${front.text}</td>${cells.slice(9).join("")}<td>${back.text}</td><td>${total.text}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
     const leaders = rankedPlayers(reportState).map((item, rank) => { const kpCode = E.kpCode(item.player, reportState.players, E.COURSE, reportState.settings, "kp"); const kpmCode = E.kpCode(item.player, reportState.players, E.COURSE, reportState.settings, "marked"); return `<tr><td>${rank + 1}</td><td>${playerNameHtml(item.player, item.index)}</td><td>${item.player.group}</td><td>${item.player.scores.filter(Boolean).length}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.birdies}</td><td>${item.tics.eagles}</td><td>${item.tics.skins}</td><td>${item.tics.frontWeight}</td><td>${item.tics.backWeight}</td><td>${item.tics.totalNetWeight}</td><td>${item.tics.sandies}</td><td class="kp-code">${kpCode}</td><td class="kp-code">${kpmCode}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${settledPointText(item.ledger.settledNet, settlement.complete)}</td></tr>`; }).join("") + bccTipsRow(settlement, 18);
     $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(reportState.roundName)}</h1><p>${esc(reportState.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table><thead><tr><th>Place</th><th>Player</th><th>Group</th><th>Thru</th><th>Gross</th><th>Net</th><th>Birdies</th><th>Eagles+</th><th>Skins</th><th>FN</th><th>BN</th><th>TN</th><th>Sandy</th><th>KP</th><th>KPM</th><th>Points +</th><th>Points −</th><th>Net points</th></tr></thead><tbody>${leaders}</tbody></table><div class="print-columns"><section><h2>KPs</h2><table><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
   }
@@ -2182,6 +2244,21 @@
       $("#versionStatus").textContent = "Update check unavailable.";
       return false;
     }
+  }
+
+  async function startNewRoundNow() {
+    selectedHole = 1;
+    selectedGroup = "A";
+    savedPlayerGroupSelections.clear();
+    if (!await dispatch({ type: "CLEAR_ROUND" })) return false;
+    shareTokens = {};
+    groupPresence = {};
+    scoreSyncStatus.clear();
+    await refreshState().catch(() => {});
+    await loadShareTokens();
+    switchView("setup");
+    showToast("New round ready. Saved players and round history were kept.", "success");
+    return true;
   }
 
   async function registerServiceWorker() {
@@ -2236,10 +2313,13 @@
     else openFinalizeDialog();
   });
   const finalizeDialog = $("#finalizeDialog");
-  finalizeDialog.addEventListener("close", () => {
-    if (finalizeDialog.returnValue === "confirm") dispatch({ type: "SET_LOCKED", payload: { locked: true } });
+  finalizeDialog.addEventListener("close", async () => {
+    if (finalizeDialog.returnValue === "confirm") await lockAndSaveCurrentRound();
   });
-  $("#saveRoundBtn").addEventListener("click", saveCurrentRound);
+  $("#saveRoundBtn").addEventListener("click", async () => {
+    const saved = await saveCurrentRound();
+    if (saved) showToast(`${saved.roundName} saved to round history.`, "success");
+  });
   $("#downloadSavedRoundBtn").addEventListener("click", () => {
     if (activeSavedRound) downloadBlob(JSON.stringify(activeSavedRound.state, null, 2), "application/json", `berry-creek-${activeSavedRound.date}-saved.json`);
   });
@@ -2293,20 +2373,14 @@
     }
   });
   const newRoundDialog = $("#newRoundDialog");
-  $("#startNewRoundBtn").addEventListener("click", () => { newRoundDialog.returnValue = "cancel"; newRoundDialog.showModal(); });
+  $("#startNewRoundBtn").addEventListener("click", async () => {
+    if (!state.players.length || currentRoundIsLockedAndSaved()) return startNewRoundNow();
+    newRoundDialog.returnValue = "cancel";
+    newRoundDialog.showModal();
+  });
   newRoundDialog.addEventListener("close", async () => {
     if (newRoundDialog.returnValue !== "confirm") return;
-    selectedHole = 1;
-    selectedGroup = "A";
-    savedPlayerGroupSelections.clear();
-    if (!await dispatch({ type: "CLEAR_ROUND" })) return;
-    shareTokens = {};
-    groupPresence = {};
-    scoreSyncStatus.clear();
-    await refreshState().catch(() => {});
-    await loadShareTokens();
-    switchView("setup");
-    showToast("New round ready. Saved players and round history were kept.", "success");
+    await startNewRoundNow();
   });
   const reuseRosterDialog = $("#reuseRosterDialog");
   reuseRosterDialog.addEventListener("close", () => {

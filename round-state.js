@@ -171,7 +171,7 @@
       case "UNDO_LAST": return `Undid ${p.detail || "the last scoring change"}`;
       case "RESET_SCORES": return "Reset all scores and tics";
       case "CLEAR_ROUND": return "Started a new event";
-      case "SET_LOCKED": return p.locked ? "Finalized and locked the round" : "Unlocked the round";
+      case "SET_LOCKED": return p.locked ? "Locked the round" : "Unlocked the round";
       case "REPLACE_ROUND": return "Imported a round backup";
       case "START_FROM_SAVED": return "Started a new round from a saved roster";
       case "CLEAR_AUDIT": return "Cleared change history";

@@ -6,8 +6,14 @@ const crypto = require("node:crypto");
 const { DatabaseSync } = require("node:sqlite");
 
 function metadataFromRow(row) {
+  let roundId = String(row?.round_id || "");
+  if (!roundId && row?.state_json) {
+    try { roundId = String(JSON.parse(row.state_json).roundId || ""); }
+    catch (_) { roundId = ""; }
+  }
   return row ? {
     id: row.id,
+    roundId,
     roundName: row.round_name,
     date: row.round_date,
     playerCount: Number(row.player_count),
@@ -38,7 +44,7 @@ class RoundHistoryDatabase {
       ON saved_rounds(saved_at DESC);
       PRAGMA optimize;
     `);
-    this.listStatement = this.db.prepare("SELECT id, round_name, round_date, player_count, completed, locked, saved_at FROM saved_rounds ORDER BY saved_at DESC");
+    this.listStatement = this.db.prepare("SELECT id, round_name, round_date, player_count, completed, locked, saved_at, state_json FROM saved_rounds ORDER BY saved_at DESC");
     this.findStatement = this.db.prepare("SELECT * FROM saved_rounds WHERE id = ?");
     this.insertStatement = this.db.prepare("INSERT INTO saved_rounds (id, round_name, round_date, player_count, completed, locked, saved_at, state_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
     this.deleteStatement = this.db.prepare("DELETE FROM saved_rounds WHERE id = ?");
@@ -62,6 +68,7 @@ class RoundHistoryDatabase {
     const id = crypto.randomUUID();
     const savedAt = new Date().toISOString();
     const completed = state.players.every((player) => Array.isArray(player.scores) && player.scores.length === 18 && player.scores.every((score) => Number(score) >= 1));
+    if (!completed) throw new Error("Complete every player's 18-hole scorecard before saving the round");
     this.insertStatement.run(
       id,
       String(state.roundName || "Berry Creek Round").slice(0, 60),
@@ -81,6 +88,7 @@ class RoundHistoryDatabase {
     this.deleteStatement.run(String(id));
     return metadataFromRow({
       id: current.id,
+      round_id: current.roundId,
       round_name: current.roundName,
       round_date: current.date,
       player_count: current.playerCount,

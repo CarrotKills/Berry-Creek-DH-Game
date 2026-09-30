@@ -30,5 +30,9 @@ assert.match(app, /data-kind="scorekeeper"/);
 assert.match(app, /type: "SET_SCOREKEEPER"/);
 assert.doesNotMatch(app, /<span class="auto-tic">Sandy ✓<\/span>/);
 assert.match(html, /<h2>Sign in<\/h2>/);
+assert.match(app, /skinPops === 0\.5 \? "1\/2"/);
+assert.match(html, /skin pops are capped at one stroke per hole, 1\/2 on par 3s\./);
+assert.doesNotMatch(html, /match strokes are capped at one dot per hole/);
+assert.match(app, /Skin pops are capped at one stroke per hole, 1\/2 on par 3s/);
 
 console.log("Scoring-page UI tests passed.");
