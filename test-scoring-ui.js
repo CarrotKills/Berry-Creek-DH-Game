@@ -16,7 +16,9 @@ assert.ok(html.indexOf('id="toggleScorecardBtn"') > html.indexOf('id="advanceHol
 assert.ok(html.indexOf('class="scorecard scorecard group-scorecard"') === -1);
 assert.ok(html.indexOf('class="scorecard group-scorecard"') < html.indexOf('class="scorecard-legend"'));
 assert.ok(html.indexOf('class="scorecard-legend"') < html.indexOf('id="hideScorecardBtn"'));
-assert.match(app, /Skin Pending: \$\{pendingSkinNames/);
+assert.match(app, /pendingSkinNames\.length > 1/);
+assert.match(app, /Skin: No skin \(yet\)/);
+assert.match(app, /Skin Pending: \$\{pendingSkinNames\.length \? pendingSkinNames\[0\]/);
 assert.match(app, /KP Pending: \$\{kpName\}/);
 assert.match(app, />KPM<\/span>/);
 assert.match(app, />S<\/span>/);

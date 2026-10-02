@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.4";
+  const APP_VERSION = "9.16.5";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -936,7 +936,13 @@
       const player = state.players.find((item) => item.id === playerId);
       return player ? esc(nameOf(player, state.players.indexOf(player))) : "";
     }).filter(Boolean);
-    const skinText = skin.status === "awarded" ? `Skin: ${esc(nameOf(skinWinner, state.players.indexOf(skinWinner)))}` : skin.status === "tie" ? "Skin: No skin (tie)" : `Skin Pending: ${pendingSkinNames.length ? pendingSkinNames.join(" / ") : "Waiting for scores"}`;
+    const skinText = skin.status === "awarded"
+      ? `Skin: ${esc(nameOf(skinWinner, state.players.indexOf(skinWinner)))}`
+      : skin.status === "tie"
+        ? "Skin: No skin (tie)"
+        : pendingSkinNames.length > 1
+          ? "Skin: No skin (yet)"
+          : `Skin Pending: ${pendingSkinNames.length ? pendingSkinNames[0] : "Waiting for scores"}`;
     $("#holeBanner").innerHTML = `<strong>Hole ${selectedHole} · Par ${base.par}</strong><span>${details.length ? details.join("  |  ") : "Add players to see tee details."}</span><span class="skin-status">${skinText}</span>${kpStatus}`;
     const missing = players.filter((player) => !player.scores[selectedHole - 1]).length;
     $("#holeWarning").textContent = missing ? `${missing} score${missing === 1 ? "" : "s"} still missing on this hole.` : players.length ? "All group scores entered for this hole. ✓" : "";
