@@ -241,7 +241,8 @@ tbody tr:last-child td { border-bottom: 0; }
 .leaderboard .bcc-tips-row td:first-child { position: static; background: var(--gold-soft); }
 .leaderboard .bcc-tips-row .settlement-label { color: var(--forest); text-align: right; white-space: nowrap; }
 .leaderboard .bcc-tips-row .settlement-value { text-align: center; white-space: nowrap; }
-.leader-row-leading td:first-child::before { content: "◆ "; color: var(--gold); }
+.leader-row-leading td:first-child::before { content: ""; display: inline-block; width: 1.15rem; height: 1.15rem; margin-right: 0.25rem; background: url("berry-creek-leader-flower.png") center / contain no-repeat; vertical-align: -0.25rem; }
+.leader-row-trailing td:first-child::before { content: "💩 "; }
 .guest-marker { margin-left: 0.12rem; color: var(--forest); font-size: 0.58em; font-weight: 900; vertical-align: super; }
 .score-only-row { opacity: 0.82; }
 .score-only-row td:first-child small { display: block; margin-top: 0.2rem; color: var(--forest-2); font-size: 0.62rem; }

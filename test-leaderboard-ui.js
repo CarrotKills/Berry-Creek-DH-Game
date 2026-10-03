@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const html = fs.readFileSync("index.html", "utf8");
 const app = fs.readFileSync("app.js", "utf8");
 const css = fs.readFileSync("styles.css", "utf8");
+const serviceWorker = fs.readFileSync("service-worker.js", "utf8");
 
 assert.match(app, /key: "frontWeight", label: "FN"/);
 assert.match(app, /key: "backWeight", label: "BN"/);
@@ -47,5 +48,11 @@ assert.match(app, /leaderboard && !leaderboard\.hidden && landscape && document\
 assert.match(app, /document\.addEventListener\("visibilitychange", updateLeaderboardWakeLock\)/);
 assert.match(app, /window\.addEventListener\("orientationchange", updateLeaderboardWakeLock\)/);
 assert.match(app, /window\.addEventListener\("pagehide", releaseLeaderboardWakeLock\)/);
+assert.match(app, /const standingLoserId = standingOrder\.length > 1 \? standingOrder\.at\(-1\)\?\.player\.id : null/);
+assert.match(app, /"leader-row-trailing"/);
+assert.match(css, /\.leader-row-leading td:first-child::before[^}]*berry-creek-leader-flower\.png/);
+assert.doesNotMatch(css, /content:\s*"◆/);
+assert.match(css, /\.leader-row-trailing td:first-child::before\s*\{\s*content:\s*"💩 "/);
+assert.match(serviceWorker, /berry-creek-leader-flower\.png/);
 
 console.log("Leaderboard display tests passed.");
