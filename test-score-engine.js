@@ -233,5 +233,6 @@ assert.equal(E.isRoundComplete([{ ...tieA, scores: ["", ...tieA.scores.slice(1)]
 const tieSettlement = E.pointsSettlement([tieA, tieB, tieC], E.COURSE, { ...settings, kpWinners: {} });
 assert.equal(tieSettlement.complete, true);
 assert.ok(tieSettlement.entries.every((entry) => Number.isInteger(entry.settledNet)));
+assert.equal(tieSettlement.totalToCollect, tieSettlement.entries.reduce((sum, entry) => sum + Math.max(0, -entry.settledNet), 0), "Total to Collect must equal the absolute sum of all rounded negative player totals");
 assert.equal(tieSettlement.entries.reduce((sum, entry) => sum + entry.settledNet, 0) + tieSettlement.tips, 0, "Settled player balances plus BCCC Tips must balance to zero");
 console.log("All score engine tests passed.");

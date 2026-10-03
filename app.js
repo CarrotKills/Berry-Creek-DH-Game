@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.5";
+  const APP_VERSION = "9.16.7";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -73,6 +73,8 @@
   let groupPresence = {};
   let readinessData = null;
   let readinessLoading = false;
+  let leaderboardWakeLock = null;
+  let leaderboardWakeLockRequesting = false;
   let autoAdvanceTimer;
   let leaderboardSort = { key: "standing", direction: "asc" };
   let preferences = loadPreferences();
@@ -1192,7 +1194,7 @@
 
   function bccTipsRow(settlement, columnCount) {
     if (!settlement.complete) return "";
-    return `<tr class="bcc-tips-row"><td colspan="${columnCount - 1}">BCCC Tips</td><td class="points-net is-positive">${settlement.tips > 0 ? "+" : ""}${settlement.tips.toFixed(0)}</td></tr>`;
+    return `<tr class="bcc-tips-row"><td class="settlement-spacer" colspan="${columnCount - 4}"></td><td class="settlement-label">Total to Collect</td><td class="points-negative settlement-value">${settlement.totalToCollect.toFixed(0)}</td><td class="settlement-label">BCCC Tips</td><td class="points-net is-positive settlement-value">${settlement.tips > 0 ? "+" : ""}${settlement.tips.toFixed(0)}</td></tr>`;
   }
 
   function leaderboardItems(round = leaderboardRound()) {
@@ -1935,6 +1937,45 @@
       view.classList.toggle("active", active);
       view.hidden = !active;
     });
+    updateLeaderboardWakeLock();
+  }
+
+  function leaderboardShouldStayAwake() {
+    const leaderboard = $("#leaderboardView");
+    const landscape = typeof window.matchMedia === "function"
+      ? window.matchMedia("(orientation: landscape)").matches
+      : window.innerWidth > window.innerHeight;
+    return Boolean(leaderboard && !leaderboard.hidden && landscape && document.visibilityState === "visible");
+  }
+
+  async function releaseLeaderboardWakeLock() {
+    const wakeLock = leaderboardWakeLock;
+    leaderboardWakeLock = null;
+    if (wakeLock && !wakeLock.released) await wakeLock.release().catch(() => {});
+  }
+
+  async function updateLeaderboardWakeLock() {
+    if (!leaderboardShouldStayAwake()) {
+      await releaseLeaderboardWakeLock();
+      return;
+    }
+    if (!navigator.wakeLock?.request || (leaderboardWakeLock && !leaderboardWakeLock.released) || leaderboardWakeLockRequesting) return;
+    leaderboardWakeLockRequesting = true;
+    try {
+      const wakeLock = await navigator.wakeLock.request("screen");
+      if (!leaderboardShouldStayAwake()) {
+        await wakeLock.release().catch(() => {});
+        return;
+      }
+      leaderboardWakeLock = wakeLock;
+      wakeLock.addEventListener("release", () => {
+        if (leaderboardWakeLock === wakeLock) leaderboardWakeLock = null;
+      }, { once: true });
+    } catch (_) {
+      leaderboardWakeLock = null;
+    } finally {
+      leaderboardWakeLockRequesting = false;
+    }
   }
 
   function moveToHole(nextHole, options = {}) {
@@ -2208,6 +2249,10 @@
       return [nameOf(player, index), player.isGuest ? "Yes" : "No", player.inGame ? "Yes" : "No", player.group, displayIndex(player.ghin), teeOf(player).name, displayPlayingHandicap(hcpForRound(player, reportState)), ...player.scores, totals.total.completed ? totals.total.gross : "", totals.total.completed ? totals.total.net : "", tics.birdies, tics.eagles, tics.skins, tics.frontWeight, tics.backWeight, tics.totalNetWeight, tics.sandies, kpCode, kpmCode, tics.total, tics.weightedTics, tics.pointsEarned.toFixed(1), ledger.positive.toFixed(1), ledger.negative.toFixed(1), ledger.net.toFixed(1), settledPointText(ledger.settledNet, settlement.complete, false)].map(csvCell).join(",");
     });
     if (settlement.complete) {
+      const collectRow = Array(headers.length).fill("");
+      collectRow[0] = "Total to Collect";
+      collectRow[collectRow.length - 1] = settlement.totalToCollect.toFixed(0);
+      rows.push(collectRow.map(csvCell).join(","));
       const tipsRow = Array(headers.length).fill("");
       tipsRow[0] = "BCCC Tips";
       tipsRow[tipsRow.length - 1] = settlement.tips.toFixed(0);
@@ -2398,6 +2443,10 @@
   $("#installUpdateBtn").addEventListener("click", () => { if (serviceWorkerRegistration?.waiting) serviceWorkerRegistration.waiting.postMessage({ type: "SKIP_WAITING" }); else location.reload(); });
   window.addEventListener("online", connect);
   window.addEventListener("offline", () => setConnection("offline"));
+  document.addEventListener("visibilitychange", updateLeaderboardWakeLock);
+  window.addEventListener("orientationchange", updateLeaderboardWakeLock);
+  window.addEventListener("resize", updateLeaderboardWakeLock);
+  window.addEventListener("pagehide", releaseLeaderboardWakeLock);
 
   document.body.dataset.display = preferences.display;
   $("#appVersion").textContent = `Version ${APP_VERSION}`;

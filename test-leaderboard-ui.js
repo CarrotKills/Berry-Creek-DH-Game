@@ -36,7 +36,16 @@ assert.match(css, /\.leaderboard-round-status\.is-saved/);
 assert.match(app, /function bccTipsRow\(settlement, columnCount\)/);
 assert.match(app, /E\.pointsSettlement\(round\.players, E\.COURSE, round\.settings\)/);
 assert.match(app, /ledger\.settledNet/);
+assert.match(app, /"Total to Collect"/);
+assert.match(app, /settlement\.totalToCollect\.toFixed\(0\)/);
 assert.match(app, /"BCCC Tips"/);
 assert.match(css, /\.leaderboard \.bcc-tips-row td/);
+assert.match(css, /\.leaderboard \.bcc-tips-row \.settlement-label/);
+assert.match(app, /navigator\.wakeLock\?\.request/);
+assert.match(app, /navigator\.wakeLock\.request\("screen"\)/);
+assert.match(app, /leaderboard && !leaderboard\.hidden && landscape && document\.visibilityState === "visible"/);
+assert.match(app, /document\.addEventListener\("visibilitychange", updateLeaderboardWakeLock\)/);
+assert.match(app, /window\.addEventListener\("orientationchange", updateLeaderboardWakeLock\)/);
+assert.match(app, /window\.addEventListener\("pagehide", releaseLeaderboardWakeLock\)/);
 
 console.log("Leaderboard display tests passed.");

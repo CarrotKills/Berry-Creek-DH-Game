@@ -391,7 +391,13 @@
       const settledNet = settled.settledValues[index];
       return { ...entry, settledNet, roundingAdjustment: Number((entry.net - settledNet).toFixed(10)) };
     });
-    const rounding = { winnersTotal: settled.winnersTotal, losersTotal: settled.losersTotal, winnerReduction: settled.winnerReduction, tips: settled.tips };
+    const rounding = {
+      winnersTotal: settled.winnersTotal,
+      losersTotal: settled.losersTotal,
+      totalToCollect: settled.losersTotal,
+      winnerReduction: settled.winnerReduction,
+      tips: settled.tips
+    };
     return { complete, ...rounding, entries };
   }
 
