@@ -48,7 +48,9 @@ assert.match(app, /leaderboard && !leaderboard\.hidden && landscape && document\
 assert.match(app, /document\.addEventListener\("visibilitychange", updateLeaderboardWakeLock\)/);
 assert.match(app, /window\.addEventListener\("orientationchange", updateLeaderboardWakeLock\)/);
 assert.match(app, /window\.addEventListener\("pagehide", releaseLeaderboardWakeLock\)/);
-assert.match(app, /const standingLoserId = standingOrder\.length > 1 \? standingOrder\.at\(-1\)\?\.player\.id : null/);
+assert.match(app, /L\.pointMarkerIds\(players\)/);
+assert.match(app, /item\.player\.id === pointLeaderId/);
+assert.match(app, /item\.player\.id === pointLoserId/);
 assert.match(app, /"leader-row-trailing"/);
 assert.match(css, /\.leader-row-leading td:first-child::before[^}]*berry-creek-leader-flower\.png/);
 assert.doesNotMatch(css, /content:\s*"◆/);

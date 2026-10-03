@@ -31,5 +31,29 @@
     }).map((entry) => entry.item);
   }
 
-  return { compareValues, sortItems };
+  function pointMarkerIds(items) {
+    const entries = items.map((item) => ({
+      id: item.player?.id ?? item.id,
+      points: Number(item.ledger?.settledNet) || 0,
+      totalNet: Number(item.totals?.total?.net) || 0
+    })).filter((item) => item.id !== undefined && item.id !== null);
+    if (!entries.length) return { leaderId: null, loserId: null };
+
+    const highestPoints = Math.max(...entries.map((item) => item.points));
+    const leaders = entries.filter((item) => item.points === highestPoints);
+    const lowestLeaderNet = Math.min(...leaders.map((item) => item.totalNet));
+    const finalLeaders = leaders.filter((item) => item.totalNet === lowestLeaderNet);
+
+    const lowestPoints = Math.min(...entries.map((item) => item.points));
+    const losers = entries.filter((item) => item.points === lowestPoints);
+    const highestLoserNet = Math.max(...losers.map((item) => item.totalNet));
+    const finalLosers = losers.filter((item) => item.totalNet === highestLoserNet);
+
+    return {
+      leaderId: highestPoints > 0 && finalLeaders.length === 1 ? finalLeaders[0].id : null,
+      loserId: lowestPoints < 0 && finalLosers.length === 1 ? finalLosers[0].id : null
+    };
+  }
+
+  return { compareValues, sortItems, pointMarkerIds };
 });

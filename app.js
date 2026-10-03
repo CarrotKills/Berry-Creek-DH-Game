@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.9";
+  const APP_VERSION = "9.16.10";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -1269,9 +1269,7 @@
     renderKPs(round);
     renderLeaderboardHeaders();
     const players = rankedPlayers(round);
-    const standingOrder = [...players].sort(standingCompare);
-    const standingLeaderId = standingOrder[0]?.player.id;
-    const standingLoserId = standingOrder.length > 1 ? standingOrder.at(-1)?.player.id : null;
+    const { leaderId: pointLeaderId, loserId: pointLoserId } = L.pointMarkerIds(players);
     $("#leaderboardKicker").textContent = saved ? "Most recent saved round" : "Updates live";
     $("#leaderboardRoundStatus").classList.toggle("is-saved", saved);
     $("#leaderboardRoundStatus").textContent = saved
@@ -1286,8 +1284,8 @@
       const kpCode = E.kpCode(item.player, round.players, E.COURSE, round.settings, "kp");
       const kpmCode = E.kpCode(item.player, round.players, E.COURSE, round.settings, "marked");
       const rowClasses = [
-        item.player.id === standingLeaderId && item.totals.total.completed ? "leader-row-leading" : "",
-        item.player.id === standingLoserId && item.totals.total.completed ? "leader-row-trailing" : ""
+        item.player.id === pointLeaderId ? "leader-row-leading" : "",
+        item.player.id === pointLoserId ? "leader-row-trailing" : ""
       ].filter(Boolean).join(" ");
       return `<tr class="${rowClasses}"><td>${playerNameHtml(item.player, item.index)}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${displayPlayingHandicap(hcpForRound(item.player, round))}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.frontWeight}</td><td>${tics.backWeight}</td><td>${tics.totalNetWeight}</td><td>${tics.sandies}</td><td class="kp-code" title="KP holes 2, 8, 12, and 17">${kpCode}</td><td class="kp-code kp-marked-count" title="KPM holes 2, 8, 12, and 17">${kpmCode}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
     }).join("") + bccTipsRow(settlement, LEADERBOARD_COLUMNS.length);
