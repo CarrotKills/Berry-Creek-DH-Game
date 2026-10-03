@@ -10,11 +10,12 @@ const AdminDatabase = require("./admin-database.js");
 const PlayerDatabase = require("./player-database.js");
 const RoundHistoryDatabase = require("./round-history-database.js");
 const IndexSheet = require("./index-sheet.js");
+const IndexUpdateSchedule = require("./index-update-schedule.js");
 
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.16.7";
+const APP_VERSION = "9.16.8";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -32,6 +33,8 @@ const AUTH_SECRET = String(process.env.AUTH_SECRET || SHARE_SECRET);
 const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 const INDEX_SHEET_CSV_URL = String(process.env.INDEX_SHEET_URL || "https://docs.google.com/spreadsheets/d/e/2PACX-1vSZyzvxEBnr9IugRMC6aptHh1ZJ3mugb4boxRmu7NS7TL-kn7BY3hAgmtSHh-7ZoyvuFtLmUEL5v3f9/pub?output=csv");
 const INDEX_SHEET_MAX_BYTES = 2 * 1024 * 1024;
+const AUTO_INDEX_UPDATE_ENABLED = !/^(?:0|false|off)$/i.test(String(process.env.AUTO_INDEX_UPDATE_ENABLED || "true"));
+const AUTO_INDEX_UPDATE_STATUS_FILE = path.resolve(process.env.AUTO_INDEX_UPDATE_STATUS_FILE || path.join(DATA_DIR, "auto-index-update.json"));
 const clients = new Map();
 const adminLoginAttempts = new Map();
 const adminAuthCache = new Map();
@@ -54,6 +57,25 @@ function persist() {
 }
 
 persist();
+
+function readAutoIndexUpdateStatus() {
+  try {
+    const value = JSON.parse(fs.readFileSync(AUTO_INDEX_UPDATE_STATUS_FILE, "utf8"));
+    return value && typeof value === "object" ? value : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function writeAutoIndexUpdateStatus(value) {
+  fs.mkdirSync(path.dirname(AUTO_INDEX_UPDATE_STATUS_FILE), { recursive: true });
+  const temporary = `${AUTO_INDEX_UPDATE_STATUS_FILE}.tmp`;
+  fs.writeFileSync(temporary, JSON.stringify(value, null, 2), { mode: 0o600 });
+  fs.renameSync(temporary, AUTO_INDEX_UPDATE_STATUS_FILE);
+}
+
+let autoIndexUpdateStatus = readAutoIndexUpdateStatus();
+let indexUpdateInProgress = false;
 
 function sendJson(res, status, body, extraHeaders = {}) {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...extraHeaders });
@@ -223,6 +245,7 @@ function readinessPayload(req) {
     : !player.directoryId || (!linkedPlayerIds.has(player.directoryId) && !playerAccounts.some((account) => account.accountType === "player" && account.playerId === player.directoryId)));
   const groupsWithoutScorekeeper = activeGroups.filter((group) => !state.settings.scorekeepers[group]);
   const savedRoundCount = roundHistoryDatabase.list().length;
+  const autoIndexHasProblem = ["outdated", "error"].includes(autoIndexUpdateStatus.status);
   const checks = [
     { key: "storage", label: "Server storage is writable", ok: storageWritable, severity: "error", detail: storageWritable ? "Round and database files can be updated." : "The server cannot write to its data folder." },
     { key: "persistent", label: "Persistent storage is configured", ok: persistentStorageConfigured, severity: "error", detail: persistentStorageConfigured ? "A persistent data location is configured." : "Set DATA_DIR or PLAYERS_DB_FILE to a persistent disk before a live event." },
@@ -233,6 +256,7 @@ function readinessPayload(req) {
     { key: "logins", label: "Active players have login credentials", ok: activePlayersWithoutLogin.length === 0, severity: "warning", detail: activePlayersWithoutLogin.length ? `${activePlayersWithoutLogin.length} active player${activePlayersWithoutLogin.length === 1 ? " does" : "s do"} not have a usable login.` : `${state.players.length} active player login${state.players.length === 1 ? " is" : "s are"} ready.` },
     { key: "scorekeepers", label: "Active groups have scorekeepers", ok: groupsWithoutScorekeeper.length === 0, severity: "warning", detail: groupsWithoutScorekeeper.length ? `Group${groupsWithoutScorekeeper.length === 1 ? "" : "s"} ${groupsWithoutScorekeeper.join(", ")} can select a scorekeeper on the Scoring page.` : "Every active group has one scorekeeper." },
     { key: "database", label: "Admin, player, and round databases are available", ok: true, severity: "error", detail: `${adminCount} admin${adminCount === 1 ? "" : "s"}; ${savedPlayerCount} saved player${savedPlayerCount === 1 ? "" : "s"}; ${playerAccounts.length} player login${playerAccounts.length === 1 ? "" : "s"}; ${linkedPlayerIds.size} linked admin-player login${linkedPlayerIds.size === 1 ? "" : "s"}; ${savedRoundCount} saved round${savedRoundCount === 1 ? "" : "s"}.` },
+    { key: "auto-index", label: "Indexes update automatically at 6:30 AM Central", ok: AUTO_INDEX_UPDATE_ENABLED && !autoIndexHasProblem, severity: "warning", detail: autoIndexReadinessDetail() },
     { key: "https", label: "The app is using a secure connection", ok: secureConnection, severity: "warning", detail: secureConnection ? "Usernames, PINs, and live scores are protected in transit." : "Use HTTPS before anyone signs in outside this device." }
   ];
   const failedErrors = checks.filter((check) => !check.ok && check.severity === "error").length;
@@ -252,9 +276,7 @@ function normalizedScore(value) {
 }
 
 function centralDate() {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
+  return IndexUpdateSchedule.centralClock().date;
 }
 
 function requestError(message, statusCode) {
@@ -283,6 +305,84 @@ async function fetchIndexUpdatePlan() {
   } catch (error) {
     throw requestError(`The published index sheet could not be read: ${error.message}`, 422);
   }
+}
+
+function applyIndexUpdatePlan(plan, updateActiveRound = true) {
+  let activePlayersUpdated = 0;
+  if (!plan.updates.length) return { activePlayersUpdated };
+  createSnapshot("before-index-update");
+  playerDatabase.updateIndexes(plan.updates);
+  if (updateActiveRound) {
+    const updatedIndexes = new Map(plan.updates.map((update) => [update.id, update.ghin]));
+    state.players = state.players.map((player) => {
+      if (!player.directoryId || !updatedIndexes.has(player.directoryId) || Number(player.ghin) === updatedIndexes.get(player.directoryId)) return player;
+      activePlayersUpdated += 1;
+      return { ...player, ghin: updatedIndexes.get(player.directoryId) };
+    });
+  }
+  return { activePlayersUpdated };
+}
+
+function autoIndexReadinessDetail() {
+  if (!AUTO_INDEX_UPDATE_ENABLED) return "Automatic index updates are disabled by server configuration.";
+  const prefix = "Scheduled daily at 6:30 AM Central.";
+  if (!autoIndexUpdateStatus.lastAttemptAt) return `${prefix} No automatic check has run yet.`;
+  return `${prefix} ${autoIndexUpdateStatus.message || `Last checked ${autoIndexUpdateStatus.lastAttemptAt}.`}`;
+}
+
+async function runAutomaticIndexUpdate(now = new Date()) {
+  if (indexUpdateInProgress || !IndexUpdateSchedule.shouldRun(autoIndexUpdateStatus, now, AUTO_INDEX_UPDATE_ENABLED)) return;
+  const clock = IndexUpdateSchedule.centralClock(now);
+  indexUpdateInProgress = true;
+  autoIndexUpdateStatus = { ...autoIndexUpdateStatus, lastAttemptAt: now.toISOString(), status: "checking", message: "Checking the published index roster." };
+  writeAutoIndexUpdateStatus(autoIndexUpdateStatus);
+  try {
+    const { parsed, plan } = await fetchIndexUpdatePlan();
+    if (parsed.updateDate !== clock.date) {
+      const sheetDate = parsed.updateDate || "missing";
+      const message = `Automatic update skipped: roster date ${sheetDate} does not match ${clock.date}.`;
+      autoIndexUpdateStatus = { ...autoIndexUpdateStatus, lastCompletedDate: clock.date, status: "outdated", sheetDate: parsed.updateDate || null, updated: 0, message };
+      writeAutoIndexUpdateStatus(autoIndexUpdateStatus);
+      recordSystemAudit("Automatic index update", "INDEX_AUTO_SKIP", message);
+      return;
+    }
+    const updateActiveRound = !state.settings.locked;
+    const { activePlayersUpdated } = applyIndexUpdatePlan(plan, updateActiveRound);
+    const updated = plan.updates.length;
+    const lockNote = state.settings.locked && updated ? " The locked active round was left unchanged." : "";
+    const message = updated
+      ? `Automatic index update completed: ${updated} saved player${updated === 1 ? "" : "s"} updated from the ${parsed.updateDate} roster.${lockNote}`
+      : `Automatic index check completed: all matched players were already current for ${parsed.updateDate}.`;
+    autoIndexUpdateStatus = {
+      ...autoIndexUpdateStatus,
+      lastCompletedDate: clock.date,
+      lastSuccessAt: new Date().toISOString(),
+      status: "success",
+      sheetDate: parsed.updateDate,
+      updated,
+      activePlayersUpdated,
+      unmatched: plan.unmatched.length,
+      ambiguous: plan.ambiguous.length,
+      message
+    };
+    writeAutoIndexUpdateStatus(autoIndexUpdateStatus);
+    recordSystemAudit("Automatic index update", "INDEX_AUTO_IMPORT", message);
+  } catch (error) {
+    const message = `Automatic index update failed: ${error.message}`;
+    autoIndexUpdateStatus = { ...autoIndexUpdateStatus, status: "error", message };
+    writeAutoIndexUpdateStatus(autoIndexUpdateStatus);
+    console.error(message);
+  } finally {
+    indexUpdateInProgress = false;
+  }
+}
+
+function startAutomaticIndexUpdates() {
+  if (!AUTO_INDEX_UPDATE_ENABLED) return;
+  const initial = setTimeout(() => runAutomaticIndexUpdate(), 5_000);
+  initial.unref?.();
+  const recurring = setInterval(() => runAutomaticIndexUpdate(), 60_000);
+  recurring.unref?.();
 }
 
 function legacyPinMatches(candidate) {
@@ -758,47 +858,45 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === "POST" && url.pathname === "/api/players/update-indexes") {
         if (state.settings.locked) return sendJson(res, 423, { ok: false, error: "Unlock the round before updating indexes" });
-        const body = await readBody(req);
-        const { parsed, plan } = await fetchIndexUpdatePlan();
-        const today = centralDate();
-        const outdated = parsed.updateDate !== today;
-        if (outdated && body.confirmOutdated !== true) {
-          return sendJson(res, 409, {
-            ok: false,
-            code: "OUTDATED_INDEX_ROSTER",
-            error: "Are you sure you want to update, the roster is outdated.",
-            sheetDate: parsed.updateDate || null,
-            currentDate: today
-          });
-        }
-        let activePlayersUpdated = 0;
-        if (plan.updates.length) {
-          createSnapshot("before-index-update");
-          playerDatabase.updateIndexes(plan.updates);
-          const updatedIndexes = new Map(plan.updates.map((update) => [update.id, update.ghin]));
-          state.players = state.players.map((player) => {
-            if (!player.directoryId || !updatedIndexes.has(player.directoryId) || Number(player.ghin) === updatedIndexes.get(player.directoryId)) return player;
-            activePlayersUpdated += 1;
-            return { ...player, ghin: updatedIndexes.get(player.directoryId) };
-          });
-          const dateDescription = parsed.updateDate || "no update date";
-          recordSystemAudit(adminIdentity.name, "INDEX_IMPORT", `Updated ${plan.updates.length} saved player index${plan.updates.length === 1 ? "" : "es"} from the published roster dated ${dateDescription}`);
-        }
-        return sendJson(res, 200, {
-          ok: true,
-          players: playerDatabase.list(),
-          summary: {
-            updated: plan.updates.length,
-            unchanged: plan.unchanged.length,
-            unmatched: plan.unmatched.map((player) => player.name),
-            ambiguous: plan.ambiguous.map((player) => player.name),
-            validSheetRows: plan.validSheetRows,
-            activePlayersUpdated,
-            sheetDate: parsed.updateDate || null,
-            currentDate: today,
-            outdated
+        if (indexUpdateInProgress) return sendJson(res, 409, { ok: false, error: "An index update is already in progress" });
+        indexUpdateInProgress = true;
+        try {
+          const body = await readBody(req);
+          const { parsed, plan } = await fetchIndexUpdatePlan();
+          const today = centralDate();
+          const outdated = parsed.updateDate !== today;
+          if (outdated && body.confirmOutdated !== true) {
+            return sendJson(res, 409, {
+              ok: false,
+              code: "OUTDATED_INDEX_ROSTER",
+              error: "Are you sure you want to update, the roster is outdated.",
+              sheetDate: parsed.updateDate || null,
+              currentDate: today
+            });
           }
-        });
+          const { activePlayersUpdated } = applyIndexUpdatePlan(plan);
+          if (plan.updates.length) {
+            const dateDescription = parsed.updateDate || "no update date";
+            recordSystemAudit(adminIdentity.name, "INDEX_IMPORT", `Updated ${plan.updates.length} saved player index${plan.updates.length === 1 ? "" : "es"} from the published roster dated ${dateDescription}`);
+          }
+          return sendJson(res, 200, {
+            ok: true,
+            players: playerDatabase.list(),
+            summary: {
+              updated: plan.updates.length,
+              unchanged: plan.unchanged.length,
+              unmatched: plan.unmatched.map((player) => player.name),
+              ambiguous: plan.ambiguous.map((player) => player.name),
+              validSheetRows: plan.validSheetRows,
+              activePlayersUpdated,
+              sheetDate: parsed.updateDate || null,
+              currentDate: today,
+              outdated
+            }
+          });
+        } finally {
+          indexUpdateInProgress = false;
+        }
       }
       if (req.method === "PUT" && playerRoute) {
         const body = await readBody(req);
@@ -958,6 +1056,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`Berry Creek DH Game v${APP_VERSION} running at http://localhost:${PORT}`);
   if (adminDatabase.count() === 0) console.log("No named admins exist yet. Use the ADMIN_PIN setup PIN to create the first named admin.");
+  startAutomaticIndexUpdates();
 });
 
 let shuttingDown = false;

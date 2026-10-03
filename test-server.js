@@ -52,7 +52,7 @@ async function createPlayerLogin(playerId, username, pin) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.16.7");
+  assert.equal(config.appVersion, "9.16.8");
   assert.equal(config.adminSetupRequired, true);
   const emptyPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
   assert.equal(emptyPublicLeaderboard.source, "empty");
@@ -173,6 +173,7 @@ async function createPlayerLogin(playerId, username, pin) {
   assert.equal(Array.isArray(readiness.checks), true);
   assert.equal(readiness.checks.some((check) => check.key === "backup" && check.ok), true);
   assert.equal(readiness.checks.some((check) => check.key === "pin" && check.ok), true);
+  assert.equal(readiness.checks.some((check) => check.key === "auto-index"), true);
   const restoredBackup = await fetch(`${base}/api/system-backup/restore`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ backup: completeBackup }) });
   assert.equal(restoredBackup.status, 200);
   assert.equal((await restoredBackup.json()).savedPlayerCount, 1);
