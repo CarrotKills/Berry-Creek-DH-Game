@@ -111,6 +111,16 @@ assert.equal(partialTotals.total.completed, false);
 
 const alice = { id: "a", name: "Alice", ghin: 0, teeKey: "championship", scores: E.COURSE.holes.map((h) => h.par), skins: Array(18).fill(false), sandies: Array(18).fill(false) };
 const bob = { id: "b", name: "Bob", ghin: 0, teeKey: "member", scores: E.COURSE.holes.map((h) => h.par), skins: Array(18).fill(false), sandies: Array(18).fill(false) };
+const incompleteFrontPlayer = { ...bob, id: "front-incomplete", group: "B", scores: [...bob.scores] };
+incompleteFrontPlayer.scores[8] = "";
+assert.deepEqual(E.leaders([alice, incompleteFrontPlayer], E.COURSE, settings, "front"), [], "FN remains unawarded until every competing player completes holes 1-9");
+assert.deepEqual(E.leaders([alice, incompleteFrontPlayer], E.COURSE, settings, "total"), [], "TN remains unawarded when the front nine is incomplete");
+assert.notDeepEqual(E.leaders([alice, incompleteFrontPlayer], E.COURSE, settings, "back"), [], "BN may be awarded once every competing player completes holes 10-18");
+const incompleteBackPlayer = { ...bob, id: "back-incomplete", group: "C", scores: [...bob.scores] };
+incompleteBackPlayer.scores[17] = "";
+assert.deepEqual(E.leaders([alice, incompleteBackPlayer], E.COURSE, settings, "back"), [], "BN remains unawarded until every competing player completes holes 10-18");
+assert.deepEqual(E.leaders([alice, incompleteBackPlayer], E.COURSE, settings, "total"), [], "TN remains unawarded when the back nine is incomplete");
+assert.notDeepEqual(E.leaders([alice, incompleteBackPlayer], E.COURSE, settings, "front"), [], "FN may be awarded once every competing player completes holes 1-9");
 alice.scores[0] = 3;
 alice.sandies[1] = true;
 settings.kpWinners["2"] = "a";
@@ -211,6 +221,7 @@ const scoreOnly = { ...bob, id: "score-only", inGame: false, scores: Array(18).f
 assert.equal(E.isInGame(scoreOnly), false);
 assert.deepEqual(E.gamePlayers([alice, bob, scoreOnly]).map((player) => player.id), ["a", "b"]);
 assert.equal(E.leaders([alice, bob, scoreOnly], E.COURSE, settings, "front").includes("score-only"), false);
+assert.notDeepEqual(E.leaders([alice, bob, { ...scoreOnly, scores: Array(18).fill("") }], E.COURSE, settings, "front"), [], "A score-only player does not delay FN awards");
 assert.deepEqual(E.skinResult([alice, bob, { ...scoreOnly, scores: Array(18).fill("") }], E.COURSE, settings, 0), { status: "awarded", winnerId: "a", lowNet: 3 });
 assert.deepEqual(E.ticSummary(scoreOnly, [alice, bob, scoreOnly], E.COURSE, settings), { birdies: 0, eagles: 0, skins: 0, front: 0, frontWeight: 0, back: 0, backWeight: 0, totalNet: 0, totalNetWeight: 0, sandies: 0, kps: 0, kpMarked: 0, total: 0, weightedTics: 0, pointsEarned: 0 });
 assert.deepEqual(E.pointsLedger(scoreOnly, [alice, bob, scoreOnly], E.COURSE, settings), { achievementPoints: 0, positive: 0, negative: 0, net: 0 });

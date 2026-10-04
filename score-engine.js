@@ -206,12 +206,10 @@
 
   function leaders(players, course, settings, segment) {
     const eligiblePlayers = gamePlayers(players);
-    const eligible = eligiblePlayers
-      .map((player) => ({ player, totals: playerTotals(player, course, settings, eligiblePlayers) }))
-      .filter((item) => item.totals[segment].completed);
-    if (!eligible.length) return [];
-    const low = Math.min(...eligible.map((item) => item.totals[segment].net));
-    return eligible.filter((item) => item.totals[segment].net === low).map((item) => item.player.id);
+    const entries = eligiblePlayers.map((player) => ({ player, totals: playerTotals(player, course, settings, eligiblePlayers) }));
+    if (!entries.length || entries.some((item) => !item.totals[segment].completed)) return [];
+    const low = Math.min(...entries.map((item) => item.totals[segment].net));
+    return entries.filter((item) => item.totals[segment].net === low).map((item) => item.player.id);
   }
 
   function skinResult(players, course, settings, holeIndex) {
