@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.15";
+  const APP_VERSION = "9.16.16";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -1190,7 +1190,8 @@
 
   function bccTipsRow(settlement, columnCount) {
     if (!settlement.complete) return "";
-    return `<tr class="bcc-tips-row"><td class="settlement-spacer" colspan="${columnCount - 4}"></td><td class="settlement-label">Total to Collect</td><td class="points-negative settlement-value">${settlement.totalToCollect.toFixed(0)}</td><td class="settlement-label">BCCC Tips</td><td class="points-net is-positive settlement-value">${settlement.tips > 0 ? "+" : ""}${settlement.tips.toFixed(0)}</td></tr>`;
+    const leadingColumns = Math.max(1, columnCount - 10);
+    return `<tr class="bcc-tips-row"><td class="settlement-spacer" colspan="${leadingColumns}"></td><td class="settlement-label" colspan="3">Total to Collect</td><td class="points-negative settlement-value">${settlement.totalToCollect.toFixed(0)}</td><td class="settlement-label" colspan="3">BCCC Tips</td><td class="points-net is-positive settlement-value">${settlement.tips > 0 ? "+" : ""}${settlement.tips.toFixed(0)}</td><td class="settlement-spacer settlement-trailing-spacer" colspan="2"></td></tr>`;
   }
 
   function leaderboardItems(round = leaderboardRound()) {

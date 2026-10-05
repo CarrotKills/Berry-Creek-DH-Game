@@ -252,8 +252,9 @@ tbody tr:last-child td { border-bottom: 0; }
 .leaderboard .points-net.is-negative { color: #a30d20; }
 .leaderboard .bcc-tips-row td { border-top: 3px solid var(--forest); background: var(--gold-soft); font-weight: 900; }
 .leaderboard .bcc-tips-row td:first-child { position: static; background: var(--gold-soft); }
-.leaderboard .bcc-tips-row .settlement-label { color: var(--forest); text-align: right; white-space: nowrap; }
+.leaderboard .bcc-tips-row .settlement-label { padding-right: 0.5rem; padding-left: 0.5rem; color: var(--forest); text-align: center; white-space: nowrap; }
 .leaderboard .bcc-tips-row .settlement-value { text-align: center; white-space: nowrap; }
+.leaderboard .bcc-tips-row .settlement-trailing-spacer { background: var(--gold-soft); }
 .leader-row-leading td:first-child::before { content: ""; display: inline-block; width: 1.15rem; height: 1.15rem; margin-right: 0.25rem; background: url("berry-creek-leader-flower.png") center / contain no-repeat; vertical-align: -0.25rem; }
 .leader-row-trailing td:first-child::before { content: "💩 "; }
 .guest-marker { margin-left: 0.12rem; color: var(--forest); font-size: 0.58em; font-weight: 900; vertical-align: super; }
