@@ -222,6 +222,14 @@ tbody tr:last-child td { border-bottom: 0; }
 .kp-card-status.is-failed { color: var(--forest); }
 .leaderboard-sort-bar { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin: 0.7rem 0; color: var(--muted); font-size: 0.82rem; }
 .leaderboard-sort-bar .text-button { flex: 0 0 auto; min-height: 36px; padding: 0.35rem 0.5rem; }
+.leaderboard-legend { margin-top: 0.8rem; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--paper) 92%, var(--gold-soft)); }
+.leaderboard-legend summary { cursor: pointer; padding: 0.75rem 0.9rem; color: var(--forest); font-weight: 900; }
+.leaderboard-legend dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 0; padding: 0 0.9rem 0.9rem; }
+.leaderboard-legend dl > div { display: grid; grid-template-columns: 3.5rem minmax(0, 1fr); gap: 0.5rem; padding: 0.45rem 0; border-top: 1px solid var(--line); }
+.leaderboard-legend dl > div:nth-child(odd) { padding-right: 0.8rem; }
+.leaderboard-legend dl > div:nth-child(even) { padding-left: 0.8rem; }
+.leaderboard-legend dt { color: var(--forest-2); font-weight: 900; }
+.leaderboard-legend dd { margin: 0; color: var(--muted); font-size: 0.82rem; line-height: 1.35; }
 .leaderboard thead th { padding: 0; }
 .leaderboard-sort-button { display: inline-flex; justify-content: center; align-items: center; gap: 0.3rem; width: 100%; min-height: 44px; border: 0; padding: 0.55rem; color: #fff; background: transparent; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
 .leaderboard-sort-button:hover, .leaderboard-sort-button:focus-visible { background: rgba(255,255,255,0.14); }
@@ -406,6 +414,8 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .score-stepper { grid-column: 1 / -1; grid-row: 1; }
   .hole-meta, .net-box { grid-row: 2; }
   .kp-panel { grid-template-columns: 1fr 1fr; }
+  .leaderboard-legend dl { grid-template-columns: 1fr; }
+  .leaderboard-legend dl > div:nth-child(odd), .leaderboard-legend dl > div:nth-child(even) { padding-right: 0; padding-left: 0; }
   .control-grid { grid-template-columns: 1fr 1fr; }
   .group-progress-grid { grid-template-columns: 1fr 1fr; }
   .group-share-grid { grid-template-columns: 1fr; }
@@ -472,6 +482,11 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .print-report table { page-break-inside: avoid; }
   .print-report th { color: #fff !important; background: #b51222 !important; }
   .print-report td { color: #000; background: #fff !important; }
+  .print-leaderboard-legend { page-break-inside: avoid; }
+  .print-leaderboard-legend dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 0.25in; margin: 0; font-size: 7.5pt; }
+  .print-leaderboard-legend dl > div { display: grid; grid-template-columns: 0.35in 1fr; gap: 0.04in; padding: 0.03in 0; border-top: 0.5pt solid #ccc; }
+  .print-leaderboard-legend dt { font-weight: 800; }
+  .print-leaderboard-legend dd { margin: 0; }
   .print-group td { position: relative; }
   .print-dots { display: block; color: #b51222; font-size: 6pt; letter-spacing: 0.4pt; }
   .print-score-value.score-mark { display: inline-grid; min-width: 14pt; height: 14pt; border-width: 1pt; }
