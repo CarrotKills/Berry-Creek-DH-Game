@@ -4,30 +4,29 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.12";
+  const APP_VERSION = "9.16.14";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
   const SESSION_KEY = "berry-creek-user-session-v1";
   const KP_HOLES = [2, 8, 12, 17];
   const LEADERBOARD_COLUMNS = [
-    { key: "player", label: "Player", description: "Player name. *G identifies a guest.", firstDirection: "asc", text: true },
-    { key: "group", label: "G", description: "Group.", firstDirection: "asc", text: true },
-    { key: "thru", label: "Thru", description: "Holes completed. F means all 18 holes are finished.", firstDirection: "desc" },
+    { key: "player", label: "PLAYER", description: "Player name. *G identifies a guest.", firstDirection: "asc", text: true },
     { key: "handicap", label: "HCP", description: "Playing Handicap for the selected tee.", firstDirection: "asc" },
+    { key: "group", label: "G", description: "Group.", firstDirection: "asc", text: true },
     { key: "gross", label: "TOT", description: "Total gross score.", firstDirection: "asc" },
     { key: "net", label: "NET", description: "Net score using the player's full Playing Handicap.", firstDirection: "asc" },
-    { key: "birdies", label: "B", description: "Birdies. Each birdie earns 1 tic.", firstDirection: "desc" },
     { key: "eagles", label: "E", description: "Eagles or better. Each earns 2 tics.", firstDirection: "desc" },
+    { key: "birdies", label: "B", description: "Birdies. Each birdie earns 1 tic.", firstDirection: "desc" },
+    { key: "sandies", label: "SD", description: "Sandies. Each qualifying sand save earns 1 tic.", firstDirection: "desc" },
+    { key: "kps", label: "KP", description: "Closest to the pin. This is the number of KPs won; each earns 1 tic.", firstDirection: "desc" },
     { key: "skins", label: "S", description: "Skins using partial handicap off the game's lowest HCP. Skin pops equal HCP minus the lowest HCP, with a maximum of 18; a par-3 pop counts as one-half stroke.", firstDirection: "desc" },
     { key: "frontWeight", label: "FN", description: "Front Net. A sole winner earns 2 tics; every tied winner earns 1 tic.", firstDirection: "desc" },
     { key: "backWeight", label: "BN", description: "Back Net. A sole winner earns 2 tics; every tied winner earns 1 tic.", firstDirection: "desc" },
     { key: "totalNetWeight", label: "TN", description: "Total Net. A sole winner earns 2 tics; every tied winner earns 1 tic.", firstDirection: "desc" },
-    { key: "sandies", label: "SD", description: "Sandies. Each qualifying sand save earns 1 tic.", firstDirection: "desc" },
-    { key: "kps", label: "KP", description: "Closest to the pin. This is the number of KPs won; each earns 1 tic.", firstDirection: "desc" },
-    { key: "positive", label: "$+", description: "Dollar amount earned from the player's tics.", firstDirection: "desc" },
-    { key: "negative", label: "$-", description: "Dollar amount owed for tics earned by other players.", firstDirection: "desc" },
-    { key: "netPoints", label: "Net $", description: "Net amount earned or owed after combining $+ and $-. Final fractional balances settle to whole dollars; BCCC Tips records any remaining collection difference.", firstDirection: "desc" }
+    { key: "positive", label: "P +", description: "Positive points earned from the player's tics.", firstDirection: "desc" },
+    { key: "negative", label: "P -", description: "Negative points owed for tics earned by other players.", firstDirection: "desc" },
+    { key: "netPoints", label: "NET P", description: "Net points after combining P + and P -. Final fractional balances settle to whole points; BCCC Tips records any remaining collection difference.", firstDirection: "desc" }
   ];
   const $ = (selector) => document.querySelector(selector);
   const teeEntries = Object.entries(E.COURSE.tees).filter(([, tee]) => tee.selectable !== false);
@@ -1246,7 +1245,7 @@
       const active = leaderboardSort.key === column.key;
       const ariaSort = active ? ` aria-sort="${leaderboardSort.direction === "asc" ? "ascending" : "descending"}"` : "";
       const icon = active ? (leaderboardSort.direction === "asc" ? "▲" : "▼") : "↕";
-      return `<th${ariaSort}><button class="leaderboard-sort-button" type="button" data-leaderboard-sort="${column.key}" title="${esc(`${column.label}: ${column.description} Sort this column.`)}">${esc(column.label)}<span class="sort-icon" aria-hidden="true">${icon}</span></button></th>`;
+      return `<th class="${column.key === "kps" ? "kp-count-column" : ""}"${ariaSort}><button class="leaderboard-sort-button" type="button" data-leaderboard-sort="${column.key}" title="${esc(`${column.label}: ${column.description} Sort this column.`)}">${esc(column.label)}<span class="sort-icon" aria-hidden="true">${icon}</span></button></th>`;
     }).join("")}</tr>`;
     $("#leaderboardLegendList").innerHTML = leaderboardLegendMarkup();
     document.querySelectorAll("[data-leaderboard-sort]").forEach((button) => button.addEventListener("click", () => {
@@ -1279,14 +1278,13 @@
     $("#leaderboardBody").innerHTML = players.map((item) => {
       const tics = item.tics;
       const ledger = item.ledger;
-      const thru = item.sortValues.thru;
       const netClass = ledger.settledNet > 0 ? "is-positive" : ledger.settledNet < 0 ? "is-negative" : "";
       const netText = settledPointText(ledger.settledNet, settlement.complete);
       const rowClasses = [
         item.player.id === pointLeaderId ? "leader-row-leading" : "",
         item.player.id === pointLoserId ? "leader-row-trailing" : ""
       ].filter(Boolean).join(" ");
-      return `<tr class="${rowClasses}"><td>${playerNameHtml(item.player, item.index)}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${displayPlayingHandicap(hcpForRound(item.player, round))}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.frontWeight}</td><td>${tics.backWeight}</td><td>${tics.totalNetWeight}</td><td>${tics.sandies}</td><td title="KPs won">${tics.kps}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
+      return `<tr class="${rowClasses}"><td>${playerNameHtml(item.player, item.index)}</td><td>${displayPlayingHandicap(hcpForRound(item.player, round))}</td><td>${item.player.group}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.eagles}</td><td>${tics.birdies}</td><td>${tics.sandies}</td><td class="kp-count-column" title="KPs won">${tics.kps}</td><td>${tics.skins}</td><td>${tics.frontWeight}</td><td>${tics.backWeight}</td><td>${tics.totalNetWeight}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
     }).join("") + bccTipsRow(settlement, LEADERBOARD_COLUMNS.length);
     $("#leaderboardEmpty").hidden = players.length > 0;
     $(".leaderboard-wrap").hidden = players.length === 0;
@@ -1424,7 +1422,7 @@
       const tics = E.ticSummary(player, roundState.players, E.COURSE, roundState.settings);
       const ledger = ledgerByPlayer.get(player.id);
       const netClass = ledger.settledNet > 0 ? "is-positive" : ledger.settledNet < 0 ? "is-negative" : "";
-      return `<tr><td>${playerNameHtml(player, index)}</td><td>${player.group}</td><td>${displayPlayingHandicap(handicap)}</td><td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td><td>${tics.birdies}</td><td>${tics.eagles}</td><td>${tics.skins}</td><td>${tics.frontWeight}</td><td>${tics.backWeight}</td><td>${tics.totalNetWeight}</td><td>${tics.sandies}</td><td title="KPs won">${tics.kps}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${settledPointText(ledger.settledNet, settlement.complete)}</td></tr>`;
+      return `<tr><td>${playerNameHtml(player, index)}</td><td>${displayPlayingHandicap(handicap)}</td><td>${player.group}</td><td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td><td>${tics.eagles}</td><td>${tics.birdies}</td><td>${tics.sandies}</td><td class="kp-count-column" title="KPs won">${tics.kps}</td><td>${tics.skins}</td><td>${tics.frontWeight}</td><td>${tics.backWeight}</td><td>${tics.totalNetWeight}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${settledPointText(ledger.settledNet, settlement.complete)}</td></tr>`;
     }).join("") + bccTipsRow(settlement, 16);
   }
 
@@ -2281,8 +2279,8 @@
     }).join("");
     const groupPlayersForReport = (group) => reportState.players.filter((player) => player.group === group);
     const groupTables = R.GROUPS.filter((group) => groupPlayersForReport(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>All tees use the standard Upper hole handicap ratings. Skin pops are capped at one stroke per hole, 1/2 on par 3s; Out, In, and Total net scores use each player's full HDCP. S marks a skin, KP marks the qualifying holder, KPM marks a claim that earned no tic, and an outlined KP is pending.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.slice(0, 9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>Out</th>${E.COURSE.holes.slice(9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>In</th><th>Total</th></tr></thead><tbody>${groupPlayersForReport(group).map((player) => { const totals = E.playerTotals(player, E.COURSE, reportState.settings, reportState.players); const front = scorecardSegment(player, totals.front, 0, 9); const back = scorecardSegment(player, totals.back, 9, 18); const total = scorecardSegment(player, totals.total, 0, 18); const cells = player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceivedFor(player, holeIndex, reportState))}</span>${scorecardIndicators(player, holeIndex, reportState)}</td>`); return `<tr class="${player.inGame ? "" : "score-only-row"}"><td>${esc(playerExportName(player, reportState.players.indexOf(player)))}</td>${cells.slice(0, 9).join("")}<td>${front.text}</td>${cells.slice(9).join("")}<td>${back.text}</td><td>${total.text}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
-    const leaders = rankedPlayers(reportState).map((item, rank) => `<tr><td>${rank + 1}</td><td>${playerNameHtml(item.player, item.index)}</td><td>${item.player.group}</td><td>${item.player.scores.filter(Boolean).length}</td><td>${displayPlayingHandicap(hcpForRound(item.player, reportState))}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.birdies}</td><td>${item.tics.eagles}</td><td>${item.tics.skins}</td><td>${item.tics.frontWeight}</td><td>${item.tics.backWeight}</td><td>${item.tics.totalNetWeight}</td><td>${item.tics.sandies}</td><td>${item.tics.kps}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${settledPointText(item.ledger.settledNet, settlement.complete)}</td></tr>`).join("") + bccTipsRow(settlement, 18);
-    $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(reportState.roundName)}</h1><p>${esc(reportState.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table><thead><tr><th>Place</th><th>Player</th><th>G</th><th>Thru</th><th>HCP</th><th>TOT</th><th>NET</th><th>B</th><th>E</th><th>S</th><th>FN</th><th>BN</th><th>TN</th><th>SD</th><th>KP</th><th>$+</th><th>$-</th><th>Net $</th></tr></thead><tbody>${leaders}</tbody></table><section class="print-leaderboard-legend"><h3>Leaderboard legend</h3><dl>${leaderboardLegendMarkup()}</dl></section><div class="print-columns"><section><h2>KPs</h2><table><thead><tr><th>Hole</th><th>KP</th><th>KPM</th></tr></thead><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
+    const leaders = rankedPlayers(reportState).map((item) => `<tr><td>${playerNameHtml(item.player, item.index)}</td><td>${displayPlayingHandicap(hcpForRound(item.player, reportState))}</td><td>${item.player.group}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.eagles}</td><td>${item.tics.birdies}</td><td>${item.tics.sandies}</td><td class="kp-count-column">${item.tics.kps}</td><td>${item.tics.skins}</td><td>${item.tics.frontWeight}</td><td>${item.tics.backWeight}</td><td>${item.tics.totalNetWeight}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${settledPointText(item.ledger.settledNet, settlement.complete)}</td></tr>`).join("") + bccTipsRow(settlement, 16);
+    $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(reportState.roundName)}</h1><p>${esc(reportState.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table class="leaderboard"><thead><tr><th>PLAYER</th><th>HCP</th><th>G</th><th>TOT</th><th>NET</th><th>E</th><th>B</th><th>SD</th><th class="kp-count-column">KP</th><th>S</th><th>FN</th><th>BN</th><th>TN</th><th>P +</th><th>P -</th><th>NET P</th></tr></thead><tbody>${leaders}</tbody></table><section class="print-leaderboard-legend"><h3>Leaderboard legend</h3><dl>${leaderboardLegendMarkup()}</dl></section><div class="print-columns"><section><h2>KPs</h2><table><thead><tr><th>Hole</th><th>KP</th><th>KPM</th></tr></thead><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
   }
 
   async function checkVersion() {

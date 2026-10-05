@@ -230,8 +230,11 @@ tbody tr:last-child td { border-bottom: 0; }
 .leaderboard-legend dl > div:nth-child(even) { padding-left: 0.8rem; }
 .leaderboard-legend dt { color: var(--forest-2); font-weight: 900; }
 .leaderboard-legend dd { margin: 0; color: var(--muted); font-size: 0.82rem; line-height: 1.35; }
+.leaderboard th, .leaderboard td { border-right: 0; border-left: 0; }
+.leaderboard th:not(:first-child), .leaderboard tbody tr:not(.bcc-tips-row) td:not(:first-child) { box-sizing: border-box; width: 4.25rem; min-width: 4.25rem; max-width: 4.25rem; }
+.leaderboard .kp-count-column { width: 4.25rem; min-width: 4.25rem; max-width: 4.25rem; }
 .leaderboard thead th { padding: 0; }
-.leaderboard-sort-button { display: inline-flex; justify-content: center; align-items: center; gap: 0.3rem; width: 100%; min-height: 44px; border: 0; padding: 0.55rem; color: #fff; background: transparent; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.leaderboard-sort-button { display: inline-flex; justify-content: center; align-items: center; gap: 0.2rem; width: 100%; min-height: 44px; border: 0; padding: 0.55rem 0.25rem; color: #fff; background: transparent; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
 .leaderboard-sort-button:hover, .leaderboard-sort-button:focus-visible { background: rgba(255,255,255,0.14); }
 .leaderboard th[aria-sort] { background: var(--forest-2); }
 .leaderboard .sort-icon { min-width: 0.8rem; color: #ffd8de; font-size: 0.62rem; }
