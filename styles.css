@@ -309,7 +309,20 @@ dialog::backdrop { background: rgba(10, 24, 17, 0.55); }
 .progress-track { height: 7px; margin: 0.55rem 0; overflow: hidden; border-radius: 999px; background: var(--line); }
 .progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--forest); }
 .group-progress-card small { color: var(--muted); font-size: 0.7rem; }
-.saved-rounds-list { display: grid; gap: 0.6rem; }
+.saved-rounds-archive { margin-top: 0.8rem; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--paper) 96%, var(--gold-soft)); }
+.saved-rounds-archive > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.75rem; min-height: 64px; padding: 0.75rem 0.9rem; cursor: pointer; list-style: none; user-select: none; }
+.saved-rounds-archive > summary::-webkit-details-marker { display: none; }
+.saved-rounds-archive > summary:focus-visible { outline: 3px solid color-mix(in srgb, var(--forest) 45%, transparent); outline-offset: -3px; }
+.archive-folder-icon { position: relative; display: block; width: 34px; height: 25px; border-radius: 4px; background: var(--forest); }
+.archive-folder-icon::before { position: absolute; top: -6px; left: 2px; width: 15px; height: 8px; border-radius: 4px 4px 0 0; background: var(--forest); content: ""; }
+.archive-folder-copy strong, .archive-folder-copy span { display: block; }
+.archive-folder-copy strong { color: var(--forest); }
+.archive-folder-copy span { margin-top: 0.15rem; color: var(--muted); font-size: 0.76rem; }
+.archive-open-label { color: var(--forest); font-size: 0.78rem; font-weight: 900; }
+.archive-open-label::after { display: inline-block; margin-left: 0.35rem; content: "▾"; transition: transform 160ms ease; }
+.saved-rounds-archive[open] .archive-open-label::after { transform: rotate(180deg); }
+.saved-rounds-list { display: grid; gap: 0.6rem; padding: 0 0.8rem 0.8rem; border-top: 1px solid var(--line); }
+.saved-rounds-list > :first-child { margin-top: 0.8rem; }
 .saved-round-card { display: grid; grid-template-columns: minmax(180px, 1fr) auto; align-items: center; gap: 0.8rem; padding: 0.8rem; border: 1px solid var(--line); border-radius: 10px; }
 .saved-round-card strong, .saved-round-card span { display: block; }
 .saved-round-card strong { color: var(--forest); }

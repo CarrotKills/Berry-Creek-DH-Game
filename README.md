@@ -85,7 +85,7 @@ Deleting a saved player does not delete that golfer's current-round scores. It o
 
 ## Settings and admin controls
 
-- Settings begins with the frequently used event controls in this order: Device preferences, Start a new round, Lock & Save Round, and Save Round. Event readiness and Live event status follow. Historical reference, Named accountability, and Change history are grouped below for less frequent access; backup, import/export, and version tools remain available inside Historical reference.
+- Settings begins with the frequently used event controls in this order: Device preferences, Start a new round, Lock & Save Round, and Save Round. Event readiness and Live event status follow. Historical reference, Named accountability, and Change history are grouped below for less frequent access; backup, import/export, and version tools remain available inside Historical reference. Saved rounds are collected in a collapsed Saved Rounds Archive so the Settings page stays compact; opening the archive reveals the existing view, roster reuse, download, and delete actions.
 - The connection badge shows Live, Reconnecting, or Offline. Offline score changes are queued on the device and sent when the connection returns.
 - Each score briefly shows Saving, Saved, Waiting to sync, or Sync problem so the scorekeeper can verify that entry.
 - Score updates include the score the device last saw. If another device changed the same player and hole first, the scorekeeper must choose whether to keep the server score or replace it, preventing silent overwrites.
