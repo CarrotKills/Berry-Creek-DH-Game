@@ -12,6 +12,10 @@ assert.doesNotMatch(html, /<details id="savedRoundsArchive"[^>]*\sopen(?:\s|>)/)
 assert.match(html, /<strong>Saved Rounds Archive<\/strong>/);
 assert.match(html, /id="savedRoundsStatus"[^>]*aria-live="polite"/);
 assert.match(html, /id="savedRoundsList" class="saved-rounds-list"/);
+assert.doesNotMatch(html, /id="exportBtn"/);
+assert.doesNotMatch(html, /id="importInput"/);
+assert.doesNotMatch(html, /Active round file/);
+assert.doesNotMatch(app, /REPLACE_ROUND/);
 assert.ok(html.indexOf('id="savedRoundsStatus"') < html.indexOf('id="savedRoundsList"'), "Archive count must appear before its round list");
 assert.match(app, /status\.textContent = `\$\{savedRounds\.length\} saved round/);
 assert.match(app, /data-round-action="view"/);

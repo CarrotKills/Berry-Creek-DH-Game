@@ -15,7 +15,7 @@
   const HOLE_PARS = [4, 3, 5, 4, 4, 4, 5, 3, 4, 4, 5, 3, 5, 4, 4, 4, 3, 4];
   const TEE_KEY_ALIASES = Object.freeze({ creekWomen: "creekMen", creekBerryCombo: "creekMen", berryMen: "creekMen", berryWomen: "creekMen" });
   const TEE_KEYS = new Set(["championship", "member", "memberCreekCombo", "creekMen"]);
-  const ADMIN_ACTIONS = new Set(["SET_META", "SET_ALLOWANCE", "ADD_PLAYER", "REMOVE_PLAYER", "UPDATE_PLAYER", "REPLACE_ROUND", "START_FROM_SAVED", "RESET_SCORES", "CLEAR_ROUND", "SET_LOCKED", "CLEAR_AUDIT"]);
+  const ADMIN_ACTIONS = new Set(["SET_META", "SET_ALLOWANCE", "ADD_PLAYER", "REMOVE_PLAYER", "UPDATE_PLAYER", "START_FROM_SAVED", "RESET_SCORES", "CLEAR_ROUND", "SET_LOCKED", "CLEAR_AUDIT"]);
   const SCORING_ACTIONS = new Set(["SET_SCORE", "SET_SANDY", "SET_KP", "UNDO_LAST"]);
   const ACCESS_ACTIONS = new Set(["SET_SCOREKEEPER"]);
 
@@ -173,7 +173,6 @@
       case "RESET_SCORES": return "Reset all scores and tics";
       case "CLEAR_ROUND": return "Started a new event";
       case "SET_LOCKED": return p.locked ? "Locked the round" : "Unlocked the round";
-      case "REPLACE_ROUND": return "Imported a round backup";
       case "START_FROM_SAVED": return "Started a new round from a saved roster";
       case "CLEAR_AUDIT": return "Cleared change history";
       default: return "Round updated";
@@ -408,9 +407,6 @@
       }
       case "UNDO_LAST":
         changed = undoLastScoringChange(state, p);
-        break;
-      case "REPLACE_ROUND":
-        state = normalizeState(p.state);
         break;
       case "START_FROM_SAVED":
         state = normalizeState(p.state);

@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.23";
+  const APP_VERSION = "9.16.24";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -2479,10 +2479,8 @@
   });
   $("#acceptPlayerInviteForm").addEventListener("submit", acceptPlayerInvitation);
   $("#cancelPlayerInviteBtn").addEventListener("click", () => $("#playerInviteDialog").close());
-  $("#exportBtn").addEventListener("click", () => downloadBlob(JSON.stringify(state, null, 2), "application/json", `berry-creek-${state.date}.json`));
   $("#csvBtn").addEventListener("click", downloadCsv);
   $("#printBtn").addEventListener("click", () => { preparePrintReport(); window.print(); });
-  $("#importInput").addEventListener("change", async (event) => { try { const imported = R.normalizeState(JSON.parse(await event.target.files[0].text())); await dispatch({ type: "REPLACE_ROUND", payload: { state: imported } }); } catch (_) { showToast("That file is not a valid Berry Creek backup.", "error"); } event.target.value = ""; });
   const resetDialog = $("#confirmDialog");
   $("#resetAppBtn").addEventListener("click", () => { resetDialog.returnValue = "cancel"; resetDialog.showModal(); });
   resetDialog.addEventListener("close", async () => {
