@@ -2,6 +2,8 @@
 
 The installable home-screen icon and the in-app banner both use the original supplied golfing-character artwork without added text or other visual changes. The master banner image remains byte-for-byte identical to the supplied PNG; only proportional size copies are created for platform-required phone and browser icons. Versioned image URLs ensure browsers request the current artwork after an update; an iPhone that still shows an older installed icon may need the old home-screen shortcut removed and added again.
 
+The leaderboard includes a sortable THRU column between G and TOT. It reports the number of holes entered and displays F after all 18 scores are complete. The app footer contains a Help Documentation link on every view.
+
 A responsive, real-time golf scoring app configured from The Club at Berry Creek's current scorecard.
 
 When installed on an iPhone or Android Home Screen, the app is labeled `DH Game` beneath the icon.

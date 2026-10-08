@@ -231,7 +231,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .leaderboard-legend dt { color: var(--forest-2); font-weight: 900; }
 .leaderboard-legend dd { margin: 0; color: var(--muted); font-size: 0.82rem; line-height: 1.35; }
 .leaderboard th, .leaderboard td { border-right: 0; border-left: 0; }
-.leaderboard { width: 55rem; table-layout: fixed; }
+.leaderboard { width: 58rem; table-layout: fixed; }
 .leaderboard th:first-child, .leaderboard tbody tr:not(.bcc-tips-row) td:first-child { box-sizing: border-box; width: 10rem; min-width: 10rem; max-width: 10rem; }
 .leaderboard th:not(:first-child), .leaderboard tbody tr:not(.bcc-tips-row) td:not(:first-child) { box-sizing: border-box; width: 3rem; min-width: 3rem; max-width: 3rem; padding-right: 0.2rem; padding-left: 0.2rem; }
 .leaderboard .kp-count-column { width: 3rem; min-width: 3rem; max-width: 3rem; }
@@ -264,6 +264,7 @@ tbody tr:last-child td { border-bottom: 0; }
 
 footer { display: flex; justify-content: space-between; gap: 1rem; width: min(1180px, calc(100% - 2rem)); margin: 0 auto 2rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.78rem; }
 .text-button { border: 0; padding: 0; color: var(--forest); background: transparent; font-weight: 800; text-decoration: underline; }
+.help-documentation-link { white-space: nowrap; }
 dialog { max-width: 420px; border: 0; border-radius: 14px; padding: 1.25rem; color: var(--ink); background: var(--paper); box-shadow: var(--shadow); }
 dialog::backdrop { background: rgba(10, 24, 17, 0.55); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1rem; }
