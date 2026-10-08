@@ -29,7 +29,7 @@ h2 { margin-bottom: 0; font-family: Georgia, serif; font-size: clamp(1.35rem, 3v
 
 .app-header { background: var(--paper); color: var(--ink); display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.75rem max(1rem, calc((100% - 1180px) / 2)); border-top: 6px solid var(--forest); border-bottom: 1px solid var(--line); }
 .brand-lockup { display: flex; align-items: center; gap: 1rem; min-width: 0; }
-.club-logo { width: 118px; height: 82px; object-fit: contain; object-position: center; }
+.club-logo { width: 82px; height: 82px; object-fit: contain; object-position: center; }
 .eyebrow, .kicker { margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.72rem; font-weight: 800; }
 .eyebrow { color: var(--forest); }
 .kicker { color: var(--forest-2); }
@@ -448,7 +448,7 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
 @media (max-width: 480px) {
   .app-header { align-items: end; }
   .brand-lockup { gap: 0.55rem; }
-  .club-logo { width: 82px; height: 62px; }
+  .club-logo { width: 64px; height: 64px; }
   .app-header h1 { font-size: 1.45rem; }
   .app-header .button { padding-inline: 0.7rem; }
   .tabs { justify-content: stretch; }
