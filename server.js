@@ -15,7 +15,7 @@ const IndexUpdateSchedule = require("./index-update-schedule.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.16.22";
+const APP_VERSION = "9.16.23";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -237,28 +237,27 @@ function readinessPayload(req) {
   const authSecretConfigured = Boolean(process.env.AUTH_SECRET || process.env.SHARE_SECRET || process.env.ADMIN_PIN);
   const activeGroups = Round.GROUPS.filter((group) => state.players.some((player) => player.group === group));
   const competingPlayers = state.players.filter((player) => player.inGame).length;
-  const savedPlayerCount = playerDatabase.list().length;
   const playerAccounts = playerDatabase.exportAccounts();
   const linkedPlayerIds = new Set(adminDatabase.list().map((admin) => admin.playerId).filter(Boolean));
   const activePlayersWithoutLogin = state.players.filter((player) => player.isGuest
     ? !playerAccounts.some((account) => account.accountType === "guest" && account.roundId === state.roundId && account.activePlayerId === player.id)
     : !player.directoryId || (!linkedPlayerIds.has(player.directoryId) && !playerAccounts.some((account) => account.accountType === "player" && account.playerId === player.directoryId)));
-  const groupsWithoutScorekeeper = activeGroups.filter((group) => !state.settings.scorekeepers[group]);
-  const savedRoundCount = roundHistoryDatabase.list().length;
   const autoIndexHasProblem = ["outdated", "error"].includes(autoIndexUpdateStatus.status);
+  const pinCheck = { key: "pin", label: "Named admin access is configured", ok: adminCount > 0, severity: "warning", detail: adminCount ? `${adminCount} named admin${adminCount === 1 ? "" : "s"} can sign in with separate PINs.` : "Sign in with the setup PIN, then add at least one named admin." };
+  const httpsCheck = { key: "https", label: "The app is using a secure connection", ok: secureConnection, severity: "warning", detail: secureConnection ? "Usernames, PINs, and live scores are protected in transit." : "Use HTTPS before anyone signs in outside this device." };
   const checks = [
     { key: "storage", label: "Server storage is writable", ok: storageWritable, severity: "error", detail: storageWritable ? "Round and database files can be updated." : "The server cannot write to its data folder." },
     { key: "persistent", label: "Persistent storage is configured", ok: persistentStorageConfigured, severity: "error", detail: persistentStorageConfigured ? "A persistent data location is configured." : "Set DATA_DIR or PLAYERS_DB_FILE to a persistent disk before a live event." },
-    { key: "pin", label: "Named admin access is configured", ok: adminCount > 0, severity: "warning", detail: adminCount ? `${adminCount} named admin${adminCount === 1 ? "" : "s"} can sign in with separate PINs.` : "Sign in with the setup PIN, then add at least one named admin." },
-    { key: "auth-secret", label: "A private session secret is configured", ok: authSecretConfigured, severity: "warning", detail: authSecretConfigured ? "Signed user sessions remain private and stable across restarts." : "Set AUTH_SECRET to a long random value before live use." },
     { key: "backup", label: "A server snapshot is less than 24 hours old", ok: backupFresh, severity: "warning", detail: latest ? `Latest snapshot: ${latest.createdAt}.` : "Create a snapshot before the event begins." },
     { key: "roster", label: "The active round has competing players", ok: competingPlayers > 0, severity: "warning", detail: `${state.players.length} assigned; ${competingPlayers} in the game across ${activeGroups.length} group${activeGroups.length === 1 ? "" : "s"}.` },
-    { key: "logins", label: "Active players have login credentials", ok: activePlayersWithoutLogin.length === 0, severity: "warning", detail: activePlayersWithoutLogin.length ? `${activePlayersWithoutLogin.length} active player${activePlayersWithoutLogin.length === 1 ? " does" : "s do"} not have a usable login.` : `${state.players.length} active player login${state.players.length === 1 ? " is" : "s are"} ready.` },
-    { key: "scorekeepers", label: "Active groups have scorekeepers", ok: groupsWithoutScorekeeper.length === 0, severity: "warning", detail: groupsWithoutScorekeeper.length ? `Group${groupsWithoutScorekeeper.length === 1 ? "" : "s"} ${groupsWithoutScorekeeper.join(", ")} can select a scorekeeper on the Scoring page.` : "Every active group has one scorekeeper." },
-    { key: "database", label: "Admin, player, and round databases are available", ok: true, severity: "error", detail: `${adminCount} admin${adminCount === 1 ? "" : "s"}; ${savedPlayerCount} saved player${savedPlayerCount === 1 ? "" : "s"}; ${playerAccounts.length} player login${playerAccounts.length === 1 ? "" : "s"}; ${linkedPlayerIds.size} linked admin-player login${linkedPlayerIds.size === 1 ? "" : "s"}; ${savedRoundCount} saved round${savedRoundCount === 1 ? "" : "s"}.` },
-    { key: "auto-index", label: "Indexes update automatically at 6:30 AM Central", ok: AUTO_INDEX_UPDATE_ENABLED && !autoIndexHasProblem, severity: "warning", detail: autoIndexReadinessDetail() },
-    { key: "https", label: "The app is using a secure connection", ok: secureConnection, severity: "warning", detail: secureConnection ? "Usernames, PINs, and live scores are protected in transit." : "Use HTTPS before anyone signs in outside this device." }
+    { key: "logins", label: "Active players have login credentials", ok: activePlayersWithoutLogin.length === 0, severity: "warning", detail: activePlayersWithoutLogin.length ? `${activePlayersWithoutLogin.length} active player${activePlayersWithoutLogin.length === 1 ? " does" : "s do"} not have a usable login.` : `${state.players.length} active player login${state.players.length === 1 ? " is" : "s are"} ready.` }
   ];
+  if (!pinCheck.ok) checks.push(pinCheck);
+  if (!httpsCheck.ok) checks.push(httpsCheck);
+  const systemChecks = [
+    { key: "auth-secret", label: "Private session secret", ok: authSecretConfigured, severity: "warning", detail: authSecretConfigured ? "Configured. Signed user sessions remain private and stable across restarts." : "Set AUTH_SECRET to a long random value before live use." }
+  ];
+  const indexCheck = { key: "auto-index", label: "Automatic index update needs attention", ok: AUTO_INDEX_UPDATE_ENABLED && !autoIndexHasProblem, severity: "warning", detail: autoIndexReadinessDetail() };
   const failedErrors = checks.filter((check) => !check.ok && check.severity === "error").length;
   const failedWarnings = checks.filter((check) => !check.ok && check.severity === "warning").length;
   return {
@@ -266,6 +265,8 @@ function readinessPayload(req) {
     status: failedErrors ? "not-ready" : failedWarnings ? "attention" : "ready",
     checkedAt: new Date().toISOString(),
     checks,
+    systemChecks,
+    indexCheck,
     latestSnapshot: latest,
     activeRound: { roundName: state.roundName, date: state.date, playerCount: state.players.length, competingPlayers, groupCount: activeGroups.length, locked: Boolean(state.settings.locked) }
   };

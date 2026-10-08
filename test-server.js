@@ -52,7 +52,7 @@ async function createPlayerLogin(playerId, username, pin) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.16.22");
+  assert.equal(config.appVersion, "9.16.23");
   assert.equal(config.adminSetupRequired, true);
   const emptyPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
   assert.equal(emptyPublicLeaderboard.source, "empty");
@@ -172,8 +172,13 @@ async function createPlayerLogin(playerId, username, pin) {
   const readiness = await (await fetch(`${base}/api/readiness`, { headers: { "X-Admin-Pin": adminPin } })).json();
   assert.equal(Array.isArray(readiness.checks), true);
   assert.equal(readiness.checks.some((check) => check.key === "backup" && check.ok), true);
-  assert.equal(readiness.checks.some((check) => check.key === "pin" && check.ok), true);
-  assert.equal(readiness.checks.some((check) => check.key === "auto-index"), true);
+  assert.equal(readiness.checks.some((check) => check.key === "pin"), false);
+  assert.equal(readiness.checks.some((check) => check.key === "https"), false);
+  assert.equal(readiness.checks.some((check) => check.key === "scorekeepers"), false);
+  assert.equal(readiness.checks.some((check) => check.key === "database"), false);
+  assert.equal(readiness.checks.some((check) => check.key === "auto-index"), false);
+  assert.equal(readiness.systemChecks.some((check) => check.key === "auth-secret" && check.ok), true);
+  assert.equal(readiness.indexCheck.key, "auto-index");
   const restoredBackup = await fetch(`${base}/api/system-backup/restore`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ backup: completeBackup }) });
   assert.equal(restoredBackup.status, 200);
   assert.equal((await restoredBackup.json()).savedPlayerCount, 1);

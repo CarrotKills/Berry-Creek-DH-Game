@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.22";
+  const APP_VERSION = "9.16.23";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -336,12 +336,18 @@
   function renderIndexUpdateState() {
     const button = $("#updateIndexesBtn");
     const status = $("#indexUpdateStatus");
+    const readinessWarning = $("#indexReadinessWarning");
     if (!button || !status) return;
     button.textContent = indexUpdateInProgress ? "Updating…" : "Update Indexes";
     button.disabled = indexUpdateInProgress || !adminUnlocked || connectionMode !== "live" || isLocked();
     status.textContent = indexUpdateMessage;
     status.hidden = !indexUpdateMessage;
     status.classList.toggle("is-error", indexUpdateError);
+    if (readinessWarning) {
+      const check = readinessData?.indexCheck;
+      readinessWarning.textContent = check && !check.ok ? check.detail : "";
+      readinessWarning.hidden = !adminUnlocked || !check || check.ok;
+    }
   }
 
   function indexUpdateSummary(summary) {
@@ -443,6 +449,7 @@
     } finally {
       readinessLoading = false;
       renderReadiness();
+      renderIndexUpdateState();
     }
   }
 
@@ -1537,7 +1544,9 @@
         : "No scoring activity";
       const connected = Number(groupPresence[group] || 0);
       const position = !players.length ? "No players" : completedHoles === 18 ? "Complete" : `Hole ${currentIndex + 1} · ${missing} missing`;
-      return `<article class="group-progress-card ${completedHoles === 18 ? "is-complete" : ""}"><div class="group-progress-heading"><strong>Group ${group}</strong><span class="presence-label ${connected ? "is-connected" : ""}"><span class="status-dot"></span>${connected ? `${connected} connected` : "Not connected"}</span></div><div class="group-progress-meta"><span>${players.length}/5 players</span><span>${position}</span></div><div class="progress-track" aria-label="${completedHoles} of 18 holes complete"><span style="width:${(completedHoles / 18) * 100}%"></span></div><small>${completedHoles}/18 holes · ${esc(lastUpdate)}</small></article>`;
+      const scorekeeper = players.find((player) => player.id === state.settings.scorekeepers[group]);
+      const scorekeeperText = !players.length ? "No scorekeeper needed" : scorekeeper ? `Scorekeeper: ${nameOf(scorekeeper, state.players.indexOf(scorekeeper))}` : "Scorekeeper: Not assigned";
+      return `<article class="group-progress-card ${completedHoles === 18 ? "is-complete" : ""}"><div class="group-progress-heading"><strong>Group ${group}</strong><span class="presence-label ${connected ? "is-connected" : ""}"><span class="status-dot"></span>${connected ? `${connected} connected` : "Not connected"}</span></div><div class="group-scorekeeper-status ${players.length && !scorekeeper ? "is-unassigned" : ""}">${esc(scorekeeperText)}</div><div class="group-progress-meta"><span>${players.length}/5 players</span><span>${position}</span></div><div class="progress-track" aria-label="${completedHoles} of 18 holes complete"><span style="width:${(completedHoles / 18) * 100}%"></span></div><small>${completedHoles}/18 holes · ${esc(lastUpdate)}</small></article>`;
     }).join("");
   }
 
@@ -1610,15 +1619,20 @@
   function renderReadiness() {
     const status = $("#readinessStatus");
     const list = $("#readinessList");
+    const systemDetails = $("#systemDetails");
+    const systemList = $("#systemChecksList");
     if (!status || !list) return;
     if (!adminUnlocked) {
       status.textContent = "Sign in as an admin to run the readiness checks.";
       list.innerHTML = "";
+      if (systemDetails) systemDetails.hidden = true;
+      if (systemList) systemList.innerHTML = "";
       return;
     }
     if (connectionMode !== "live") {
       status.textContent = "Connect to the server to run readiness checks.";
       list.innerHTML = "";
+      if (systemDetails) systemDetails.hidden = true;
       return;
     }
     if (readinessLoading) {
@@ -1628,18 +1642,28 @@
     if (readinessData?.error) {
       status.textContent = readinessData.error;
       list.innerHTML = "";
+      if (systemDetails) systemDetails.hidden = true;
       return;
     }
     const checks = Array.isArray(readinessData?.checks) ? readinessData.checks : [];
     if (!checks.length) {
       status.textContent = "Select Run checks to verify the server and event setup.";
       list.innerHTML = "";
+      if (systemDetails) systemDetails.hidden = true;
+      if (systemList) systemList.innerHTML = "";
       return;
     }
     const labels = { ready: "Ready for play", attention: "Usable, with items to review", "not-ready": "Not ready for live scoring" };
     const checkedAt = new Date(readinessData.checkedAt).toLocaleString();
     status.textContent = `${labels[readinessData.status] || "Checks complete"} · Checked ${checkedAt}`;
     list.innerHTML = checks.map((check) => {
+      const stateClass = check.ok ? "is-ready" : check.severity === "warning" ? "is-warning" : "is-error";
+      const icon = check.ok ? "✓" : "!";
+      return `<li class="${stateClass}"><span class="readiness-icon" aria-hidden="true">${icon}</span><div><strong>${esc(check.label)}</strong><small>${esc(check.detail)}</small></div></li>`;
+    }).join("");
+    const systemChecks = Array.isArray(readinessData?.systemChecks) ? readinessData.systemChecks : [];
+    if (systemDetails) systemDetails.hidden = systemChecks.length === 0;
+    if (systemList) systemList.innerHTML = systemChecks.map((check) => {
       const stateClass = check.ok ? "is-ready" : check.severity === "warning" ? "is-warning" : "is-error";
       const icon = check.ok ? "✓" : "!";
       return `<li class="${stateClass}"><span class="readiness-icon" aria-hidden="true">${icon}</span><div><strong>${esc(check.label)}</strong><small>${esc(check.detail)}</small></div></li>`;

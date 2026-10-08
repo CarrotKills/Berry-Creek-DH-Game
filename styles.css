@@ -324,6 +324,8 @@ dialog::backdrop { background: rgba(10, 24, 17, 0.55); }
 .presence-label { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--muted); font-size: 0.7rem; font-weight: 800; }
 .presence-label.is-connected { color: #176c31; }
 .group-progress-meta { margin-top: 0.65rem; color: var(--muted); font-size: 0.76rem; font-weight: 700; }
+.group-scorekeeper-status { margin-top: 0.55rem; padding: 0.4rem 0.5rem; border-radius: 7px; color: #176c31; background: #e2f5e6; font-size: 0.75rem; font-weight: 850; }
+.group-scorekeeper-status.is-unassigned { color: #7a4a00; background: #fff1cf; }
 .progress-track { height: 7px; margin: 0.55rem 0; overflow: hidden; border-radius: 999px; background: var(--line); }
 .progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--forest); }
 .group-progress-card small { color: var(--muted); font-size: 0.7rem; }
@@ -366,6 +368,11 @@ dialog::backdrop { background: rgba(10, 24, 17, 0.55); }
 .readiness-list strong, .readiness-list small { display: block; }
 .readiness-list strong { color: var(--ink); font-size: 0.88rem; }
 .readiness-list small { margin-top: 0.2rem; color: var(--muted); line-height: 1.35; }
+.system-details { margin-top: 0.85rem; border-top: 1px solid var(--line); }
+.system-details[hidden] { display: none; }
+.system-details > summary { padding-top: 0.8rem; color: var(--forest); cursor: pointer; font-size: 0.84rem; font-weight: 850; }
+.readiness-list-compact { grid-template-columns: minmax(0, 1fr); margin-top: 0.6rem; }
+.readiness-list-compact li { box-shadow: none; }
 .admin-setup-form { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(150px, 0.7fr) auto; align-items: end; gap: 0.65rem; margin-top: 0.8rem; padding: 0.8rem; border: 1px solid var(--line); border-radius: 10px; background: var(--gold-soft); }
 .admin-invite-controls { margin-top: 0.8rem; }
 .admin-invite-controls > .button { width: auto; }

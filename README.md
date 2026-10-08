@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Event Readiness now focuses on storage, persistence, roster, player access, and current snapshot protection. Completed one-time admin and HTTPS checks are hidden; unresolved versions still appear. The private session-secret check is available inside collapsed System Details, automatic-index warnings appear beside Update Indexes only when attention is required, and scorekeeper assignments are shown on the Live Event Status group cards.
+
 On phones, the Scoring page now keeps Previous, Hole, and Next controls in a safe-area-aware dock at the bottom of the screen. The top banner and navigation stay visible and collapse to a compact DH Game header after scrolling. Score saves pulse the player card with a visible status, Sandy/KP/scorekeeper changes show a short confirmation, conflicting edits identify whether the server score was kept or replaced, and touch controls visibly depress when tapped.
 
 The installable home-screen icon and the in-app banner both use the original supplied golfing-character artwork without added text or other visual changes. The master banner image remains byte-for-byte identical to the supplied PNG; only proportional size copies are created for platform-required phone and browser icons. Versioned image URLs ensure browsers request the current artwork after an update; an iPhone that still shows an older installed icon may need the old home-screen shortcut removed and added again.
