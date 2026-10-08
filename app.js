@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.21";
+  const APP_VERSION = "9.16.22";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -69,12 +69,15 @@
   const savedPlayerGroupSelections = new Map();
   const scoreSyncStatus = new Map();
   const scoreSyncTimers = new Map();
+  const touchFeedback = new Map();
+  const touchFeedbackTimers = new Map();
   let groupPresence = {};
   let readinessData = null;
   let readinessLoading = false;
   let leaderboardWakeLock = null;
   let leaderboardWakeLockRequesting = false;
   let autoAdvanceTimer;
+  let headerLayoutFrame;
   let leaderboardSort = { key: "standing", direction: "asc" };
   let preferences = loadPreferences();
 
@@ -203,6 +206,35 @@
         renderGroupScoring();
       }, 2600));
     }
+  }
+
+  function setTouchFeedback(playerId, message, kind = "success") {
+    clearTimeout(touchFeedbackTimers.get(playerId));
+    touchFeedback.set(playerId, { message, kind });
+    if (navigator.vibrate && kind === "success") navigator.vibrate(12);
+    renderGroupScoring();
+    touchFeedbackTimers.set(playerId, setTimeout(() => {
+      touchFeedback.delete(playerId);
+      touchFeedbackTimers.delete(playerId);
+      renderGroupScoring();
+    }, 1800));
+  }
+
+  async function dispatchWithTouchFeedback(action, playerId, successMessage) {
+    const accepted = await dispatch(action);
+    setTouchFeedback(playerId, accepted ? successMessage : "Change not saved", accepted ? "success" : "error");
+    return accepted;
+  }
+
+  function scheduleHeaderLayout() {
+    if (headerLayoutFrame) return;
+    headerLayoutFrame = requestAnimationFrame(() => {
+      headerLayoutFrame = 0;
+      const appHeader = $(".app-header");
+      if (!appHeader) return;
+      document.body.classList.toggle("header-compact", window.innerWidth <= 760 && window.scrollY > 72);
+      document.documentElement.style.setProperty("--app-header-height", `${Math.ceil(appHeader.getBoundingClientRect().height)}px`);
+    });
   }
 
   function showToast(message, kind = "info") {
@@ -475,12 +507,14 @@
     const overwrite = window.confirm(`${playerName}'s Hole ${Number(conflict.holeIndex) + 1} score is now ${scoreConflictLabel(currentScore)} from another device. Replace it with ${scoreConflictLabel(attemptedScore)}?\n\nChoose Cancel to keep the score already on the server.`);
     if (!overwrite) {
       showToast(`Kept ${playerName}'s server score of ${scoreConflictLabel(currentScore)}.`, "success");
+      if (player?.id) setTouchFeedback(player.id, "Server score kept", "warning");
       return true;
     }
     const forcedAction = { ...action, payload: { ...(action.payload || {}), expectedScore: currentScore, force: true } };
     await postAction(forcedAction, admin);
     await refreshState();
     showToast(`${playerName}'s Hole ${Number(conflict.holeIndex) + 1} score was replaced.`, "success");
+    if (player?.id) setTouchFeedback(player.id, "Score replaced", "success");
     return true;
   }
 
@@ -913,9 +947,10 @@
     else if (isSelectedGroupScorekeeper()) notice.textContent = `You are the Group ${selectedGroup} scorekeeper. Scoring controls are active.`;
     else if (selectedScorekeeper) notice.textContent = `${nameOf(selectedScorekeeper, 0)} is the Group ${selectedGroup} scorekeeper. You may browse the scorecard.`;
     else notice.textContent = `Group ${selectedGroup} has no scorekeeper. Select SK beside a group member to assign one.`;
-    const holes = $("#holeSelect");
-    if (!holes.options.length) holes.innerHTML = E.COURSE.holes.map((hole) => `<option value="${hole.number}">Hole ${hole.number}</option>`).join("");
-    holes.value = selectedHole;
+    [$("#holeSelect"), $("#mobileHoleSelect")].forEach((holes) => {
+      if (!holes.options.length) holes.innerHTML = E.COURSE.holes.map((hole) => `<option value="${hole.number}">Hole ${hole.number}</option>`).join("");
+      holes.value = selectedHole;
+    });
   }
 
   function renderHoleBanner(players) {
@@ -1052,6 +1087,8 @@
     $("#roundLockedNotice").hidden = !isLocked();
     const list = $("#groupScoreList");
     const holeComplete = players.length > 0 && players.every((player) => player.scores[selectedHole - 1] !== "");
+    const enteredScores = players.filter((player) => player.scores[selectedHole - 1] !== "").length;
+    $("#mobileScoringStatus").textContent = `Group ${selectedGroup} · Hole ${selectedHole} · ${enteredScores}/${players.length} scores`;
     [$("#advanceHoleBtn"), $("#advanceHoleBtnBottom")].forEach((advanceButton) => {
       advanceButton.hidden = !holeComplete || selectedHole >= 18;
       advanceButton.textContent = selectedHole < 18 ? `Continue to Hole ${selectedHole + 1}` : "Round complete";
@@ -1078,14 +1115,17 @@
       const kpDisabled = disabled || player.sandies[index] ? "disabled" : "";
       const syncState = scoreSyncStatus.get(scoreSyncKey(player.id, index));
       const syncLabel = { saving: "Saving…", pending: "Waiting to sync", synced: "Saved", error: "Sync problem" }[syncState] || "";
+      const touch = touchFeedback.get(player.id);
+      const feedbackKind = touch?.kind || (syncState === "synced" ? "success" : syncState === "error" ? "error" : syncState === "saving" || syncState === "pending" ? "pending" : "");
       const scorekeeperId = state.settings.scorekeepers[selectedGroup] || "";
       const signedInPlayer = currentRoundPlayer();
       const canChangeScorekeeper = adminUnlocked || (signedInPlayer?.group === selectedGroup && (!scorekeeperId || scorekeeperId === signedInPlayer.id));
-      return `<article class="group-score-card ${competitive ? "" : "is-score-only"}" data-player-id="${player.id}">
+      return `<article class="group-score-card ${competitive ? "" : "is-score-only"} ${feedbackKind ? `touch-feedback--${feedbackKind}` : ""}" data-player-id="${player.id}">
         <div class="score-player"><div class="score-player-heading"><label class="scorekeeper-toggle" title="Group scorekeeper"><input data-kind="scorekeeper" type="checkbox" ${scorekeeperId === player.id ? "checked" : ""} ${canChangeScorekeeper ? "" : "disabled"}>SK</label><strong>${playerNameHtml(player, state.players.indexOf(player))}</strong></div><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${skinPops > 0 ? `gets ${skinPops === 0.5 ? "1/2" : skinPops}` : skinPops < 0 ? `gives ${Math.abs(skinPops) === 0.5 ? "1/2" : Math.abs(skinPops)}` : "no stroke"}</span>${competitive ? "" : '<span class="score-only-note">Not in the game · score only</span>'}</div>
         <div class="score-entry-wrap"><div class="score-stepper"><button type="button" data-delta="-1" ${disabled} aria-label="Decrease score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" ${disabled} aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" ${disabled} aria-label="Increase score">+</button></div>${syncLabel ? `<span class="score-sync score-sync--${syncState}" role="status">${syncLabel}</span>` : ""}</div>
         <div class="net-box"><span>Match net</span><strong>${net ?? "—"}</strong></div>
         <div class="card-tics">${achievement ? `<span class="auto-tic">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle" title="${hasKp ? "Remove KP before marking a Sandy" : "Mark Sandy"}"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${sandyDisabled}>Sandy</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle" title="${player.sandies[index] ? "Remove Sandy before marking KP" : "Mark KP"}"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${kpDisabled}>KP</label>` : ""}${kpNote}</div>
+        ${touch ? `<span class="touch-confirmation touch-confirmation--${touch.kind}" role="status">${touch.kind === "success" ? "✓" : touch.kind === "warning" ? "!" : "×"} ${esc(touch.message)}</span>` : ""}
       </article>`;
     }).join("");
     list.querySelectorAll(".group-score-card").forEach((card) => {
@@ -1093,9 +1133,9 @@
       const input = card.querySelector('input[type="number"]');
       input?.addEventListener("change", (event) => setScore(player.id, event.target.value));
       card.querySelectorAll("[data-delta]").forEach((button) => button.addEventListener("click", () => setScore(player.id, E.steppedScore(player.scores[selectedHole - 1], E.COURSE.holes[selectedHole - 1].par, Number(button.dataset.delta)))));
-      card.querySelector('[data-kind="sandy"]')?.addEventListener("change", (event) => dispatch({ type: "SET_SANDY", payload: { playerId: player.id, holeIndex: selectedHole - 1, value: event.target.checked } }));
-      card.querySelector('[data-kind="kp"]')?.addEventListener("change", (event) => dispatch({ type: "SET_KP", payload: { hole: selectedHole, playerId: player.id, value: event.target.checked } }));
-      card.querySelector('[data-kind="scorekeeper"]')?.addEventListener("change", (event) => dispatch({ type: "SET_SCOREKEEPER", payload: { group: selectedGroup, playerId: event.target.checked ? player.id : "" } }));
+      card.querySelector('[data-kind="sandy"]')?.addEventListener("change", (event) => dispatchWithTouchFeedback({ type: "SET_SANDY", payload: { playerId: player.id, holeIndex: selectedHole - 1, value: event.target.checked } }, player.id, event.target.checked ? "Sandy marked" : "Sandy removed"));
+      card.querySelector('[data-kind="kp"]')?.addEventListener("change", (event) => dispatchWithTouchFeedback({ type: "SET_KP", payload: { hole: selectedHole, playerId: player.id, value: event.target.checked } }, player.id, event.target.checked ? "KP marked" : "KP removed"));
+      card.querySelector('[data-kind="scorekeeper"]')?.addEventListener("change", (event) => dispatchWithTouchFeedback({ type: "SET_SCOREKEEPER", payload: { group: selectedGroup, playerId: event.target.checked ? player.id : "" } }, player.id, event.target.checked ? "Scorekeeper assigned" : "Scorekeeper cleared"));
     });
     $("#noGroupPlayers").hidden = players.length > 0;
     list.hidden = players.length === 0;
@@ -1940,6 +1980,9 @@
       view.classList.toggle("active", active);
       view.hidden = !active;
     });
+    document.body.classList.toggle("score-view-active", name === "score");
+    document.body.dataset.activeView = name;
+    scheduleHeaderLayout();
     updateLeaderboardWakeLock();
   }
 
@@ -2350,6 +2393,9 @@
   $("#holeSelect").addEventListener("change", (event) => moveToHole(Number(event.target.value)));
   $("#prevHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 1 ? 18 : selectedHole - 1, { skipMissingCheck: true }));
   $("#nextHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 18 ? 1 : selectedHole + 1));
+  $("#mobileHoleSelect").addEventListener("change", (event) => moveToHole(Number(event.target.value)));
+  $("#mobilePrevHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 1 ? 18 : selectedHole - 1, { skipMissingCheck: true }));
+  $("#mobileNextHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 18 ? 1 : selectedHole + 1));
   $("#advanceHoleBtn").addEventListener("click", () => moveToHole(Math.min(18, selectedHole + 1), { skipMissingCheck: true }));
   $("#advanceHoleBtnBottom").addEventListener("click", () => moveToHole(Math.min(18, selectedHole + 1), { skipMissingCheck: true }));
   $("#toggleScorecardBtn").addEventListener("click", () => { scorecardOpen = !scorecardOpen; updateScorecardVisibility(); });
@@ -2451,9 +2497,14 @@
   document.addEventListener("visibilitychange", updateLeaderboardWakeLock);
   window.addEventListener("orientationchange", updateLeaderboardWakeLock);
   window.addEventListener("resize", updateLeaderboardWakeLock);
+  window.addEventListener("scroll", scheduleHeaderLayout, { passive: true });
+  window.addEventListener("resize", scheduleHeaderLayout);
   window.addEventListener("pagehide", releaseLeaderboardWakeLock);
 
+  if (typeof ResizeObserver === "function") new ResizeObserver(scheduleHeaderLayout).observe($(".app-header"));
+
   document.body.dataset.display = preferences.display;
+  scheduleHeaderLayout();
   $("#appVersion").textContent = `Version ${APP_VERSION}`;
   $("#footerVersionBtn").textContent = `App v${APP_VERSION}`;
   render();
