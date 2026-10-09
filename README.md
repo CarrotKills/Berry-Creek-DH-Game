@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Event Readiness now includes a persistent Last index update indicator for both automatic and manual index updates. It reports the completion time in Central Time, the administrator or automatic schedule responsible, the sheet roster date, how many indexes changed, and how many were already current. The player-login readiness warning also lists every assigned player missing usable credentials by name.
+
 Active Round export/import has been removed from Settings and from the round action engine. Complete Backup is the supported whole-app recovery method, while Saved Rounds Archive preserves completed events for reference, download, or roster reuse.
 
 Event Readiness now focuses on storage, persistence, roster, player access, and current snapshot protection. Completed one-time admin and HTTPS checks are hidden; unresolved versions still appear. The private session-secret check is available inside collapsed System Details, automatic-index warnings appear beside Update Indexes only when attention is required, and scorekeeper assignments are shown on the Live Event Status group cards.

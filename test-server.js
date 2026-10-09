@@ -52,7 +52,7 @@ async function createPlayerLogin(playerId, username, pin) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.16.24");
+  assert.equal(config.appVersion, "9.16.25");
   assert.equal(config.adminSetupRequired, true);
   const emptyPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
   assert.equal(emptyPublicLeaderboard.source, "empty");
@@ -177,6 +177,7 @@ async function createPlayerLogin(playerId, username, pin) {
   assert.equal(readiness.checks.some((check) => check.key === "scorekeepers"), false);
   assert.equal(readiness.checks.some((check) => check.key === "database"), false);
   assert.equal(readiness.checks.some((check) => check.key === "auto-index"), false);
+  assert.equal(readiness.checks.some((check) => check.key === "index-history" && !check.ok), true);
   assert.equal(readiness.systemChecks.some((check) => check.key === "auth-secret" && check.ok), true);
   assert.equal(readiness.indexCheck.key, "auto-index");
   const restoredBackup = await fetch(`${base}/api/system-backup/restore`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ backup: completeBackup }) });
@@ -211,6 +212,12 @@ async function createPlayerLogin(playerId, username, pin) {
   const uniqueActiveState = await (await fetch(`${base}/api/state`)).json();
   assert.equal(uniqueActiveState.players.length, 2);
   assert.equal(uniqueActiveState.players.some((player) => player.id === "live-a-duplicate"), false);
+  await action("ADD_PLAYER", { player: { id: "no-login-player", name: "No Login Player", group: "E", teeKey: "creek", ghin: 20 } });
+  const missingLoginReadiness = await (await fetch(`${base}/api/readiness`, { headers: { "X-Admin-Pin": adminPin } })).json();
+  const missingLoginCheck = missingLoginReadiness.checks.find((check) => check.key === "logins");
+  assert.equal(missingLoginCheck.ok, false);
+  assert.match(missingLoginCheck.detail, /1 active player does not have a usable login: No Login Player\./);
+  await action("REMOVE_PLAYER", { playerId: "no-login-player" });
   await action("ADD_PLAYER", { player: { id: "guest-auto-1", name: "Guest Golfer", group: "C", teeKey: "member", ghin: 14.2, isGuest: true } });
   const guestAccountResponse = await fetch(`${base}/api/guest-accounts`, { method: "POST", headers: { "X-Admin-Pin": adminPin, "Content-Type": "application/json" }, body: JSON.stringify({ activePlayerId: "guest-auto-1", username: "ignored.username", pin: "9999" }) });
   assert.equal(guestAccountResponse.status, 201);

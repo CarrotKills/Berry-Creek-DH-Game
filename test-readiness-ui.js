@@ -22,6 +22,11 @@ assert.match(server, /if \(!pinCheck\.ok\) checks\.push\(pinCheck\)/);
 assert.match(server, /if \(!httpsCheck\.ok\) checks\.push\(httpsCheck\)/);
 assert.match(server, /const systemChecks = \[/);
 assert.match(server, /const indexCheck = \{/);
+assert.match(server, /key: "index-history"/);
+assert.match(server, /\$\{Number\(lastUpdate\.updated\)\} updated; \$\{Number\(lastUpdate\.unchanged\)\} unchanged/);
+assert.match(server, /performedBy: adminIdentity\.name/);
+assert.match(server, /playersWithoutLoginNames\.join\(", "\)/);
+assert.match(app, /await loadReadiness\(\);/);
 assert.doesNotMatch(server, /checksWithoutScorekeeper/);
 assert.doesNotMatch(server, /key: "database"/);
 

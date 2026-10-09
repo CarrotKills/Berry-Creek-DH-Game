@@ -15,7 +15,7 @@ const IndexUpdateSchedule = require("./index-update-schedule.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.16.24";
+const APP_VERSION = "9.16.25";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -242,6 +242,7 @@ function readinessPayload(req) {
   const activePlayersWithoutLogin = state.players.filter((player) => player.isGuest
     ? !playerAccounts.some((account) => account.accountType === "guest" && account.roundId === state.roundId && account.activePlayerId === player.id)
     : !player.directoryId || (!linkedPlayerIds.has(player.directoryId) && !playerAccounts.some((account) => account.accountType === "player" && account.playerId === player.directoryId)));
+  const playersWithoutLoginNames = activePlayersWithoutLogin.map((player, index) => player.name?.trim() || `Player ${index + 1}`);
   const autoIndexHasProblem = ["outdated", "error"].includes(autoIndexUpdateStatus.status);
   const pinCheck = { key: "pin", label: "Named admin access is configured", ok: adminCount > 0, severity: "warning", detail: adminCount ? `${adminCount} named admin${adminCount === 1 ? "" : "s"} can sign in with separate PINs.` : "Sign in with the setup PIN, then add at least one named admin." };
   const httpsCheck = { key: "https", label: "The app is using a secure connection", ok: secureConnection, severity: "warning", detail: secureConnection ? "Usernames, PINs, and live scores are protected in transit." : "Use HTTPS before anyone signs in outside this device." };
@@ -250,7 +251,8 @@ function readinessPayload(req) {
     { key: "persistent", label: "Persistent storage is configured", ok: persistentStorageConfigured, severity: "error", detail: persistentStorageConfigured ? "A persistent data location is configured." : "Set DATA_DIR or PLAYERS_DB_FILE to a persistent disk before a live event." },
     { key: "backup", label: "A server snapshot is less than 24 hours old", ok: backupFresh, severity: "warning", detail: latest ? `Latest snapshot: ${latest.createdAt}.` : "Create a snapshot before the event begins." },
     { key: "roster", label: "The active round has competing players", ok: competingPlayers > 0, severity: "warning", detail: `${state.players.length} assigned; ${competingPlayers} in the game across ${activeGroups.length} group${activeGroups.length === 1 ? "" : "s"}.` },
-    { key: "logins", label: "Active players have login credentials", ok: activePlayersWithoutLogin.length === 0, severity: "warning", detail: activePlayersWithoutLogin.length ? `${activePlayersWithoutLogin.length} active player${activePlayersWithoutLogin.length === 1 ? " does" : "s do"} not have a usable login.` : `${state.players.length} active player login${state.players.length === 1 ? " is" : "s are"} ready.` }
+    { key: "logins", label: "Active players have login credentials", ok: activePlayersWithoutLogin.length === 0, severity: "warning", detail: activePlayersWithoutLogin.length ? `${activePlayersWithoutLogin.length} active player${activePlayersWithoutLogin.length === 1 ? " does" : "s do"} not have a usable login: ${playersWithoutLoginNames.join(", ")}.` : `${state.players.length} active player login${state.players.length === 1 ? " is" : "s are"} ready.` },
+    indexUpdateHistoryCheck()
   ];
   if (!pinCheck.ok) checks.push(pinCheck);
   if (!httpsCheck.ok) checks.push(httpsCheck);
@@ -331,6 +333,64 @@ function autoIndexReadinessDetail() {
   return `${prefix} ${autoIndexUpdateStatus.message || `Last checked ${autoIndexUpdateStatus.lastAttemptAt}.`}`;
 }
 
+function lastIndexUpdateRecord() {
+  if (autoIndexUpdateStatus.lastUpdate?.completedAt) return autoIndexUpdateStatus.lastUpdate;
+  if (!autoIndexUpdateStatus.lastSuccessAt) return null;
+  return {
+    completedAt: autoIndexUpdateStatus.lastSuccessAt,
+    source: "automatic",
+    performedBy: "Automatic schedule",
+    sheetDate: autoIndexUpdateStatus.sheetDate || null,
+    updated: Number.isFinite(Number(autoIndexUpdateStatus.updated)) ? Number(autoIndexUpdateStatus.updated) : null,
+    unchanged: Number.isFinite(Number(autoIndexUpdateStatus.unchanged)) ? Number(autoIndexUpdateStatus.unchanged) : null
+  };
+}
+
+function formatCentralDateTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value || "Unknown time");
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: IndexUpdateSchedule.CENTRAL_TIME_ZONE,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short"
+  }).format(date);
+}
+
+function indexUpdateHistoryCheck() {
+  const lastUpdate = lastIndexUpdateRecord();
+  const currentProblem = !AUTO_INDEX_UPDATE_ENABLED || ["outdated", "error"].includes(autoIndexUpdateStatus.status);
+  if (!lastUpdate) {
+    return {
+      key: "index-history",
+      label: "Last index update",
+      ok: false,
+      severity: "warning",
+      detail: "No completed index update has been recorded. Use Update Indexes or wait for the daily 6:30 AM Central update."
+    };
+  }
+  const countsKnown = lastUpdate.updated !== null && lastUpdate.updated !== undefined && lastUpdate.unchanged !== null && lastUpdate.unchanged !== undefined;
+  const counts = countsKnown && Number.isFinite(Number(lastUpdate.updated)) && Number.isFinite(Number(lastUpdate.unchanged))
+    ? `${Number(lastUpdate.updated)} updated; ${Number(lastUpdate.unchanged)} unchanged.`
+    : "Updated and unchanged counts were not recorded for this earlier update.";
+  const source = lastUpdate.performedBy || (lastUpdate.source === "manual" ? "Manual update" : "Automatic schedule");
+  const roster = lastUpdate.sheetDate ? ` Roster date: ${lastUpdate.sheetDate}.` : "";
+  const warning = currentProblem && autoIndexUpdateStatus.message ? ` Current warning: ${autoIndexUpdateStatus.message}` : "";
+  return {
+    key: "index-history",
+    label: "Last index update",
+    ok: !currentProblem,
+    severity: "warning",
+    detail: `${formatCentralDateTime(lastUpdate.completedAt)} · ${source}. ${counts}${roster}${warning}`,
+    completedAt: lastUpdate.completedAt,
+    updated: lastUpdate.updated,
+    unchanged: lastUpdate.unchanged
+  };
+}
+
 async function runAutomaticIndexUpdate(now = new Date()) {
   if (indexUpdateInProgress || !IndexUpdateSchedule.shouldRun(autoIndexUpdateStatus, now, AUTO_INDEX_UPDATE_ENABLED)) return;
   const clock = IndexUpdateSchedule.centralClock(now);
@@ -350,6 +410,8 @@ async function runAutomaticIndexUpdate(now = new Date()) {
     const updateActiveRound = !state.settings.locked;
     const { activePlayersUpdated } = applyIndexUpdatePlan(plan, updateActiveRound);
     const updated = plan.updates.length;
+    const unchanged = plan.unchanged.length;
+    const completedAt = new Date().toISOString();
     const lockNote = state.settings.locked && updated ? " The locked active round was left unchanged." : "";
     const message = updated
       ? `Automatic index update completed: ${updated} saved player${updated === 1 ? "" : "s"} updated from the ${parsed.updateDate} roster.${lockNote}`
@@ -357,13 +419,24 @@ async function runAutomaticIndexUpdate(now = new Date()) {
     autoIndexUpdateStatus = {
       ...autoIndexUpdateStatus,
       lastCompletedDate: clock.date,
-      lastSuccessAt: new Date().toISOString(),
+      lastSuccessAt: completedAt,
       status: "success",
       sheetDate: parsed.updateDate,
       updated,
+      unchanged,
       activePlayersUpdated,
       unmatched: plan.unmatched.length,
       ambiguous: plan.ambiguous.length,
+      source: "automatic",
+      lastUpdate: {
+        completedAt,
+        source: "automatic",
+        performedBy: "Automatic schedule",
+        sheetDate: parsed.updateDate,
+        updated,
+        unchanged,
+        activePlayersUpdated
+      },
       message
     };
     writeAutoIndexUpdateStatus(autoIndexUpdateStatus);
@@ -876,6 +949,33 @@ const server = http.createServer(async (req, res) => {
             });
           }
           const { activePlayersUpdated } = applyIndexUpdatePlan(plan);
+          const completedAt = new Date().toISOString();
+          const statusMessage = `Manual index update completed by ${adminIdentity.name}: ${plan.updates.length} updated and ${plan.unchanged.length} unchanged from the ${parsed.updateDate || "undated"} roster.`;
+          autoIndexUpdateStatus = {
+            ...autoIndexUpdateStatus,
+            lastAttemptAt: completedAt,
+            lastCompletedDate: today,
+            lastSuccessAt: completedAt,
+            status: outdated ? "outdated" : "success",
+            sheetDate: parsed.updateDate || null,
+            updated: plan.updates.length,
+            unchanged: plan.unchanged.length,
+            activePlayersUpdated,
+            unmatched: plan.unmatched.length,
+            ambiguous: plan.ambiguous.length,
+            source: "manual",
+            lastUpdate: {
+              completedAt,
+              source: "manual",
+              performedBy: adminIdentity.name,
+              sheetDate: parsed.updateDate || null,
+              updated: plan.updates.length,
+              unchanged: plan.unchanged.length,
+              activePlayersUpdated
+            },
+            message: outdated ? `${statusMessage} The roster date does not match ${today}.` : statusMessage
+          };
+          writeAutoIndexUpdateStatus(autoIndexUpdateStatus);
           if (plan.updates.length) {
             const dateDescription = parsed.updateDate || "no update date";
             recordSystemAudit(adminIdentity.name, "INDEX_IMPORT", `Updated ${plan.updates.length} saved player index${plan.updates.length === 1 ? "" : "es"} from the published roster dated ${dateDescription}`);
