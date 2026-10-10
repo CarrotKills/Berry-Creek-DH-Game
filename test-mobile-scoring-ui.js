@@ -33,11 +33,12 @@ assert.match(app, /Scorekeeper assigned/);
 assert.match(app, /navigator\.vibrate\(12\)/);
 
 assert.match(css, /\.mobile-scoring-dock \{ display: none; \}/);
-assert.match(css, /\.mobile-scoring-dock \{ position: fixed; right: 0; bottom: 0; left: 0;/);
+assert.match(css, /\.mobile-scoring-dock \{ position: fixed; right: 0; bottom: calc\(4\.05rem \+ env\(safe-area-inset-bottom\)\); left: 0;/);
 assert.match(css, /\.mobile-missing-scores-reminder \{[^}]*background: var\(--danger\)/s);
 assert.match(css, /env\(safe-area-inset-bottom\)/);
 assert.match(css, /\.app-header \{ position: sticky; top: 0; z-index: 40;/);
-assert.match(css, /\.tabs \{ top: var\(--app-header-height, 0px\); z-index: 35;/);
+assert.match(css, /\.tabs \{ position: fixed; top: auto; right: 0; bottom: 0; left: 0; z-index: 50;[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/s);
+assert.match(css, /\.tab \{ display: grid; justify-items: center;[^}]*min-height: 3\.45rem/s);
 assert.match(css, /body\.header-compact \.compact-app-title \{ display: block; \}/);
 assert.match(css, /body:has\(\.score-stepper input:focus\) \.mobile-scoring-dock \{ display: none; \}/);
 assert.match(css, /button:not\(:disabled\):active/);

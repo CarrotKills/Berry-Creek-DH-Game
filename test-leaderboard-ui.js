@@ -47,7 +47,7 @@ assert.ok(html.indexOf('class="leaderboard-wrap"') < html.indexOf('id="csvBtn"')
 assert.match(html, /class="section-actions leaderboard-footer-actions"/);
 assert.match(css, /\.leaderboard-footer-actions\s*\{[^}]*justify-content:\s*flex-end/s);
 assert.match(html, /id="leaderboardRoundStatus"/);
-assert.match(html, /No active or saved round is available yet\./);
+assert.match(html, /No round is ready yet\. Ask an admin to start a round or open the most recent saved results\./);
 assert.match(app, /fetch\("\/api\/public-leaderboard"/);
 assert.match(app, /function leaderboardRound\(\)/);
 assert.match(app, /Most recent saved round/);
@@ -87,9 +87,12 @@ assert.match(app, /L\.pointMarkerIds\(players\)/);
 assert.match(app, /item\.player\.id === pointLeaderId/);
 assert.match(app, /item\.player\.id === pointLoserId/);
 assert.match(app, /"leader-row-trailing"/);
-assert.match(css, /\.leader-row-leading td:first-child::before[^}]*berry-creek-leader-flower\.png/);
+assert.match(app, /class="standing-marker standing-marker--leader"/);
+assert.match(app, /class="standing-marker standing-marker--trailing"[^>]*>💩<\/span>/);
+assert.match(css, /\.standing-marker--leader[^}]*berry-creek-leader-flower\.png/);
 assert.doesNotMatch(css, /content:\s*"◆/);
-assert.match(css, /\.leader-row-trailing td:first-child::before\s*\{\s*content:\s*"💩 "/);
+assert.match(css, /\.leader-row-current td[^}]*var\(--forest\)/);
+assert.match(css, /\.leaderboard tbody tr:not\(\.bcc-tips-row\):nth-child\(even\) td/);
 assert.match(serviceWorker, /berry-creek-leader-flower\.png/);
 
 console.log("Leaderboard display tests passed.");

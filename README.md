@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Version 9.16.29 introduces a complete phone-first visual refresh: a stronger Berry Creek red-and-white design system, icon navigation that moves to a thumb-friendly bottom bar on phones, larger scoring controls, clearer achievement badges, polished physical-style scorecards, and a more compact leaderboard with zebra rows, signed-in-player highlighting, and distinct leader/last-place markers. Loading skeletons, clearer empty states, consistent warnings, refined touch feedback, and subtle Berry Creek flower watermarks make the app feel faster and easier to scan without changing scoring rules or saved data.
+
 Admins can configure one photo email address in Settings. When it is set, every live group scorecard shows an **Email a photo for Hole X** link beneath the shared comments. The link opens the viewer's device email app with the round, date, group being viewed, and hole already identified; the sender only needs to attach the photo. The address remains configured when scores are reset, a saved roster is reused, or a new round is started, and no image files are stored by the app.
 
 THRU now reserves `F` for a player whose complete 18-hole scorecard is present. A player who reaches Hole 18 with any earlier score missing displays `18` instead. Once a group moves beyond a missing score, its active scorekeeper sees a persistent reminder naming each affected player and hole on the scoring page and in the phone's sticky scoring controls until the gaps are corrected.

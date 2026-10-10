@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.28";
+  const APP_VERSION = "9.16.29";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -56,8 +56,10 @@
   let playerInviteLink = "";
   let playerInvitePlayer = null;
   let savedPlayers = [];
+  let savedPlayersLoading = false;
   let savedRounds = [];
   let publicLeaderboard = null;
+  let leaderboardLoading = false;
   let shareTokens = {};
   let activeSavedRound = null;
   let pendingReuseRound = null;
@@ -314,14 +316,16 @@
       renderSavedPlayers();
       return;
     }
-    const status = $("#playerDatabaseStatus");
-    status.textContent = "Loading saved players…";
+    savedPlayersLoading = true;
+    renderSavedPlayers();
     try {
       const body = await databaseRequest("/api/players", { cache: "no-store" });
       savedPlayers = Array.isArray(body.players) ? body.players : [];
+      savedPlayersLoading = false;
       renderSavedPlayers();
     } catch (error) {
       savedPlayers = [];
+      savedPlayersLoading = false;
       renderSavedPlayers(error.message);
     }
   }
@@ -480,17 +484,23 @@
   }
 
   async function loadPublicLeaderboard(options = {}) {
-    const response = await fetch("/api/public-leaderboard", { cache: "no-store" });
-    if (!response.ok) throw new Error("Could not load the public leaderboard");
-    const body = await response.json();
-    publicLeaderboard = {
-      source: ["active", "saved", "empty"].includes(body.source) ? body.source : "empty",
-      state: R.normalizeState(body.state),
-      savedAt: body.savedAt || "",
-      savedRoundId: body.savedRoundId || ""
-    };
+    leaderboardLoading = true;
     if (options.render !== false) renderLeaderboard();
-    return publicLeaderboard;
+    try {
+      const response = await fetch("/api/public-leaderboard", { cache: "no-store" });
+      if (!response.ok) throw new Error("Could not load the public leaderboard");
+      const body = await response.json();
+      publicLeaderboard = {
+        source: ["active", "saved", "empty"].includes(body.source) ? body.source : "empty",
+        state: R.normalizeState(body.state),
+        savedAt: body.savedAt || "",
+        savedRoundId: body.savedRoundId || ""
+      };
+      return publicLeaderboard;
+    } finally {
+      leaderboardLoading = false;
+      if (options.render !== false) renderLeaderboard();
+    }
   }
 
   async function refreshState() {
@@ -751,6 +761,11 @@
     }
     if (connectionMode !== "live") {
       status.textContent = "The saved player database requires a live connection.";
+      return;
+    }
+    if (savedPlayersLoading) {
+      status.textContent = "Loading saved players…";
+      list.innerHTML = Array.from({ length: 4 }, () => '<article class="saved-player-row skeleton-roster-row" aria-hidden="true"><span class="skeleton-block skeleton-name"></span><span class="skeleton-block"></span><span class="skeleton-block"></span><span class="skeleton-block skeleton-wide"></span><span class="skeleton-block"></span></article>').join("");
       return;
     }
     if (errorMessage) {
@@ -1138,11 +1153,12 @@
       const scorekeeperId = state.settings.scorekeepers[selectedGroup] || "";
       const signedInPlayer = currentRoundPlayer();
       const canChangeScorekeeper = adminUnlocked || (signedInPlayer?.group === selectedGroup && (!scorekeeperId || scorekeeperId === signedInPlayer.id));
+      const achievementClass = achievement ? `achievement-tic achievement-tic--${achievement.toLowerCase()}` : "";
       return `<article class="group-score-card ${competitive ? "" : "is-score-only"} ${feedbackKind ? `touch-feedback--${feedbackKind}` : ""}" data-player-id="${player.id}">
-        <div class="score-player"><div class="score-player-heading"><label class="scorekeeper-toggle" title="Group scorekeeper"><input data-kind="scorekeeper" type="checkbox" ${scorekeeperId === player.id ? "checked" : ""} ${canChangeScorekeeper ? "" : "disabled"}>SK</label><strong>${playerNameHtml(player, state.players.indexOf(player))}</strong></div><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${skinPops > 0 ? `gets ${skinPops === 0.5 ? "1/2" : skinPops}` : skinPops < 0 ? `gives ${Math.abs(skinPops) === 0.5 ? "1/2" : Math.abs(skinPops)}` : "no stroke"}</span>${competitive ? "" : '<span class="score-only-note">Not in the game · score only</span>'}</div>
+        <header class="score-card-header"><div class="score-player"><div class="score-player-heading"><label class="scorekeeper-toggle" title="Group scorekeeper"><input data-kind="scorekeeper" type="checkbox" ${scorekeeperId === player.id ? "checked" : ""} ${canChangeScorekeeper ? "" : "disabled"}>SK</label><strong>${playerNameHtml(player, state.players.indexOf(player))}</strong></div><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${skinPops > 0 ? `gets ${skinPops === 0.5 ? "1/2" : skinPops}` : skinPops < 0 ? `gives ${Math.abs(skinPops) === 0.5 ? "1/2" : Math.abs(skinPops)}` : "no stroke"}</span>${competitive ? "" : '<span class="score-only-note">Not in the game · score only</span>'}</div><span class="score-group-pill">Group ${player.group}</span></header>
         <div class="score-entry-wrap"><div class="score-stepper"><button type="button" data-delta="-1" ${disabled} aria-label="Decrease score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" ${disabled} aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" ${disabled} aria-label="Increase score">+</button></div>${syncLabel ? `<span class="score-sync score-sync--${syncState}" role="status">${syncLabel}</span>` : ""}</div>
         <div class="net-box"><span>Match net</span><strong>${net ?? "—"}</strong></div>
-        <div class="card-tics">${achievement ? `<span class="auto-tic">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic">Net skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle" title="${hasKp ? "Remove KP before marking a Sandy" : "Mark Sandy"}"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${sandyDisabled}>Sandy</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle" title="${player.sandies[index] ? "Remove Sandy before marking KP" : "Mark KP"}"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${kpDisabled}>KP</label>` : ""}${kpNote}</div>
+        <div class="card-tics">${achievement ? `<span class="auto-tic ${achievementClass}">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic skin-tic">Skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle sandy-toggle" title="${hasKp ? "Remove KP before marking a Sandy" : "Mark Sandy"}"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${sandyDisabled}>Sandy</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle" title="${player.sandies[index] ? "Remove Sandy before marking KP" : "Mark KP"}"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${kpDisabled}>KP</label>` : ""}${kpNote}</div>
         ${touch ? `<span class="touch-confirmation touch-confirmation--${touch.kind}" role="status">${touch.kind === "success" ? "✓" : touch.kind === "warning" ? "!" : "×"} ${esc(touch.message)}</span>` : ""}
       </article>`;
     }).join("");
@@ -1423,10 +1439,21 @@
   function renderLeaderboard() {
     const round = leaderboardRound();
     const saved = leaderboardIsSaved();
+    renderLeaderboardHeaders();
+    if (leaderboardLoading) {
+      $("#leaderboardKicker").textContent = "Loading standings";
+      $("#leaderboardRoundStatus").classList.remove("is-saved");
+      $("#leaderboardRoundStatus").textContent = "Loading the active or most recent leaderboard…";
+      $("#kpPanel").innerHTML = Array.from({ length: 4 }, () => '<div class="kp-card skeleton-kp-card" aria-hidden="true"><span class="skeleton-block"></span><span class="skeleton-block skeleton-short"></span></div>').join("");
+      $("#leaderboardBody").innerHTML = Array.from({ length: 5 }, () => `<tr class="skeleton-table-row" aria-hidden="true">${Array.from({ length: LEADERBOARD_COLUMNS.length }, () => '<td><span class="skeleton-block"></span></td>').join("")}</tr>`).join("");
+      $("#leaderboardEmpty").hidden = true;
+      $(".leaderboard-wrap").hidden = false;
+      return;
+    }
     const settlement = E.pointsSettlement(round.players, E.COURSE, round.settings);
     renderKPs(round);
-    renderLeaderboardHeaders();
     const players = rankedPlayers(round);
+    const signedInPlayer = saved ? null : currentRoundPlayer();
     const { leaderId: pointLeaderId, loserId: pointLoserId } = L.pointMarkerIds(players);
     $("#leaderboardKicker").textContent = saved ? "Most recent saved round" : "Updates live";
     $("#leaderboardRoundStatus").classList.toggle("is-saved", saved);
@@ -1440,9 +1467,14 @@
       const netText = settledPointText(ledger.settledNet, settlement.complete);
       const rowClasses = [
         item.player.id === pointLeaderId ? "leader-row-leading" : "",
-        item.player.id === pointLoserId ? "leader-row-trailing" : ""
+        item.player.id === pointLoserId ? "leader-row-trailing" : "",
+        signedInPlayer?.id === item.player.id ? "leader-row-current" : ""
       ].filter(Boolean).join(" ");
-      return `<tr class="${rowClasses}"><td>${playerNameHtml(item.player, item.index)}</td><td>${displayPlayingHandicap(hcpForRound(item.player, round))}</td><td>${item.player.group}</td><td>${leaderboardThruText(item.player, item.totals)}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.eagles}</td><td>${tics.birdies}</td><td>${tics.sandies}</td><td class="kp-count-column" title="KPs won">${tics.kps}</td><td>${tics.skins}</td><td>${tics.frontWeight}</td><td>${tics.backWeight}</td><td>${tics.totalNetWeight}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
+      const marker = item.player.id === pointLeaderId
+        ? '<span class="standing-marker standing-marker--leader" role="img" aria-label="Point leader"></span>'
+        : item.player.id === pointLoserId ? '<span class="standing-marker standing-marker--trailing" role="img" aria-label="Lowest point total">💩</span>' : "";
+      const thruClass = item.totals.total.completed ? "is-finished" : "is-incomplete";
+      return `<tr class="${rowClasses}"><td><span class="leaderboard-player-cell">${marker}<span>${playerNameHtml(item.player, item.index)}</span></span></td><td>${displayPlayingHandicap(hcpForRound(item.player, round))}</td><td><span class="group-pill">${item.player.group}</span></td><td class="thru-cell ${thruClass}">${leaderboardThruText(item.player, item.totals)}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.eagles}</td><td>${tics.birdies}</td><td>${tics.sandies}</td><td class="kp-count-column" title="KPs won">${tics.kps}</td><td>${tics.skins}</td><td>${tics.frontWeight}</td><td>${tics.backWeight}</td><td>${tics.totalNetWeight}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
     }).join("") + bccTipsRow(settlement, LEADERBOARD_COLUMNS.length);
     $("#leaderboardEmpty").hidden = players.length > 0;
     $(".leaderboard-wrap").hidden = players.length === 0;
