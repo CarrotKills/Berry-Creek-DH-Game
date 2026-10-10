@@ -16,6 +16,14 @@ assert.ok(html.indexOf('id="toggleScorecardBtn"') > html.indexOf('id="advanceHol
 assert.ok(html.indexOf('class="scorecard scorecard group-scorecard"') === -1);
 assert.ok(html.indexOf('class="scorecard group-scorecard"') < html.indexOf('class="scorecard-legend"'));
 assert.ok(html.indexOf('class="scorecard-legend"') < html.indexOf('id="hideScorecardBtn"'));
+assert.ok(html.indexOf('id="holeCommentsTitle"') > html.indexOf('class="scorecard-legend"'));
+assert.ok(html.indexOf('id="holeCommentsTitle"') < html.indexOf('id="hideScorecardBtn"'));
+assert.match(html, /Shared across every group/);
+assert.match(html, /id="holeCommentInput"[^>]+maxlength="500"/);
+assert.match(html, /id="emailHolePhotoLink"[^>]*>Email a photo for Hole 1</);
+assert.match(html, /id="photoEmailInput"[^>]+type="email"/);
+assert.match(html, /id="photoEmailForm"/);
+assert.match(html, /id="priorMissingScoresNotice"[^>]+role="alert"/);
 assert.match(app, /pendingSkinNames\.length > 1/);
 assert.match(app, /Skin: No skin \(yet\)/);
 assert.match(app, /Skin Pending: \$\{pendingSkinNames\.length \? pendingSkinNames\[0\]/);
@@ -37,5 +45,16 @@ assert.match(html, /skin pops are capped at one stroke per hole, 1\/2 on par 3s\
 assert.doesNotMatch(html, /match strokes are capped at one dot per hole/);
 assert.match(app, /Skin pops are capped at one stroke per hole, 1\/2 on par 3s/);
 assert.match(app, /E\.sandyAllowedForHole\(E\.COURSE, index\)/);
+assert.match(app, /function renderHoleComments\(\)/);
+assert.match(app, /state\.holeComments/);
+assert.match(app, /type: "ADD_HOLE_COMMENT"/);
+assert.match(app, /type: "DELETE_HOLE_COMMENT"/);
+assert.match(app, /Sign in to leave a comment\./);
+assert.match(app, /mailto:\$\{photoEmail\}\?subject=/);
+assert.match(app, /Please attach the photo before sending\./);
+assert.match(app, /type: "SET_PHOTO_EMAIL"/);
+assert.match(app, /function priorMissingScoreReminder\(players\)/);
+assert.match(app, /Missing earlier scores:/);
+assert.match(app, /return `\$\{nameOf\(player, state\.players\.indexOf\(player\)\)\} — \$\{holeText\}`/);
 
 console.log("Scoring-page UI tests passed.");

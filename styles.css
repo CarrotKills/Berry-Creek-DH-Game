@@ -17,11 +17,11 @@
 * { box-sizing: border-box; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 body { margin: 0; background: var(--cream); color: var(--ink); min-width: 320px; }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button, select, input[type="checkbox"] { cursor: pointer; }
 button, select, label:has(input[type="checkbox"]) { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-input, select { color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 0.65rem 0.75rem; min-height: 44px; }
-input:focus, select:focus, button:focus-visible { outline: 3px solid rgba(181, 18, 34, 0.3); outline-offset: 2px; }
+input, select, textarea { color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 0.65rem 0.75rem; min-height: 44px; }
+input:focus, select:focus, textarea:focus, button:focus-visible { outline: 3px solid rgba(181, 18, 34, 0.3); outline-offset: 2px; }
 label { color: var(--muted); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.02em; }
 label input, label select { display: block; width: 100%; margin-top: 0.3rem; font-size: 1rem; font-weight: 500; }
 h1, h2, p { margin-top: 0; }
@@ -56,7 +56,7 @@ main { width: min(1180px, calc(100% - 2rem)); margin: 1.25rem auto 3rem; }
 .button-primary { color: #fff; background: var(--forest); }
 .button-quiet { color: var(--forest-2); background: var(--gold-soft); }
 .button-danger { color: #fff; background: var(--danger); }
-.button:disabled, .icon-button:disabled, .plus-handicap-toggle:disabled, input:disabled, select:disabled { cursor: not-allowed; opacity: 0.52; }
+.button:disabled, .icon-button:disabled, .plus-handicap-toggle:disabled, input:disabled, select:disabled, textarea:disabled { cursor: not-allowed; opacity: 0.52; }
 .icon-button { min-width: 44px; padding: 0.5rem; color: var(--forest); background: var(--gold-soft); font-size: 1.2rem; }
 @media (hover: none) {
   button:not(:disabled):active, .tic-toggle:has(input:not(:disabled)):active, .scorekeeper-toggle:has(input:not(:disabled)):active { transform: scale(0.96); filter: brightness(0.94); }
@@ -112,6 +112,7 @@ main { width: min(1180px, calc(100% - 2rem)); margin: 1.25rem auto 3rem; }
 .validation { margin: 0.8rem 0; color: var(--danger); font-weight: 700; }
 .notice { margin-bottom: 1rem; padding: 0.8rem 1rem; border-left: 4px solid var(--forest); border-radius: 8px; color: var(--forest-2); background: var(--gold-soft); font-size: 0.9rem; font-weight: 700; }
 .notice-danger { color: #fff; background: var(--danger); }
+.notice-missing-scores { border-left-color: var(--danger); color: #7f101d; background: #fbe7ea; line-height: 1.45; }
 .warning-list { margin: 0.8rem 0; padding: 0.75rem 1rem; border: 1px solid #d8a328; border-radius: 10px; color: #633c00; background: #fff6d8; }
 .warning-list p { margin: 0.25rem 0; font-weight: 700; }
 .data-tools { margin-top: 1rem; color: var(--muted); }
@@ -205,6 +206,27 @@ tbody tr:last-child td { border-bottom: 0; }
 .scorecard th:first-child { background: var(--forest); }
 .scorecard td:first-child { background: var(--paper); }
 .scorecard-legend { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.35rem 1rem; margin: 0; padding: 0.65rem 0.8rem; color: var(--muted); font-size: 0.78rem; font-weight: 700; }
+.hole-comments { margin-top: 0.65rem; padding: 0.9rem; border: 1px solid var(--line); border-top: 4px solid var(--forest); border-radius: 12px; background: var(--paper); box-shadow: var(--shadow); }
+.hole-comments-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; }
+.hole-comments-heading h3 { margin: 0; color: var(--ink); font-family: Georgia, serif; font-size: 1.15rem; font-weight: 500; }
+.hole-comment-count { color: var(--muted); font-size: 0.78rem; font-weight: 800; }
+.hole-comment-list { display: grid; gap: 0.55rem; margin-top: 0.75rem; }
+.hole-comment { padding: 0.7rem 0.8rem; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--paper) 93%, var(--gold-soft)); }
+.hole-comment-meta { display: flex; align-items: start; justify-content: space-between; gap: 0.75rem; }
+.hole-comment-meta strong { display: block; color: var(--forest); font-size: 0.88rem; }
+.hole-comment-meta span { display: block; margin-top: 0.1rem; color: var(--muted); font-size: 0.72rem; font-weight: 700; }
+.hole-comment-meta .text-button { min-height: 32px; color: var(--danger); font-size: 0.75rem; }
+.hole-comment p { margin: 0.45rem 0 0; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+.hole-comment-empty, .hole-comment-access { margin: 0.75rem 0 0; padding: 0.65rem 0.75rem; border-radius: 8px; color: var(--muted); background: var(--cream); font-size: 0.82rem; font-weight: 700; }
+.hole-comment-form { margin-top: 0.8rem; }
+.hole-comment-form > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: 0.55rem; margin-top: 0.3rem; }
+.hole-comment-form textarea { width: 100%; min-height: 70px; resize: vertical; }
+.hole-comment-form .button { min-width: 125px; }
+.hole-comment-form .helper { display: block; margin-top: 0.25rem; }
+.hole-photo-email-action { display: flex; align-items: center; flex-wrap: wrap; gap: 0.65rem; margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px solid var(--line); }
+.hole-photo-email-action[hidden] { display: none; }
+.hole-photo-email-action .button { min-height: 44px; }
+.hole-photo-email-action span { color: var(--muted); font-size: 0.78rem; font-weight: 700; }
 .legend-dot { color: var(--forest); }
 .scorecard-segment-heading { background: var(--forest-2); }
 .scorecard-segment-heading small { display: block; margin-top: 0.1rem; font-size: 0.5rem; letter-spacing: 0; text-transform: none; }
@@ -305,6 +327,8 @@ dialog::backdrop { background: rgba(10, 24, 17, 0.55); }
 .control-card h3, .tournament-panel h3 { margin: 0 0 0.5rem; font-family: Georgia, serif; font-size: 1.2rem; font-weight: 500; }
 .control-card p { color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
 .control-card .button { width: 100%; }
+.photo-email-form { display: grid; gap: 0.65rem; }
+.photo-email-form label { display: grid; gap: 0.3rem; }
 .switch-row { display: flex; align-items: center; gap: 0.55rem; min-height: 44px; margin-bottom: 0.65rem; color: var(--ink); font-size: 0.9rem; }
 .switch-row input { width: 20px; height: 20px; min-height: 0; accent-color: var(--forest); }
 .tournament-panel { margin-top: 1rem; }
@@ -439,6 +463,8 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   body.score-view-active footer { margin-bottom: calc(7.2rem + env(safe-area-inset-bottom)); }
   .mobile-scoring-dock { position: fixed; right: 0; bottom: 0; left: 0; z-index: 45; display: grid; grid-template-columns: 1fr minmax(86px, 0.72fr) 1fr; gap: 0.4rem; padding: 0.45rem max(0.55rem, env(safe-area-inset-right)) calc(0.45rem + env(safe-area-inset-bottom)) max(0.55rem, env(safe-area-inset-left)); border-top: 1px solid color-mix(in srgb, var(--forest) 30%, var(--line)); background: color-mix(in srgb, var(--paper) 94%, transparent); box-shadow: 0 -8px 24px rgba(0,0,0,0.16); backdrop-filter: blur(12px); }
   .mobile-scoring-status { grid-column: 1 / -1; color: var(--forest); font-size: 0.72rem; font-weight: 900; text-align: center; }
+  .mobile-missing-scores-reminder { grid-column: 1 / -1; overflow-x: auto; padding: 0.28rem 0.4rem; border-radius: 6px; color: #fff; background: var(--danger); font-size: 0.68rem; font-weight: 850; line-height: 1.25; text-align: center; white-space: nowrap; scrollbar-width: none; }
+  .mobile-missing-scores-reminder[hidden] { display: none; }
   .mobile-scoring-dock label { display: block; }
   .mobile-scoring-dock select, .mobile-hole-button { width: 100%; min-height: 46px; margin: 0; border: 0; border-radius: 9px; font-weight: 850; }
   .mobile-scoring-dock select { padding: 0.45rem 0.3rem; color: var(--ink); border: 1px solid var(--line); background: var(--paper); text-align: center; }
@@ -472,6 +498,10 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .group-score-card { grid-template-columns: 1fr auto; }
   .group-score-card .score-player { grid-column: 1 / -1; }
   .group-score-card .net-box { grid-column: 2; grid-row: 2; }
+  .hole-comment-form > div { grid-template-columns: 1fr; }
+  .hole-comment-form .button { width: 100%; }
+  .hole-photo-email-action { align-items: stretch; flex-direction: column; }
+  .hole-photo-email-action .button { width: 100%; }
   .score-heading { justify-content: stretch; }
   .score-heading .player-picker { flex: 1 1 180px; min-width: 0; }
   .hole-entry { grid-template-columns: 1fr 1fr; }

@@ -9,15 +9,17 @@
   const MAX_GROUP_SIZE = 5;
   const MAX_AUDIT_ENTRIES = 250;
   const MAX_UNDO_ENTRIES = 100;
+  const MAX_HOLE_COMMENTS = 300;
   const GROUPS = ["A", "B", "C", "D", "E", "F"];
   const KP_HOLES = [2, 8, 12, 17];
   const SANDY_DISABLED_HOLES = new Set([4, 12]);
   const HOLE_PARS = [4, 3, 5, 4, 4, 4, 5, 3, 4, 4, 5, 3, 5, 4, 4, 4, 3, 4];
   const TEE_KEY_ALIASES = Object.freeze({ creekWomen: "creekMen", creekBerryCombo: "creekMen", berryMen: "creekMen", berryWomen: "creekMen" });
   const TEE_KEYS = new Set(["championship", "member", "memberCreekCombo", "creekMen"]);
-  const ADMIN_ACTIONS = new Set(["SET_META", "SET_ALLOWANCE", "ADD_PLAYER", "REMOVE_PLAYER", "UPDATE_PLAYER", "START_FROM_SAVED", "RESET_SCORES", "CLEAR_ROUND", "SET_LOCKED", "CLEAR_AUDIT"]);
+  const ADMIN_ACTIONS = new Set(["SET_META", "SET_ALLOWANCE", "SET_PHOTO_EMAIL", "ADD_PLAYER", "REMOVE_PLAYER", "UPDATE_PLAYER", "START_FROM_SAVED", "RESET_SCORES", "CLEAR_ROUND", "SET_LOCKED", "CLEAR_AUDIT"]);
   const SCORING_ACTIONS = new Set(["SET_SCORE", "SET_SANDY", "SET_KP", "UNDO_LAST"]);
   const ACCESS_ACTIONS = new Set(["SET_SCOREKEEPER"]);
+  const COMMENT_ACTIONS = new Set(["ADD_HOLE_COMMENT", "DELETE_HOLE_COMMENT"]);
 
   function newRoundId() {
     return globalThis.crypto?.randomUUID?.() || `round-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -25,13 +27,14 @@
 
   function defaultState() {
     return {
-      version: 7,
+      version: 8,
       revision: 0,
       roundId: newRoundId(),
       roundName: "Berry Creek Round",
       date: new Date().toISOString().slice(0, 10),
-      settings: { par: 72, allowance: 100, kpWinners: {}, kpClaims: {}, scorekeepers: {}, locked: false },
+      settings: { par: 72, allowance: 100, photoEmail: "", kpWinners: {}, kpClaims: {}, scorekeepers: {}, locked: false },
       players: [],
+      holeComments: [],
       auditLog: [],
       groupActivity: {},
       undoStack: []
@@ -78,6 +81,23 @@
     };
   }
 
+  function normalizeHoleComment(comment) {
+    const id = String(comment?.id || "").slice(0, 80);
+    const hole = Number(comment?.hole);
+    const text = String(comment?.text || "").trim().slice(0, 500);
+    if (!id || !Number.isInteger(hole) || hole < 1 || hole > 18 || !text) return null;
+    return {
+      id,
+      hole,
+      text,
+      authorAccountId: String(comment?.authorAccountId || "").slice(0, 80),
+      authorRole: comment?.authorRole === "admin" ? "admin" : "player",
+      authorName: String(comment?.authorName || "Player").trim().slice(0, 40) || "Player",
+      authorGroup: GROUPS.includes(comment?.authorGroup) ? comment.authorGroup : "",
+      createdAt: String(comment?.createdAt || "")
+    };
+  }
+
   function normalizeUndoEntry(entry) {
     return {
       id: String(entry?.id || ""),
@@ -101,6 +121,11 @@
       const entry = value[group];
       return entry?.at ? [[group, { at: String(entry.at), action: String(entry.action || "UPDATE").slice(0, 30) }]] : [];
     }));
+  }
+
+  function normalizePhotoEmail(value) {
+    const email = String(value || "").trim().toLowerCase().slice(0, 254);
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
   }
 
   function normalizeKpClaims(value, winners, validPlayerIds) {
@@ -131,7 +156,7 @@
     return {
       ...base,
       ...value,
-      version: 7,
+      version: 8,
       roundId: String(value.roundId || base.roundId),
       settings: {
         ...base.settings,
@@ -139,9 +164,11 @@
         kpWinners,
         kpClaims: normalizeKpClaims(value.settings?.kpClaims, kpWinners, validPlayerIds),
         scorekeepers,
+        photoEmail: normalizePhotoEmail(value.settings?.photoEmail),
         locked: Boolean(value.settings?.locked)
       },
       players,
+      holeComments: Array.isArray(value.holeComments) ? value.holeComments.map(normalizeHoleComment).filter(Boolean).slice(-MAX_HOLE_COMMENTS) : [],
       auditLog: Array.isArray(value.auditLog) ? value.auditLog.slice(-MAX_AUDIT_ENTRIES).map(normalizeAuditEntry) : [],
       groupActivity: normalizeGroupActivity(value.groupActivity),
       undoStack: Array.isArray(value.undoStack) ? value.undoStack.slice(-MAX_UNDO_ENTRIES).map(normalizeUndoEntry) : []
@@ -158,6 +185,7 @@
     switch (action?.type) {
       case "SET_META": return "Updated round details";
       case "SET_ALLOWANCE": return `Set handicap allowance to ${after.settings.allowance}%`;
+      case "SET_PHOTO_EMAIL": return p.email ? "Updated the photo email address" : "Cleared the photo email address";
       case "ADD_PLAYER": return `Added ${p.player?.name?.trim() || "a player"} to Group ${p.player?.group || "A"}`;
       case "REMOVE_PLAYER": return `Removed ${playerName(before, p.playerId)}`;
       case "UPDATE_PLAYER": return `Updated ${playerName(after, p.playerId)}`;
@@ -169,6 +197,8 @@
       case "SET_SANDY": return `${playerName(after, p.playerId)} · Hole ${Number(p.holeIndex) + 1}: sand save ${p.value ? "marked" : "removed"}`;
       case "SET_KP": return `Hole ${p.hole} KP: ${p.playerId ? playerName(after, p.playerId) : "cleared"}`;
       case "SET_SCOREKEEPER": return p.playerId ? `Set ${playerName(after, p.playerId)} as Group ${p.group} scorekeeper` : `Cleared Group ${p.group} scorekeeper`;
+      case "ADD_HOLE_COMMENT": return `Commented on Hole ${Number(p.comment?.hole) || Number(p.hole)}`;
+      case "DELETE_HOLE_COMMENT": return `Removed a Hole ${Number(p.hole) || ""} comment`.trim();
       case "UNDO_LAST": return `Undid ${p.detail || "the last scoring change"}`;
       case "RESET_SCORES": return "Reset all scores and tics";
       case "CLEAR_ROUND": return "Started a new event";
@@ -194,6 +224,7 @@
 
   function isAdminAction(type) { return ADMIN_ACTIONS.has(type); }
   function isScoringAction(type) { return SCORING_ACTIONS.has(type); }
+  function isCommentAction(type) { return COMMENT_ACTIONS.has(type); }
 
   function actionGroup(before, after, action) {
     const p = action?.payload || {};
@@ -282,6 +313,14 @@
       case "SET_ALLOWANCE":
         state.settings.allowance = Math.max(0, Math.min(100, Number(p.allowance) || 0));
         break;
+      case "SET_PHOTO_EMAIL": {
+        const requestedEmail = String(p.email || "").trim().toLowerCase();
+        const photoEmail = normalizePhotoEmail(requestedEmail);
+        if (requestedEmail && !photoEmail) { changed = false; break; }
+        if (photoEmail === state.settings.photoEmail) { changed = false; break; }
+        state.settings.photoEmail = photoEmail;
+        break;
+      }
       case "SET_LOCKED":
         state.settings.locked = Boolean(p.locked);
         break;
@@ -405,10 +444,25 @@
         if (previous === playerId) changed = false;
         break;
       }
+      case "ADD_HOLE_COMMENT": {
+        const comment = normalizeHoleComment(p.comment);
+        if (!comment?.id || state.holeComments.some((item) => item.id === comment.id)) { changed = false; break; }
+        state.holeComments.push(comment);
+        state.holeComments = state.holeComments.slice(-MAX_HOLE_COMMENTS);
+        break;
+      }
+      case "DELETE_HOLE_COMMENT": {
+        const commentId = String(p.commentId || "");
+        const previousLength = state.holeComments.length;
+        state.holeComments = state.holeComments.filter((comment) => comment.id !== commentId);
+        if (state.holeComments.length === previousLength) changed = false;
+        break;
+      }
       case "UNDO_LAST":
         changed = undoLastScoringChange(state, p);
         break;
-      case "START_FROM_SAVED":
+      case "START_FROM_SAVED": {
+        const photoEmail = state.settings.photoEmail;
         state = normalizeState(p.state);
         state.players.forEach((player) => {
           player.scores = Array(18).fill("");
@@ -419,9 +473,12 @@
         state.settings.kpWinners = {};
         state.settings.kpClaims = {};
         state.settings.scorekeepers = {};
+        state.settings.photoEmail = photoEmail;
+        state.holeComments = [];
         state.groupActivity = {};
         state.undoStack = [];
         break;
+      }
       case "RESET_SCORES":
         state.players.forEach((player) => {
           player.scores = Array(18).fill("");
@@ -431,12 +488,16 @@
         state.settings.kpWinners = {};
         state.settings.kpClaims = {};
         state.settings.locked = false;
+        state.holeComments = [];
         state.groupActivity = {};
         state.undoStack = [];
         break;
-      case "CLEAR_ROUND":
+      case "CLEAR_ROUND": {
+        const photoEmail = state.settings.photoEmail;
         state = defaultState();
+        state.settings.photoEmail = photoEmail;
         break;
+      }
       case "CLEAR_AUDIT":
         state.auditLog = [];
         break;
@@ -457,18 +518,21 @@
     MAX_GROUP_SIZE,
     MAX_AUDIT_ENTRIES,
     MAX_UNDO_ENTRIES,
+    MAX_HOLE_COMMENTS,
     GROUPS,
     KP_HOLES,
     HOLE_PARS,
     ADMIN_ACTIONS,
     SCORING_ACTIONS,
     ACCESS_ACTIONS,
+    COMMENT_ACTIONS,
     defaultState,
     normalizePlayer,
     activePlayerConflict,
     normalizeState,
     isAdminAction,
     isScoringAction,
+    isCommentAction,
     applyAction
   };
 });

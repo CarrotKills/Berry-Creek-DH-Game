@@ -15,7 +15,7 @@ const IndexUpdateSchedule = require("./index-update-schedule.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.16.25";
+const APP_VERSION = "9.16.28";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -1081,7 +1081,8 @@ const server = http.createServer(async (req, res) => {
       const scorerAuthorized = Boolean(assignedScorekeeper || legacyScorerAuthorized);
 
       if (Round.isAdminAction(action.type) && !adminAuthorized) return sendJson(res, 401, { ok: false, error: "Admin sign-in required" });
-      if (state.settings.locked && !["SET_LOCKED", "CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type)) return sendJson(res, 423, { ok: false, error: "This round is locked" });
+      if (Round.isCommentAction(action.type) && !sessionIdentity) return sendJson(res, 401, { ok: false, error: "Sign in to add or remove hole comments" });
+      if (state.settings.locked && !["SET_LOCKED", "SET_PHOTO_EMAIL", "CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type)) return sendJson(res, 423, { ok: false, error: "This round is locked" });
       const duplicatePlayer = duplicateActivePlayer(action);
       if (duplicatePlayer) return sendJson(res, 409, { ok: false, error: `${duplicatePlayer.name.trim() || "That player"} is already active in Group ${duplicatePlayer.group}` });
       if (Round.isScoringAction(action.type) && !adminOverride && (!scorerAuthorized || !scoringGroupAllowed(action, scoringGroup))) {
@@ -1117,9 +1118,43 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
+      let actionPayload = action.payload || {};
+      if (action.type === "SET_PHOTO_EMAIL") {
+        const email = String(actionPayload.email || "").trim().toLowerCase();
+        if (email.length > 254 || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) return sendJson(res, 400, { ok: false, error: "Enter a valid admin email address" });
+        actionPayload = { email };
+      }
+      if (action.type === "ADD_HOLE_COMMENT") {
+        const hole = Number(actionPayload.hole);
+        const text = String(actionPayload.text || "").trim();
+        if (!Number.isInteger(hole) || hole < 1 || hole > 18) return sendJson(res, 400, { ok: false, error: "Choose a hole from 1 through 18" });
+        if (!text) return sendJson(res, 400, { ok: false, error: "Enter a comment before posting" });
+        if (text.length > 500) return sendJson(res, 400, { ok: false, error: "Comments are limited to 500 characters" });
+        actionPayload = {
+          comment: {
+            id: crypto.randomUUID(),
+            hole,
+            text,
+            authorAccountId: sessionIdentity.id,
+            authorRole: sessionIdentity.role,
+            authorName: sessionIdentity.name,
+            authorGroup: actorPlayer?.group || "",
+            createdAt: new Date().toISOString()
+          }
+        };
+      }
+      if (action.type === "DELETE_HOLE_COMMENT") {
+        const commentId = String(actionPayload.commentId || "");
+        const comment = state.holeComments.find((item) => item.id === commentId);
+        if (!comment) return sendJson(res, 404, { ok: false, error: "That comment is no longer available" });
+        const ownsComment = comment.authorAccountId === sessionIdentity.id && comment.authorRole === sessionIdentity.role;
+        if (sessionIdentity.role !== "admin" && !ownsComment) return sendJson(res, 403, { ok: false, error: "You may only remove your own comments" });
+        actionPayload = { commentId, hole: comment.hole };
+      }
+
       const serverAction = {
         type: action.type,
-        payload: action.payload || {},
+        payload: actionPayload,
         meta: {
           at: new Date().toISOString(),
           actor: Round.isAdminAction(action.type) || adminOverride || (Round.ACCESS_ACTIONS.has(action.type) && adminIdentity) ? adminIdentity.name : sessionIdentity?.name || `Group ${scoringGroup} scorer`,

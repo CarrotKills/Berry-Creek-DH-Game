@@ -73,8 +73,11 @@ assert.match(app, /leaderboard && !leaderboard\.hidden && landscape && document\
 assert.match(app, /document\.addEventListener\("visibilitychange", updateLeaderboardWakeLock\)/);
 assert.match(app, /window\.addEventListener\("orientationchange", updateLeaderboardWakeLock\)/);
 assert.match(app, /window\.addEventListener\("pagehide", releaseLeaderboardWakeLock\)/);
-assert.match(app, /const thru = item\.sortValues\.thru;/);
-assert.match(app, /thru === 18 \? "F" : thru/);
+assert.match(app, /function leaderboardThruValue\(player, totals\)/);
+assert.match(app, /return L\.thruValue\(player, totals\.total\.completed\)/);
+assert.match(app, /function leaderboardThruText\(player, totals\)/);
+assert.match(app, /return L\.thruText\(player, totals\.total\.completed\)/);
+assert.doesNotMatch(app, /thru === 18 \? "F" : thru/);
 assert.match(app, /bccTipsRow\(settlement, 17\)/);
 assert.match(app, /"Group", "Thru", "GHIN Index"/);
 assert.match(app, /<th>G<\/th><th>THRU<\/th><th>TOT<\/th>/);

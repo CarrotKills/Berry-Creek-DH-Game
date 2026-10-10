@@ -1,5 +1,11 @@
 # Berry Creek DH Game
 
+Admins can configure one photo email address in Settings. When it is set, every live group scorecard shows an **Email a photo for Hole X** link beneath the shared comments. The link opens the viewer's device email app with the round, date, group being viewed, and hole already identified; the sender only needs to attach the photo. The address remains configured when scores are reset, a saved roster is reused, or a new round is started, and no image files are stored by the app.
+
+THRU now reserves `F` for a player whose complete 18-hole scorecard is present. A player who reaches Hole 18 with any earlier score missing displays `18` instead. Once a group moves beyond a missing score, its active scorekeeper sees a persistent reminder naming each affected player and hole on the scoring page and in the phone's sticky scoring controls until the gaps are corrected.
+
+Signed-in players and admins can post a shared comment for any hole beneath the live group scorecard. Hole comments display the author's name, group, and posting time on every group's scorecard in real time. Players may remove their own comments, admins may remove any comment, and comments become view-only when the round is locked. Comments are included in saved rounds, complete backups, and server snapshots, and are cleared when a new round or score reset begins.
+
 Event Readiness now includes a persistent Last index update indicator for both automatic and manual index updates. It reports the completion time in Central Time, the administrator or automatic schedule responsible, the sheet roster date, how many indexes changed, and how many were already current. The player-login readiness warning also lists every assigned player missing usable credentials by name.
 
 Active Round export/import has been removed from Settings and from the round action engine. Complete Backup is the supported whole-app recovery method, while Saved Rounds Archive preserves completed events for reference, download, or roster reuse.

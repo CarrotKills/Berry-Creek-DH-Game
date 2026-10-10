@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.25";
+  const APP_VERSION = "9.16.28";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -530,7 +530,9 @@
     const admin = options.admin ?? R.isAdminAction(action.type);
     if (spectatorMode) { showToast("This leaderboard link is view only.", "error"); return false; }
     if (R.ACCESS_ACTIONS.has(action.type) && !currentUser) { openAdminDialog(); showToast("Sign in to choose a group scorekeeper.", "error"); return false; }
-    if (isLocked() && !["SET_LOCKED", "CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type)) { showToast("The round is locked.", "error"); return false; }
+    if (R.isCommentAction(action.type) && !currentUser) { openAdminDialog(); showToast("Sign in to add or remove hole comments.", "error"); return false; }
+    if (R.isCommentAction(action.type) && connectionMode !== "live") { showToast("Reconnect to post a shared hole comment.", "error"); return false; }
+    if (isLocked() && !["SET_LOCKED", "SET_PHOTO_EMAIL", "CLEAR_ROUND", "START_FROM_SAVED"].includes(action.type)) { showToast("The round is locked.", "error"); return false; }
     if (admin && !adminUnlocked) {
       openAdminDialog();
       showToast("Admin access is required for that change.", "error");
@@ -1097,6 +1099,14 @@
     const holeComplete = players.length > 0 && players.every((player) => player.scores[selectedHole - 1] !== "");
     const enteredScores = players.filter((player) => player.scores[selectedHole - 1] !== "").length;
     $("#mobileScoringStatus").textContent = `Group ${selectedGroup} · Hole ${selectedHole} · ${enteredScores}/${players.length} scores`;
+    const missingReminder = priorMissingScoreReminder(players);
+    const reminderVisible = Boolean(missingReminder && canScore());
+    const reminder = $("#priorMissingScoresNotice");
+    reminder.hidden = !reminderVisible;
+    reminder.textContent = reminderVisible ? missingReminder : "";
+    const mobileReminder = $("#mobileMissingScoresReminder");
+    mobileReminder.hidden = !reminderVisible;
+    mobileReminder.textContent = reminderVisible ? `⚠ ${missingReminder}` : "";
     [$("#advanceHoleBtn"), $("#advanceHoleBtnBottom")].forEach((advanceButton) => {
       advanceButton.hidden = !holeComplete || selectedHole >= 18;
       advanceButton.textContent = selectedHole < 18 ? `Continue to Hole ${selectedHole + 1}` : "Round complete";
@@ -1149,6 +1159,17 @@
     list.hidden = players.length === 0;
     renderGroupScorecard(players);
     updateScorecardVisibility();
+  }
+
+  function priorMissingScoreReminder(players) {
+    if (selectedHole <= 1) return "";
+    const entries = players.map((player) => {
+      const holes = player.scores.slice(0, selectedHole - 1).flatMap((score, index) => score === "" || score === null || score === undefined ? [index + 1] : []);
+      if (!holes.length) return null;
+      const holeText = holes.length === 1 ? `Hole ${holes[0]}` : `Holes ${holes.slice(0, -1).join(", ")} and ${holes.at(-1)}`;
+      return `${nameOf(player, state.players.indexOf(player))} — ${holeText}`;
+    }).filter(Boolean);
+    return entries.length ? `Missing earlier scores: ${entries.join("; ")}.` : "";
   }
 
   function updateScorecardVisibility() {
@@ -1212,6 +1233,85 @@
       return `<tr class="${E.isInGame(player) ? "" : "score-only-row"}"><td>${playerNameHtml(player, state.players.indexOf(player))}${E.isInGame(player) ? "" : '<small>Not in game · score only</small>'}</td>${cells.slice(0, 9).join("")}${totalCell(front)}${cells.slice(9).join("")}${totalCell(back)}${totalCell(total)}</tr>`;
     }).join("");
     document.querySelectorAll("[data-card-hole]").forEach((button) => button.addEventListener("click", () => { selectedHole = Number(button.dataset.cardHole); renderGroupScoring(); }));
+    renderHoleComments();
+  }
+
+  function commentTimestamp(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+  }
+
+  function mayDeleteComment(comment) {
+    return Boolean(currentUser && (currentUser.role === "admin" || (comment.authorAccountId === currentUser.id && comment.authorRole === currentUser.role)));
+  }
+
+  function renderHoleComments() {
+    const comments = (state.holeComments || []).filter((comment) => comment.hole === selectedHole).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    $("#holeCommentsTitle").textContent = `Hole ${selectedHole} comments`;
+    $("#holeCommentCount").textContent = `${comments.length} comment${comments.length === 1 ? "" : "s"}`;
+    $("#holeCommentList").innerHTML = comments.length ? comments.map((comment) => {
+      const identity = comment.authorGroup ? `Group ${comment.authorGroup}` : comment.authorRole === "admin" ? "Admin" : "Player";
+      const timestamp = commentTimestamp(comment.createdAt);
+      return `<article class="hole-comment"><div class="hole-comment-meta"><div><strong>${esc(comment.authorName)}</strong><span>${esc(identity)}${timestamp ? ` · ${esc(timestamp)}` : ""}</span></div>${mayDeleteComment(comment) ? `<button class="text-button delete-hole-comment" type="button" data-comment-id="${esc(comment.id)}" aria-label="Remove ${esc(comment.authorName)}'s comment">Remove</button>` : ""}</div><p>${esc(comment.text)}</p></article>`;
+    }).join("") : `<div class="hole-comment-empty">No comments have been posted for Hole ${selectedHole}.</div>`;
+    const form = $("#holeCommentForm");
+    const input = $("#holeCommentInput");
+    const postButton = $("#postHoleCommentBtn");
+    const canPost = Boolean(currentUser && !isLocked() && connectionMode === "live" && !spectatorMode);
+    form.hidden = !currentUser;
+    input.disabled = !canPost;
+    postButton.disabled = !canPost;
+    input.placeholder = `Share a note about Hole ${selectedHole}`;
+    const access = $("#holeCommentAccess");
+    access.hidden = canPost;
+    access.textContent = !currentUser ? "Sign in to leave a comment." : isLocked() ? "This round is locked; comments are view only." : connectionMode !== "live" ? "Reconnect to post a shared comment." : "";
+    const photoEmail = String(state.settings.photoEmail || "").trim();
+    const photoAction = $("#holePhotoEmailAction");
+    const photoLink = $("#emailHolePhotoLink");
+    photoAction.hidden = !photoEmail;
+    if (photoEmail) {
+      const subject = `${state.roundName} · Hole ${selectedHole} photo`;
+      const body = `Round: ${state.roundName}\nDate: ${state.date}\nHole: ${selectedHole}\nGroup viewed: ${selectedGroup}\n\nPlease attach the photo before sending.`;
+      photoLink.href = `mailto:${photoEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      photoLink.textContent = `Email a photo for Hole ${selectedHole}`;
+    }
+    document.querySelectorAll(".delete-hole-comment").forEach((button) => button.addEventListener("click", () => deleteHoleComment(button.dataset.commentId)));
+  }
+
+  async function savePhotoEmail(event) {
+    event.preventDefault();
+    const input = $("#photoEmailInput");
+    const email = input.value.trim().toLowerCase();
+    if (email && !input.checkValidity()) return input.reportValidity();
+    if (!await dispatch({ type: "SET_PHOTO_EMAIL", payload: { email } })) return;
+    await refreshState().catch(() => {});
+    showToast(email ? "Photo email address saved." : "Photo email address cleared.", "success");
+  }
+
+  async function postHoleComment(event) {
+    event.preventDefault();
+    const input = $("#holeCommentInput");
+    const text = input.value.trim();
+    if (!currentUser) { openAdminDialog(); return showToast("Sign in to leave a comment.", "error"); }
+    if (!text) return showToast("Enter a comment before posting.", "error");
+    const posted = await dispatch({ type: "ADD_HOLE_COMMENT", payload: { hole: selectedHole, text } });
+    if (!posted) return;
+    input.value = "";
+    await refreshState().catch(() => {});
+    render();
+    showToast(`Comment posted for Hole ${selectedHole}.`, "success");
+  }
+
+  async function deleteHoleComment(commentId) {
+    const comment = (state.holeComments || []).find((item) => item.id === commentId);
+    if (!comment || !mayDeleteComment(comment)) return;
+    if (!window.confirm("Remove this hole comment?")) return;
+    const removed = await dispatch({ type: "DELETE_HOLE_COMMENT", payload: { commentId } });
+    if (!removed) return;
+    await refreshState().catch(() => {});
+    render();
+    showToast("Comment removed.", "success");
   }
 
   function renderKPs(round = leaderboardRound()) {
@@ -1230,6 +1330,14 @@
     if (a.totals.total.completed !== b.totals.total.completed) return a.totals.total.completed ? -1 : 1;
     if (a.totals.total.completed) return a.totals.total.net - b.totals.total.net || a.sortValues.player.localeCompare(b.sortValues.player);
     return bThru - aThru || a.totals.total.net - b.totals.total.net || a.sortValues.player.localeCompare(b.sortValues.player);
+  }
+
+  function leaderboardThruValue(player, totals) {
+    return L.thruValue(player, totals.total.completed);
+  }
+
+  function leaderboardThruText(player, totals) {
+    return L.thruText(player, totals.total.completed);
   }
 
   function settledPointText(value, complete, includePlus = true) {
@@ -1260,7 +1368,7 @@
         sortValues: {
           player: nameOf(player, index),
           group: player.group,
-          thru: player.scores.filter(Boolean).length,
+          thru: leaderboardThruValue(player, totals),
           handicap: hcpForRound(player, round),
           gross: totals.total.completed ? totals.total.gross : null,
           net: totals.total.completed ? totals.total.net : null,
@@ -1328,14 +1436,13 @@
     $("#leaderboardBody").innerHTML = players.map((item) => {
       const tics = item.tics;
       const ledger = item.ledger;
-      const thru = item.sortValues.thru;
       const netClass = ledger.settledNet > 0 ? "is-positive" : ledger.settledNet < 0 ? "is-negative" : "";
       const netText = settledPointText(ledger.settledNet, settlement.complete);
       const rowClasses = [
         item.player.id === pointLeaderId ? "leader-row-leading" : "",
         item.player.id === pointLoserId ? "leader-row-trailing" : ""
       ].filter(Boolean).join(" ");
-      return `<tr class="${rowClasses}"><td>${playerNameHtml(item.player, item.index)}</td><td>${displayPlayingHandicap(hcpForRound(item.player, round))}</td><td>${item.player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.eagles}</td><td>${tics.birdies}</td><td>${tics.sandies}</td><td class="kp-count-column" title="KPs won">${tics.kps}</td><td>${tics.skins}</td><td>${tics.frontWeight}</td><td>${tics.backWeight}</td><td>${tics.totalNetWeight}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
+      return `<tr class="${rowClasses}"><td>${playerNameHtml(item.player, item.index)}</td><td>${displayPlayingHandicap(hcpForRound(item.player, round))}</td><td>${item.player.group}</td><td>${leaderboardThruText(item.player, item.totals)}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${tics.eagles}</td><td>${tics.birdies}</td><td>${tics.sandies}</td><td class="kp-count-column" title="KPs won">${tics.kps}</td><td>${tics.skins}</td><td>${tics.frontWeight}</td><td>${tics.backWeight}</td><td>${tics.totalNetWeight}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${netText}</td></tr>`;
     }).join("") + bccTipsRow(settlement, LEADERBOARD_COLUMNS.length);
     $("#leaderboardEmpty").hidden = players.length > 0;
     $(".leaderboard-wrap").hidden = players.length === 0;
@@ -1472,9 +1579,8 @@
       const totals = E.playerTotals(player, E.COURSE, roundState.settings, roundState.players);
       const tics = E.ticSummary(player, roundState.players, E.COURSE, roundState.settings);
       const ledger = ledgerByPlayer.get(player.id);
-      const thru = player.scores.filter(Boolean).length;
       const netClass = ledger.settledNet > 0 ? "is-positive" : ledger.settledNet < 0 ? "is-negative" : "";
-      return `<tr><td>${playerNameHtml(player, index)}</td><td>${displayPlayingHandicap(handicap)}</td><td>${player.group}</td><td>${thru === 18 ? "F" : thru}</td><td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td><td>${tics.eagles}</td><td>${tics.birdies}</td><td>${tics.sandies}</td><td class="kp-count-column" title="KPs won">${tics.kps}</td><td>${tics.skins}</td><td>${tics.frontWeight}</td><td>${tics.backWeight}</td><td>${tics.totalNetWeight}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${settledPointText(ledger.settledNet, settlement.complete)}</td></tr>`;
+      return `<tr><td>${playerNameHtml(player, index)}</td><td>${displayPlayingHandicap(handicap)}</td><td>${player.group}</td><td>${leaderboardThruText(player, totals)}</td><td>${complete(totals.total.gross, totals.total.completed)}</td><td>${complete(totals.total.net, totals.total.completed)}</td><td>${tics.eagles}</td><td>${tics.birdies}</td><td>${tics.sandies}</td><td class="kp-count-column" title="KPs won">${tics.kps}</td><td>${tics.skins}</td><td>${tics.frontWeight}</td><td>${tics.backWeight}</td><td>${tics.totalNetWeight}</td><td class="points-positive">${ledger.positive ? `+${ledger.positive.toFixed(1)}` : "0.0"}</td><td class="points-negative">${ledger.negative.toFixed(1)}</td><td class="points-net ${netClass}">${settledPointText(ledger.settledNet, settlement.complete)}</td></tr>`;
     }).join("") + bccTipsRow(settlement, 17);
   }
 
@@ -1974,6 +2080,8 @@
     $("#roundName").value = state.roundName;
     $("#roundDate").value = state.date;
     $("#allowance").value = state.settings.allowance;
+    const photoEmailInput = $("#photoEmailInput");
+    if (document.activeElement !== photoEmailInput) photoEmailInput.value = state.settings.photoEmail || "";
     const savedPlayerTee = $("#savedPlayerTee");
     const selectedSavedTee = savedPlayerTee.value || E.COURSE.defaultTee;
     savedPlayerTee.innerHTML = teeOptions(selectedSavedTee);
@@ -2317,8 +2425,7 @@
       const ledger = ledgerByPlayer.get(player.id) || { ...rawLedger, settledNet: rawLedger.net };
       const kpCode = E.kpCode(player, reportState.players, E.COURSE, reportState.settings, "kp");
       const kpmCode = E.kpCode(player, reportState.players, E.COURSE, reportState.settings, "marked");
-      const thru = player.scores.filter(Boolean).length;
-      return [nameOf(player, index), player.isGuest ? "Yes" : "No", player.inGame ? "Yes" : "No", player.group, thru === 18 ? "F" : thru, displayIndex(player.ghin), teeOf(player).name, displayPlayingHandicap(hcpForRound(player, reportState)), ...player.scores, totals.total.completed ? totals.total.gross : "", totals.total.completed ? totals.total.net : "", tics.birdies, tics.eagles, tics.skins, tics.frontWeight, tics.backWeight, tics.totalNetWeight, tics.sandies, kpCode, kpmCode, tics.total, tics.weightedTics, tics.pointsEarned.toFixed(1), ledger.positive.toFixed(1), ledger.negative.toFixed(1), ledger.net.toFixed(1), settledPointText(ledger.settledNet, settlement.complete, false)].map(csvCell).join(",");
+      return [nameOf(player, index), player.isGuest ? "Yes" : "No", player.inGame ? "Yes" : "No", player.group, leaderboardThruText(player, totals), displayIndex(player.ghin), teeOf(player).name, displayPlayingHandicap(hcpForRound(player, reportState)), ...player.scores, totals.total.completed ? totals.total.gross : "", totals.total.completed ? totals.total.net : "", tics.birdies, tics.eagles, tics.skins, tics.frontWeight, tics.backWeight, tics.totalNetWeight, tics.sandies, kpCode, kpmCode, tics.total, tics.weightedTics, tics.pointsEarned.toFixed(1), ledger.positive.toFixed(1), ledger.negative.toFixed(1), ledger.net.toFixed(1), settledPointText(ledger.settledNet, settlement.complete, false)].map(csvCell).join(",");
     });
     if (settlement.complete) {
       const collectRow = Array(headers.length).fill("");
@@ -2352,7 +2459,7 @@
     }).join("");
     const groupPlayersForReport = (group) => reportState.players.filter((player) => player.group === group);
     const groupTables = R.GROUPS.filter((group) => groupPlayersForReport(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>All tees use the standard Upper hole handicap ratings. Skin pops are capped at one stroke per hole, 1/2 on par 3s; Out, In, and Total net scores use each player's full HDCP. S marks a skin, KP marks the qualifying holder, KPM marks a claim that earned no tic, and an outlined KP is pending.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.slice(0, 9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>Out</th>${E.COURSE.holes.slice(9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>In</th><th>Total</th></tr></thead><tbody>${groupPlayersForReport(group).map((player) => { const totals = E.playerTotals(player, E.COURSE, reportState.settings, reportState.players); const front = scorecardSegment(player, totals.front, 0, 9); const back = scorecardSegment(player, totals.back, 9, 18); const total = scorecardSegment(player, totals.total, 0, 18); const cells = player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceivedFor(player, holeIndex, reportState))}</span>${scorecardIndicators(player, holeIndex, reportState)}</td>`); return `<tr class="${player.inGame ? "" : "score-only-row"}"><td>${esc(playerExportName(player, reportState.players.indexOf(player)))}</td>${cells.slice(0, 9).join("")}<td>${front.text}</td>${cells.slice(9).join("")}<td>${back.text}</td><td>${total.text}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
-    const leaders = rankedPlayers(reportState).map((item) => `<tr><td>${playerNameHtml(item.player, item.index)}</td><td>${displayPlayingHandicap(hcpForRound(item.player, reportState))}</td><td>${item.player.group}</td><td>${item.sortValues.thru === 18 ? "F" : item.sortValues.thru}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.eagles}</td><td>${item.tics.birdies}</td><td>${item.tics.sandies}</td><td class="kp-count-column">${item.tics.kps}</td><td>${item.tics.skins}</td><td>${item.tics.frontWeight}</td><td>${item.tics.backWeight}</td><td>${item.tics.totalNetWeight}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${settledPointText(item.ledger.settledNet, settlement.complete)}</td></tr>`).join("") + bccTipsRow(settlement, 17);
+    const leaders = rankedPlayers(reportState).map((item) => `<tr><td>${playerNameHtml(item.player, item.index)}</td><td>${displayPlayingHandicap(hcpForRound(item.player, reportState))}</td><td>${item.player.group}</td><td>${leaderboardThruText(item.player, item.totals)}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.eagles}</td><td>${item.tics.birdies}</td><td>${item.tics.sandies}</td><td class="kp-count-column">${item.tics.kps}</td><td>${item.tics.skins}</td><td>${item.tics.frontWeight}</td><td>${item.tics.backWeight}</td><td>${item.tics.totalNetWeight}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${settledPointText(item.ledger.settledNet, settlement.complete)}</td></tr>`).join("") + bccTipsRow(settlement, 17);
     $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(reportState.roundName)}</h1><p>${esc(reportState.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table class="leaderboard"><thead><tr><th>PLAYER</th><th>HCP</th><th>G</th><th>THRU</th><th>TOT</th><th>NET</th><th>E</th><th>B</th><th>SD</th><th class="kp-count-column">KP</th><th>S</th><th>FN</th><th>BN</th><th>TN</th><th>$+</th><th>$-</th><th>Net $</th></tr></thead><tbody>${leaders}</tbody></table><section class="print-leaderboard-legend"><h3>Leaderboard legend</h3><dl>${leaderboardLegendMarkup()}</dl></section><div class="print-columns"><section><h2>KPs</h2><table><thead><tr><th>Hole</th><th>KP</th><th>KPM</th></tr></thead><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
   }
 
@@ -2425,6 +2532,8 @@
   $("#advanceHoleBtnBottom").addEventListener("click", () => moveToHole(Math.min(18, selectedHole + 1), { skipMissingCheck: true }));
   $("#toggleScorecardBtn").addEventListener("click", () => { scorecardOpen = !scorecardOpen; updateScorecardVisibility(); });
   $("#hideScorecardBtn").addEventListener("click", () => { scorecardOpen = false; updateScorecardVisibility(); });
+  $("#holeCommentForm").addEventListener("submit", postHoleComment);
+  $("#photoEmailForm").addEventListener("submit", savePhotoEmail);
   $("#roundName").addEventListener("change", (event) => dispatch({ type: "SET_META", payload: { roundName: event.target.value } }));
   $("#roundDate").addEventListener("change", (event) => dispatch({ type: "SET_META", payload: { date: event.target.value } }));
   $("#allowance").addEventListener("change", (event) => dispatch({ type: "SET_ALLOWANCE", payload: { allowance: Number(event.target.value) } }));

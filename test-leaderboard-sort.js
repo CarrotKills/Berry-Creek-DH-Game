@@ -15,6 +15,13 @@ assert.deepEqual(Sort.sortItems(players, "net", "asc").map((item) => item.id), [
 assert.deepEqual(Sort.sortItems(players, "net", "desc").map((item) => item.id), ["b", "a", "c"]);
 assert.equal(Sort.compareValues(null, 5, "desc"), 1);
 
+const missingTwelve = { scores: Array.from({ length: 18 }, (_, index) => index === 11 ? "" : 4) };
+assert.equal(Sort.thruValue(missingTwelve, false), 18, "A player with Hole 18 entered has reached 18 even when an earlier score is missing");
+assert.equal(Sort.thruText(missingTwelve, false), 18, "An incomplete card must display 18 rather than F");
+assert.equal(Sort.thruText({ scores: Array(18).fill(4) }, true), "F", "Only a complete 18-hole card displays F");
+const throughThirteenWithTwelveMissing = { scores: Array.from({ length: 18 }, (_, index) => index < 11 || index === 12 ? 4 : "") };
+assert.equal(Sort.thruValue(throughThirteenWithTwelveMissing, false), 12, "Before Hole 18, THRU continues to show the number of entered scores");
+
 const pointItems = [
   { id: "flower", ledger: { settledNet: 6 }, totals: { total: { net: 70 } } },
   { id: "points-tie", ledger: { settledNet: 6 }, totals: { total: { net: 72 } } },

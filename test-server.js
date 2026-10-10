@@ -52,7 +52,7 @@ async function createPlayerLogin(playerId, username, pin) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.16.25");
+  assert.equal(config.appVersion, "9.16.28");
   assert.equal(config.adminSetupRequired, true);
   const emptyPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
   assert.equal(emptyPublicLeaderboard.source, "empty");
@@ -70,6 +70,12 @@ async function createPlayerLogin(playerId, username, pin) {
   assert.equal(firstAdmin.admin.name, "Alice Admin");
   assert.equal(firstAdmin.admin.username, "alice.admin");
   adminPin = "1357";
+  const unauthorizedPhotoEmail = await fetch(`${base}/api/action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "SET_PHOTO_EMAIL", payload: { email: "photos@example.com" } }) });
+  assert.equal(unauthorizedPhotoEmail.status, 401);
+  await action("SET_PHOTO_EMAIL", { email: "not-an-email" }, { status: 400 });
+  await action("SET_PHOTO_EMAIL", { email: " Photos@Example.com " });
+  const photoEmailState = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(photoEmailState.settings.photoEmail, "photos@example.com");
   const disabledSetupPin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: "2468" }) });
   assert.equal(disabledSetupPin.status, 401);
   const aliceLogin = await fetch(`${base}/api/admin/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: adminPin }) });
@@ -192,6 +198,7 @@ async function createPlayerLogin(playerId, username, pin) {
   await action("CLEAR_ROUND");
   const clearedState = await (await fetch(`${base}/api/state`)).json();
   assert.notEqual(clearedState.roundId, priorRoundState.roundId);
+  assert.equal(clearedState.settings.photoEmail, "photos@example.com");
   const currentTokenResponse = await fetch(`${base}/api/share-tokens`, { headers: { "X-Admin-Pin": adminPin } });
   scoreTokens = (await currentTokenResponse.json()).tokens;
   assert.notEqual(scoreTokens.A, priorTokens.A);
@@ -236,6 +243,18 @@ async function createPlayerLogin(playerId, username, pin) {
   assert.equal(activePublicLeaderboard.state.players.length, 2);
   const liveALogin = await (await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "live.a", pin: "123456" }) })).json();
   const liveBLogin = await (await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: "live.b", pin: "654321" }) })).json();
+  await action("ADD_HOLE_COMMENT", { hole: 6, text: "Anonymous comment" }, { status: 401 });
+  await action("ADD_HOLE_COMMENT", { hole: 6, text: "Play one extra club.", authorName: "Spoofed Name", authorGroup: "A" }, { group: "B", authToken: liveBLogin.token });
+  let commentState = await (await fetch(`${base}/api/state`)).json();
+  const sharedComment = commentState.holeComments.find((comment) => comment.hole === 6);
+  assert.equal(sharedComment.text, "Play one extra club.");
+  assert.equal(sharedComment.authorName, "Live B");
+  assert.equal(sharedComment.authorGroup, "B");
+  assert.equal(sharedComment.authorRole, "player");
+  await action("DELETE_HOLE_COMMENT", { commentId: sharedComment.id }, { group: "A", authToken: liveALogin.token, status: 403 });
+  await action("DELETE_HOLE_COMMENT", { commentId: sharedComment.id }, { group: "B", authToken: liveBLogin.token });
+  commentState = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(commentState.holeComments.some((comment) => comment.id === sharedComment.id), false);
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 17, score: 4, expectedScore: "" }, { group: "A", authToken: liveALogin.token, noToken: true, status: 403 });
   await action("SET_SCOREKEEPER", { group: "A", playerId: "live-a" }, { group: "A", authToken: liveALogin.token });
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 17, score: 4, expectedScore: "" }, { group: "A", authToken: liveALogin.token, noToken: true });
@@ -315,6 +334,7 @@ async function createPlayerLogin(playerId, username, pin) {
   await fetch(`${base}/api/rounds/${savedRound.id}`, { method: "DELETE", headers: { "X-Admin-Pin": adminPin } });
   await action("SET_LOCKED", { locked: true });
   await action("SET_SCORE", { playerId: "live-a", holeIndex: 1, score: 3 }, { group: "A", status: 423 });
+  await action("SET_PHOTO_EMAIL", { email: "locked-photos@example.com" });
   await action("SET_LOCKED", { locked: false });
   await action("RESET_SCORES");
   const resetState = await (await fetch(`${base}/api/state`)).json();
@@ -346,6 +366,7 @@ async function createPlayerLogin(playerId, username, pin) {
   const newRoundState = await (await fetch(`${base}/api/state`)).json();
   assert.equal(newRoundState.players.length, 0);
   assert.equal(newRoundState.settings.locked, false);
+  assert.equal(newRoundState.settings.photoEmail, "locked-photos@example.com");
   const savedPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
   assert.equal(savedPublicLeaderboard.source, "saved");
   assert.equal(savedPublicLeaderboard.savedRoundId, latestRound.id);

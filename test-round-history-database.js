@@ -13,6 +13,7 @@ state.date = "2026-09-02";
 const incompleteState = R.applyAction(state, { type: "ADD_PLAYER", payload: { player: { id: "incomplete", name: "Incomplete Golfer", group: "A" } } });
 assert.throws(() => database.create(incompleteState), /Complete every player's 18-hole scorecard/);
 state = R.applyAction(state, { type: "ADD_PLAYER", payload: { player: { id: "p1", name: "Test Golfer", group: "A", scores: Array(18).fill(4) } } });
+state = R.applyAction(state, { type: "ADD_HOLE_COMMENT", payload: { comment: { id: "history-comment", hole: 9, text: "Saved with the round.", authorAccountId: "history-account", authorName: "Test Golfer", authorGroup: "A", createdAt: "2026-10-10T14:00:00.000Z" } } });
 
 const saved = database.create(state);
 assert.equal(saved.roundName, "History Test");
@@ -20,6 +21,7 @@ assert.equal(saved.roundId, state.roundId);
 assert.equal(saved.playerCount, 1);
 assert.equal(saved.completed, true);
 assert.equal(saved.state.players[0].scores.length, 18);
+assert.equal(saved.state.holeComments[0].text, "Saved with the round.");
 assert.equal(database.list().length, 1);
 assert.equal(database.list()[0].roundId, state.roundId);
 assert.equal(database.find(saved.id).state.players[0].name, "Test Golfer");

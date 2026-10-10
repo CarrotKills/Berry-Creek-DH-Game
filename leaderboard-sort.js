@@ -31,6 +31,20 @@
     }).map((entry) => entry.item);
   }
 
+  function scoreEntered(score) {
+    return score !== "" && score !== null && score !== undefined;
+  }
+
+  function thruValue(player, completed = false) {
+    const scores = Array.isArray(player?.scores) ? player.scores : [];
+    if (completed || scoreEntered(scores[17])) return 18;
+    return scores.filter(scoreEntered).length;
+  }
+
+  function thruText(player, completed = false) {
+    return completed ? "F" : thruValue(player, false);
+  }
+
   function pointMarkerIds(items) {
     const entries = items.map((item) => ({
       id: item.player?.id ?? item.id,
@@ -55,5 +69,5 @@
     };
   }
 
-  return { compareValues, sortItems, pointMarkerIds };
+  return { compareValues, sortItems, thruValue, thruText, pointMarkerIds };
 });

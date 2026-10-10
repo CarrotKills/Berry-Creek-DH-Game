@@ -12,6 +12,7 @@ assert.equal(new Set(ids).size, ids.length, "Every element id must be unique");
 
 assert.match(html, /id="mobileScoringDock"/);
 assert.match(html, /id="mobileScoringStatus"/);
+assert.match(html, /id="mobileMissingScoresReminder"[^>]+role="alert"/);
 assert.match(html, /id="mobilePrevHoleBtn"/);
 assert.match(html, /id="mobileHoleSelect"/);
 assert.match(html, /id="mobileNextHoleBtn"/);
@@ -33,6 +34,7 @@ assert.match(app, /navigator\.vibrate\(12\)/);
 
 assert.match(css, /\.mobile-scoring-dock \{ display: none; \}/);
 assert.match(css, /\.mobile-scoring-dock \{ position: fixed; right: 0; bottom: 0; left: 0;/);
+assert.match(css, /\.mobile-missing-scores-reminder \{[^}]*background: var\(--danger\)/s);
 assert.match(css, /env\(safe-area-inset-bottom\)/);
 assert.match(css, /\.app-header \{ position: sticky; top: 0; z-index: 40;/);
 assert.match(css, /\.tabs \{ top: var\(--app-header-height, 0px\); z-index: 35;/);
