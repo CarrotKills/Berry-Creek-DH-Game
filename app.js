@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.16.30";
+  const APP_VERSION = "9.17.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -246,6 +246,59 @@
     toast.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { toast.hidden = true; }, 4200);
+  }
+
+  function scoreStateIcon(kind) {
+    if (kind === "saved") return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10"/></svg>';
+    if (kind === "pending") return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+    if (kind === "error") return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/></svg>';
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>';
+  }
+
+  function renderRoundIdentity() {
+    const bar = $("#roundIdentityBar");
+    if (!bar) return;
+    const activeView = document.body.dataset.activeView || "score";
+    const shownRound = activeView === "leaderboard" ? leaderboardRound() : state;
+    const savedResults = activeView === "leaderboard" && leaderboardIsSaved();
+    const playerCount = shownRound.players.length;
+    const groupCount = new Set(shownRound.players.map((player) => player.group)).size;
+    const contexts = {
+      setup: `${playerCount} player${playerCount === 1 ? "" : "s"} · ${groupCount} active group${groupCount === 1 ? "" : "s"}`,
+      score: `Group ${selectedGroup} · Hole ${selectedHole}`,
+      leaderboard: `${savedResults ? "Saved standings" : "All groups"} · ${playerCount} player${playerCount === 1 ? "" : "s"}`,
+      tournament: `Event controls · ${playerCount} player${playerCount === 1 ? "" : "s"}`
+    };
+    $("#roundIdentityName").textContent = shownRound.roundName || "Berry Creek Round";
+    $("#roundIdentityDate").textContent = shownRound.date ? displayRosterDate(shownRound.date) : "";
+    $("#roundIdentityContext").textContent = contexts[activeView] || contexts.score;
+    const stateLabel = savedResults ? "Saved Round" : isLocked() ? "Round Locked" : "Round Active";
+    const stateEl = $("#roundIdentityState");
+    stateEl.lastChild.textContent = stateLabel;
+    stateEl.classList.toggle("is-locked", savedResults || isLocked());
+  }
+
+  function updateScrollAffordance(surface) {
+    const shell = surface.closest(".horizontal-scroll-shell");
+    if (!shell) return;
+    const overflow = surface.scrollWidth > surface.clientWidth + 4;
+    shell.classList.toggle("can-scroll-left", overflow && surface.scrollLeft > 5);
+    shell.classList.toggle("can-scroll-right", overflow && surface.scrollLeft + surface.clientWidth < surface.scrollWidth - 5);
+  }
+
+  function updateScrollAffordances() {
+    document.querySelectorAll("[data-scroll-surface]").forEach(updateScrollAffordance);
+  }
+
+  function setupScrollAffordances() {
+    document.querySelectorAll("[data-scroll-surface]").forEach((surface) => {
+      surface.addEventListener("scroll", () => updateScrollAffordance(surface), { passive: true });
+    });
+    if (typeof ResizeObserver === "function") {
+      const observer = new ResizeObserver((entries) => entries.forEach((entry) => updateScrollAffordance(entry.target)));
+      document.querySelectorAll("[data-scroll-surface]").forEach((surface) => observer.observe(surface));
+    }
+    window.addEventListener("resize", updateScrollAffordances);
   }
 
   function setConnection(mode) {
@@ -1148,14 +1201,17 @@
       const kpDisabled = disabled || player.sandies[index] ? "disabled" : "";
       const syncState = scoreSyncStatus.get(scoreSyncKey(player.id, index));
       const syncLabel = { saving: "Saving…", pending: "Waiting to sync", synced: "Saved", error: "Sync problem" }[syncState] || "";
+      const scoreEntered = gross !== "" && gross !== null && gross !== undefined;
+      const scoreVisualState = syncState === "error" ? "error" : syncState === "saving" || syncState === "pending" ? "pending" : scoreEntered ? "saved" : "missing";
+      const scoreStateLabel = { saved: "Saved", pending: "Saving", error: "Check", missing: "Missing" }[scoreVisualState];
       const touch = touchFeedback.get(player.id);
       const feedbackKind = touch?.kind || (syncState === "synced" ? "success" : syncState === "error" ? "error" : syncState === "saving" || syncState === "pending" ? "pending" : "");
       const scorekeeperId = state.settings.scorekeepers[selectedGroup] || "";
       const signedInPlayer = currentRoundPlayer();
       const canChangeScorekeeper = adminUnlocked || (signedInPlayer?.group === selectedGroup && (!scorekeeperId || scorekeeperId === signedInPlayer.id));
       const achievementClass = achievement ? `achievement-tic achievement-tic--${achievement.toLowerCase()}` : "";
-      return `<article class="group-score-card ${competitive ? "" : "is-score-only"} ${feedbackKind ? `touch-feedback--${feedbackKind}` : ""}" data-player-id="${player.id}">
-        <header class="score-card-header"><div class="score-player"><div class="score-player-heading"><label class="scorekeeper-toggle" title="Group scorekeeper"><input data-kind="scorekeeper" type="checkbox" ${scorekeeperId === player.id ? "checked" : ""} ${canChangeScorekeeper ? "" : "disabled"}>SK</label><strong>${playerNameHtml(player, state.players.indexOf(player))}</strong></div><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${skinPops > 0 ? `gets ${skinPops === 0.5 ? "1/2" : skinPops}` : skinPops < 0 ? `gives ${Math.abs(skinPops) === 0.5 ? "1/2" : Math.abs(skinPops)}` : "no stroke"}</span>${competitive ? "" : '<span class="score-only-note">Not in the game · score only</span>'}</div><span class="score-group-pill">Group ${player.group}</span></header>
+      return `<article class="group-score-card score-${scoreVisualState} ${competitive ? "" : "is-score-only"} ${feedbackKind ? `touch-feedback--${feedbackKind}` : ""}" data-player-id="${player.id}">
+        <header class="score-card-header"><div class="score-player"><div class="score-player-heading"><label class="scorekeeper-toggle" title="Group scorekeeper"><input data-kind="scorekeeper" type="checkbox" ${scorekeeperId === player.id ? "checked" : ""} ${canChangeScorekeeper ? "" : "disabled"}>SK</label><strong>${playerNameHtml(player, state.players.indexOf(player))}</strong></div><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${skinPops > 0 ? `gets ${skinPops === 0.5 ? "1/2" : skinPops}` : skinPops < 0 ? `gives ${Math.abs(skinPops) === 0.5 ? "1/2" : Math.abs(skinPops)}` : "no stroke"}</span>${competitive ? "" : '<span class="score-only-note">Not in the game · score only</span>'}</div><div class="score-card-meta"><span class="score-state-badge is-${scoreVisualState}">${scoreStateIcon(scoreVisualState)}${scoreStateLabel}</span><span class="score-group-pill">Group ${player.group}</span></div></header>
         <div class="score-entry-wrap"><div class="score-stepper"><button type="button" data-delta="-1" ${disabled} aria-label="Decrease score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" ${disabled} aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" ${disabled} aria-label="Increase score">+</button></div>${syncLabel ? `<span class="score-sync score-sync--${syncState}" role="status">${syncLabel}</span>` : ""}</div>
         <div class="net-box"><span>Match net</span><strong>${net ?? "—"}</strong></div>
         <div class="card-tics">${achievement ? `<span class="auto-tic ${achievementClass}">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic skin-tic">Skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle sandy-toggle" title="${hasKp ? "Remove KP before marking a Sandy" : "Mark Sandy"}"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${sandyDisabled}>Sandy</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle" title="${player.sandies[index] ? "Remove Sandy before marking KP" : "Mark KP"}"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${kpDisabled}>KP</label>` : ""}${kpNote}</div>
@@ -1175,6 +1231,8 @@
     list.hidden = players.length === 0;
     renderGroupScorecard(players);
     updateScorecardVisibility();
+    renderRoundIdentity();
+    requestAnimationFrame(updateScrollAffordances);
   }
 
   function priorMissingScoreReminder(players) {
@@ -1448,6 +1506,8 @@
       $("#leaderboardBody").innerHTML = Array.from({ length: 5 }, () => `<tr class="skeleton-table-row" aria-hidden="true">${Array.from({ length: LEADERBOARD_COLUMNS.length }, () => '<td><span class="skeleton-block"></span></td>').join("")}</tr>`).join("");
       $("#leaderboardEmpty").hidden = true;
       $(".leaderboard-wrap").hidden = false;
+      renderRoundIdentity();
+      requestAnimationFrame(updateScrollAffordances);
       return;
     }
     const settlement = E.pointsSettlement(round.players, E.COURSE, round.settings);
@@ -1478,6 +1538,8 @@
     }).join("") + bccTipsRow(settlement, LEADERBOARD_COLUMNS.length);
     $("#leaderboardEmpty").hidden = players.length > 0;
     $(".leaderboard-wrap").hidden = players.length === 0;
+    renderRoundIdentity();
+    requestAnimationFrame(updateScrollAffordances);
   }
 
   function groupScoringUrl(group) {
@@ -1656,6 +1718,7 @@
       $("#exportAllSavedRoundJpegsBtn").disabled = groups.length === 0;
       $("#exportAllSavedRoundPdfBtn").disabled = groups.length === 0;
       $("#savedRoundDialog").showModal();
+      requestAnimationFrame(updateScrollAffordances);
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -1685,7 +1748,8 @@
       const position = !players.length ? "No players" : completedHoles === 18 ? "Complete" : `Hole ${currentIndex + 1} · ${missing} missing`;
       const scorekeeper = players.find((player) => player.id === state.settings.scorekeepers[group]);
       const scorekeeperText = !players.length ? "No scorekeeper needed" : scorekeeper ? `Scorekeeper: ${nameOf(scorekeeper, state.players.indexOf(scorekeeper))}` : "Scorekeeper: Not assigned";
-      return `<article class="group-progress-card ${completedHoles === 18 ? "is-complete" : ""}"><div class="group-progress-heading"><strong>Group ${group}</strong><span class="presence-label ${connected ? "is-connected" : ""}"><span class="status-dot"></span>${connected ? `${connected} connected` : "Not connected"}</span></div><div class="group-scorekeeper-status ${players.length && !scorekeeper ? "is-unassigned" : ""}">${esc(scorekeeperText)}</div><div class="group-progress-meta"><span>${players.length}/5 players</span><span>${position}</span></div><div class="progress-track" aria-label="${completedHoles} of 18 holes complete"><span style="width:${(completedHoles / 18) * 100}%"></span></div><small>${completedHoles}/18 holes · ${esc(lastUpdate)}</small></article>`;
+      const progress = Math.round((completedHoles / 18) * 100);
+      return `<article class="group-progress-card ${completedHoles === 18 ? "is-complete" : ""}"><div class="group-progress-heading"><strong>Group ${group}</strong><span class="presence-label ${connected ? "is-connected" : ""}"><span class="status-dot"></span>${connected ? `${connected} connected` : "Not connected"}</span></div><div class="group-scorekeeper-status ${players.length && !scorekeeper ? "is-unassigned" : ""}">${esc(scorekeeperText)}</div><div class="group-progress-body"><div class="group-progress-ring" style="--progress:${progress}" role="img" aria-label="${completedHoles} of 18 holes complete"><span class="group-progress-ring-value">${completedHoles}<small>/18</small></span></div><div class="group-progress-details"><div class="group-progress-meta"><span>${players.length}/5 players</span><span>${position}</span></div><small>${esc(lastUpdate)}</small></div></div></article>`;
     }).join("");
   }
 
@@ -2061,9 +2125,11 @@
       ? saved ? "The round is locked and saved. Scorecards and results remain available to view." : "The round is locked but has not yet been saved."
       : "The round is active and open for live scoring.";
     $("#toggleRoundLockBtn").textContent = locked ? "Unlock round" : "Lock & Save Round";
+    $("#toggleRoundLockBtn").dataset.icon = locked ? "unlock" : "lock";
     $("#toggleRoundLockBtn").classList.toggle("button-danger", !locked);
     $("#toggleRoundLockBtn").classList.toggle("button-primary", locked);
     $("#saveRoundBtn").textContent = saved ? "Round Saved" : "Save Round";
+    $("#saveRoundBtn").dataset.icon = "save";
     $("#saveRoundStatusText").textContent = saved
       ? "This locked round is preserved in historical reference."
       : complete
@@ -2131,6 +2197,8 @@
     renderLeaderboard();
     renderTournament();
     renderAdminState();
+    renderRoundIdentity();
+    requestAnimationFrame(updateScrollAffordances);
   }
 
   function switchView(name) {
@@ -2147,6 +2215,8 @@
     });
     document.body.classList.toggle("score-view-active", name === "score");
     document.body.dataset.activeView = name;
+    renderRoundIdentity();
+    requestAnimationFrame(updateScrollAffordances);
     scheduleHeaderLayout();
     updateLeaderboardWakeLock();
   }
@@ -2668,6 +2738,7 @@
   if (typeof ResizeObserver === "function") new ResizeObserver(scheduleHeaderLayout).observe($(".app-header"));
 
   document.body.dataset.display = preferences.display;
+  setupScrollAffordances();
   scheduleHeaderLayout();
   $("#appVersion").textContent = `Version ${APP_VERSION}`;
   $("#footerVersionBtn").textContent = `App v${APP_VERSION}`;
