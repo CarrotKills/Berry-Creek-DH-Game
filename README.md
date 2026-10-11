@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Version 9.17.3 makes **Send with Gmail** prefer the installed Gmail app on iPhone, iPad, and Android. The recipient, subject, and message are passed directly to Gmail; if Gmail is unavailable, the app falls back to Gmail's browser composer.
+
 Version 9.17.2 adds a dedicated **Send with Gmail** option for hole photos. It opens a pre-addressed Gmail draft with the round, date, hole, and viewed group filled in, while preserving the original default-email option.
 
 Version 9.17.1 keeps the selected hole's shared comments visible directly on the Scoring page, independent of the expandable group scorecard. The section also invites players to share hole stories that may appear in the Gazette.

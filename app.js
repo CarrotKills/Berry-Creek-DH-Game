@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.17.2";
+  const APP_VERSION = "9.17.3";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -1320,6 +1320,38 @@
     return Boolean(currentUser && (currentUser.role === "admin" || (comment.authorAccountId === currentUser.id && comment.authorRole === currentUser.role)));
   }
 
+  function gmailComposeTargets(email, subject, body) {
+    const appParams = new URLSearchParams({ to: email, subject, body });
+    const webParams = new URLSearchParams({ view: "cm", fs: "1", to: email, su: subject, body });
+    const web = `https://mail.google.com/mail/?${webParams.toString()}`;
+    const agent = navigator.userAgent || "";
+    if (/iPad|iPhone|iPod/.test(agent)) return { native: `googlegmail:///co?${appParams.toString()}`, web, platform: "ios" };
+    if (/Android/i.test(agent)) {
+      const fallback = encodeURIComponent(web);
+      return { native: `intent://co?${appParams.toString()}#Intent;scheme=googlegmail;package=com.google.android.gm;S.browser_fallback_url=${fallback};end`, web, platform: "android" };
+    }
+    return { native: web, web, platform: "web" };
+  }
+
+  function openGmailCompose(event, targets) {
+    if (targets.platform === "web") return;
+    event.preventDefault();
+    if (targets.platform === "android") {
+      window.location.href = targets.native;
+      return;
+    }
+    let appOpened = false;
+    const markAppOpened = () => {
+      if (document.hidden) appOpened = true;
+    };
+    document.addEventListener("visibilitychange", markAppOpened, { once: true });
+    window.location.href = targets.native;
+    window.setTimeout(() => {
+      document.removeEventListener("visibilitychange", markAppOpened);
+      if (!appOpened && !document.hidden) window.location.href = targets.web;
+    }, 1200);
+  }
+
   function renderHoleComments() {
     const comments = (state.holeComments || []).filter((comment) => comment.hole === selectedHole).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
     $("#holeCommentsTitle").textContent = `Hole ${selectedHole} comments`;
@@ -1350,8 +1382,10 @@
       const body = `Round: ${state.roundName}\nDate: ${state.date}\nHole: ${selectedHole}\nGroup viewed: ${selectedGroup}\n\nPlease attach the photo before sending.`;
       photoLink.href = `mailto:${photoEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       photoLink.textContent = `Email a photo for Hole ${selectedHole}`;
-      const gmailParams = new URLSearchParams({ view: "cm", fs: "1", to: photoEmail, su: subject, body });
-      gmailLink.href = `https://mail.google.com/mail/?${gmailParams.toString()}`;
+      const gmailTargets = gmailComposeTargets(photoEmail, subject, body);
+      gmailLink.href = gmailTargets.native;
+      gmailLink.target = gmailTargets.platform === "web" ? "_blank" : "_self";
+      gmailLink.onclick = (event) => openGmailCompose(event, gmailTargets);
     }
     document.querySelectorAll(".delete-hole-comment").forEach((button) => button.addEventListener("click", () => deleteHoleComment(button.dataset.commentId)));
   }

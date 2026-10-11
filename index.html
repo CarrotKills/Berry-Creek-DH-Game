@@ -10,14 +10,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Berry Creek DH Game</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" sizes="180x180" href="app-icon-180.png?v=9.17.2">
-  <link rel="icon" type="image/png" sizes="32x32" href="app-icon-32.png?v=9.17.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="app-icon-180.png?v=9.17.3">
+  <link rel="icon" type="image/png" sizes="32x32" href="app-icon-32.png?v=9.17.3">
   <link rel="preload" href="eagle-call.wav" as="audio" type="audio/wav">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body data-display="normal">
   <header class="app-header">
-    <div class="brand-lockup"><img class="club-logo" src="app-icon-master.png?v=9.17.2" alt="DH Game golfing character"><div><p class="eyebrow">Live tournament scoring</p><h1>Berry Creek DH Game</h1><span class="compact-app-title" aria-hidden="true">DH Game</span></div></div>
+    <div class="brand-lockup"><img class="club-logo" src="app-icon-master.png?v=9.17.3" alt="DH Game golfing character"><div><p class="eyebrow">Live tournament scoring</p><h1>Berry Creek DH Game</h1><span class="compact-app-title" aria-hidden="true">DH Game</span></div></div>
     <div class="header-actions">
       <span id="spectatorStatus" class="status-pill viewer-pill" hidden>Live leaderboard · View only</span>
       <span id="lockStatus" class="status-pill lock-pill is-active">Round Active</span>
@@ -143,7 +143,7 @@
         <details id="savedRoundsArchive" class="saved-rounds-archive"><summary><span class="archive-folder-icon" aria-hidden="true"></span><span class="archive-folder-copy"><strong>Saved Rounds Archive</strong><span id="savedRoundsStatus" aria-live="polite">Loading saved rounds…</span></span><span class="archive-open-label" aria-hidden="true">Open</span></summary><div id="savedRoundsList" class="saved-rounds-list"></div></details>
         <div class="historical-tools">
           <article class="control-card"><h3>Complete backups</h3><p>Download or restore the active round, saved-player database, and all historical rounds in one file.</p><div class="tool-row"><button id="completeBackupBtn" class="button button-primary admin-control" data-icon="download" type="button">Download complete backup</button><label class="button button-quiet file-button admin-only-label" data-icon="upload">Restore complete backup<input id="completeRestoreInput" class="admin-control" type="file" accept="application/json"></label></div></article>
-          <article class="control-card"><h3>App version</h3><p><strong id="appVersion">Version 9.17.2</strong><br><span id="versionStatus">Updates are checked automatically when the app opens.</span></p></article>
+          <article class="control-card"><h3>App version</h3><p><strong id="appVersion">Version 9.17.3</strong><br><span id="versionStatus">Updates are checked automatically when the app opens.</span></p></article>
         </div>
       </section>
 
@@ -154,7 +154,7 @@
   </main>
 
   <section id="printReport" class="print-report" aria-hidden="true"></section>
-  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Connecting to shared scoring…</span><a class="text-button help-documentation-link" href="https://docs.google.com/document/d/1xvEjR70nWH3zNVUma9CtlUr99HZ9q_IY30uq_0Z7_uE/edit?tab=t.0#heading=h.yxw78wa44d8" target="_blank" rel="noopener noreferrer">Help Documentation</a><button id="footerVersionBtn" class="text-button" type="button">App v9.17.2</button></footer>
+  <footer><span>Current Berry Creek card · Six groups of five</span><span id="connectionFoot">Connecting to shared scoring…</span><a class="text-button help-documentation-link" href="https://docs.google.com/document/d/1xvEjR70nWH3zNVUma9CtlUr99HZ9q_IY30uq_0Z7_uE/edit?tab=t.0#heading=h.yxw78wa44d8" target="_blank" rel="noopener noreferrer">Help Documentation</a><button id="footerVersionBtn" class="text-button" type="button">App v9.17.3</button></footer>
 
   <dialog id="adminDialog"><form method="dialog"><h2>Sign in</h2><p>Players and admins use the same login. Players can browse every group; only a group's selected scorekeeper can enter its scores.</p><label>Username (first.last; e.g. John.Smith)<input id="loginUsernameInput" type="text" minlength="3" maxlength="30" autocomplete="username" placeholder="Existing admins may leave blank once"></label><label>Private PIN<input id="adminPinInput" type="password" inputmode="numeric" autocomplete="current-password" maxlength="10"></label><p id="adminError" class="validation" role="alert" hidden></p><div class="dialog-actions"><button class="button button-quiet" value="cancel">Cancel</button><button id="adminSubmitBtn" class="button button-primary" value="unlock">Sign in</button></div></form></dialog>
   <dialog id="adminInviteDialog"><form id="acceptAdminInviteForm"><h2>Create your admin access</h2><p>Enter your name exactly as it appears in GHIN and choose a private PIN. Your login username will be assigned as first.last. The person who sent this link cannot see your PIN.</p><label>Name (match GHIN)<input id="invitedAdminName" type="text" maxlength="40" autocomplete="name" required></label><label>Choose a PIN<input id="invitedAdminPin" type="password" inputmode="numeric" minlength="4" maxlength="10" pattern="[0-9]{4,10}" autocomplete="new-password" required></label><label>Confirm PIN<input id="invitedAdminPinConfirm" type="password" inputmode="numeric" minlength="4" maxlength="10" pattern="[0-9]{4,10}" autocomplete="new-password" required></label><p id="adminInviteError" class="validation" role="alert" hidden></p><div class="dialog-actions"><button id="cancelAdminInviteBtn" class="button button-quiet" type="button">Cancel</button><button id="acceptAdminInviteBtn" class="button button-primary" type="submit">Create admin access</button></div></form></dialog>
