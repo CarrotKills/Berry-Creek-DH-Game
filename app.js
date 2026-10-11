@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.17.1";
+  const APP_VERSION = "9.17.2";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -1343,12 +1343,15 @@
     const photoEmail = String(state.settings.photoEmail || "").trim();
     const photoAction = $("#holePhotoEmailAction");
     const photoLink = $("#emailHolePhotoLink");
+    const gmailLink = $("#gmailHolePhotoLink");
     photoAction.hidden = !photoEmail;
     if (photoEmail) {
       const subject = `${state.roundName} · Hole ${selectedHole} photo`;
       const body = `Round: ${state.roundName}\nDate: ${state.date}\nHole: ${selectedHole}\nGroup viewed: ${selectedGroup}\n\nPlease attach the photo before sending.`;
       photoLink.href = `mailto:${photoEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       photoLink.textContent = `Email a photo for Hole ${selectedHole}`;
+      const gmailParams = new URLSearchParams({ view: "cm", fs: "1", to: photoEmail, su: subject, body });
+      gmailLink.href = `https://mail.google.com/mail/?${gmailParams.toString()}`;
     }
     document.querySelectorAll(".delete-hole-comment").forEach((button) => button.addEventListener("click", () => deleteHoleComment(button.dataset.commentId)));
   }

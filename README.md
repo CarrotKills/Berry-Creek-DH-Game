@@ -1,10 +1,12 @@
 # Berry Creek DH Game
 
+Version 9.17.2 adds a dedicated **Send with Gmail** option for hole photos. It opens a pre-addressed Gmail draft with the round, date, hole, and viewed group filled in, while preserving the original default-email option.
+
 Version 9.17.1 keeps the selected hole's shared comments visible directly on the Scoring page, independent of the expandable group scorecard. The section also invites players to share hole stories that may appear in the Gazette.
 
 Version 9.17.0 completes the next phone-first aesthetic phase. A live-round identity strip keeps the round, date, selected group or view, and lock state visible; wide scorecards and leaderboards show swipe cues and keep their headings and player names in view. Group status uses compact 18-hole progress rings, scoring cards visibly distinguish saved, pending, missing, and failed entries, and important confirmation windows now use clearer hierarchy and action-specific styling. Matching SVG icons and refined typography replace the remaining inconsistent action symbols without changing scoring rules or saved data.
 
-Admins can configure one photo email address in Settings. When it is set, the always-visible Hole Comments section on the Scoring page shows an **Email a photo for Hole X** link. The link opens the viewer's device email app with the round, date, group being viewed, and hole already identified; the sender only needs to attach the photo. The address remains configured when scores are reset, a saved roster is reused, or a new round is started, and no image files are stored by the app.
+Admins can configure one photo email address in Settings. When it is set, the always-visible Hole Comments section on the Scoring page offers both **Email a photo for Hole X** and **Send with Gmail**. Each option opens a pre-addressed draft with the round, date, group being viewed, and hole already identified; the sender only needs to attach the photo. The address remains configured when scores are reset, a saved roster is reused, or a new round is started, and no image files are stored by the app.
 
 THRU now reserves `F` for a player whose complete 18-hole scorecard is present. A player who reaches Hole 18 with any earlier score missing displays `18` instead. Once a group moves beyond a missing score, its active scorekeeper sees a persistent reminder naming each affected player and hole on the scoring page and in the phone's sticky scoring controls until the gaps are corrected.
 

@@ -22,8 +22,10 @@ assert.ok(html.indexOf('id="holeCommentsTitle"') < html.indexOf('id="groupScorec
 assert.doesNotMatch(html.slice(html.indexOf('id="groupScorecardPanel"'), html.indexOf('id="mobileScoringDock"')), /id="holeCommentsTitle"/);
 assert.match(html, /Shared across every group/);
 assert.match(html, /If you have a story on this hole that you'd like to share and have it potentially appear in the Gazette, add it here!/);
+assert.match(fs.readFileSync("styles.css", "utf8"), /\.hole-comments-description \{[^}]*font-size: 0\.96rem;[^}]*font-weight: 800;/);
 assert.match(html, /id="holeCommentInput"[^>]+maxlength="500"/);
 assert.match(html, /id="emailHolePhotoLink"[^>]*>Email a photo for Hole 1</);
+assert.match(html, /id="gmailHolePhotoLink"[^>]+target="_blank"[^>]*>Send with Gmail</);
 assert.match(html, /id="photoEmailInput"[^>]+type="email"/);
 assert.match(html, /id="photoEmailForm"/);
 assert.match(html, /id="priorMissingScoresNotice"[^>]+role="alert"/);
@@ -55,6 +57,7 @@ assert.match(app, /type: "ADD_HOLE_COMMENT"/);
 assert.match(app, /type: "DELETE_HOLE_COMMENT"/);
 assert.match(app, /Sign in to leave a comment\./);
 assert.match(app, /mailto:\$\{photoEmail\}\?subject=/);
+assert.match(app, /https:\/\/mail\.google\.com\/mail\/\?\$\{gmailParams\.toString\(\)\}/);
 assert.match(app, /Please attach the photo before sending\./);
 assert.match(app, /type: "SET_PHOTO_EMAIL"/);
 assert.match(app, /function priorMissingScoreReminder\(players\)/);
