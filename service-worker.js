@@ -1,5 +1,5 @@
-const CACHE = "berry-creek-dh-game-v9-17-0";
-const ASSETS = ["./", "./index.html", "./styles.css", "./score-engine.js", "./round-state.js", "./leaderboard-sort.js", "./scorecard-export.js", "./app.js", "./manifest.webmanifest", "./version.json", "./app-icon-master.png?v=9.17.0", "./berry-creek-leader-flower.png", "./eagle-call.wav", "./app-icon-32.png?v=9.17.0", "./app-icon-180.png?v=9.17.0", "./app-icon-192.png?v=9.17.0", "./app-icon-512.png?v=9.17.0"];
+const CACHE = "berry-creek-dh-game-v9-17-1";
+const ASSETS = ["./", "./index.html", "./styles.css", "./score-engine.js", "./round-state.js", "./leaderboard-sort.js", "./scorecard-export.js", "./app.js", "./manifest.webmanifest", "./version.json", "./app-icon-master.png?v=9.17.1", "./berry-creek-leader-flower.png", "./eagle-call.wav", "./app-icon-32.png?v=9.17.1", "./app-icon-180.png?v=9.17.1", "./app-icon-192.png?v=9.17.1", "./app-icon-512.png?v=9.17.1"];
 self.addEventListener("install", (event) => event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(ASSETS))));
 self.addEventListener("activate", (event) => event.waitUntil(Promise.all([caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))), self.clients.claim()])));
 self.addEventListener("message", (event) => { if (event.data?.type === "SKIP_WAITING") self.skipWaiting(); });

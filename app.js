@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.17.0";
+  const APP_VERSION = "9.17.1";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -1230,6 +1230,7 @@
     $("#noGroupPlayers").hidden = players.length > 0;
     list.hidden = players.length === 0;
     renderGroupScorecard(players);
+    renderHoleComments();
     updateScorecardVisibility();
     renderRoundIdentity();
     requestAnimationFrame(updateScrollAffordances);
@@ -1307,7 +1308,6 @@
       return `<tr class="${E.isInGame(player) ? "" : "score-only-row"}"><td>${playerNameHtml(player, state.players.indexOf(player))}${E.isInGame(player) ? "" : '<small>Not in game · score only</small>'}</td>${cells.slice(0, 9).join("")}${totalCell(front)}${cells.slice(9).join("")}${totalCell(back)}${totalCell(total)}</tr>`;
     }).join("");
     document.querySelectorAll("[data-card-hole]").forEach((button) => button.addEventListener("click", () => { selectedHole = Number(button.dataset.cardHole); renderGroupScoring(); }));
-    renderHoleComments();
   }
 
   function commentTimestamp(value) {
