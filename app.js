@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.20.1";
+  const APP_VERSION = "9.21.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -39,6 +39,7 @@
   let groupWasChosen = params.has("group");
   let selectedGroup = R.GROUPS.includes(params.get("group")) ? params.get("group") : "A";
   let selectedHole = 1;
+  let selectedCommentHole = 1;
   let scorecardOpen = false;
   let scorerLinkLocked = params.get("scorer") === "1";
   let scorerToken = params.get("token") || "";
@@ -260,6 +261,7 @@
     const contexts = {
       setup: `${playerCount} player${playerCount === 1 ? "" : "s"} · ${groupCount} active group${groupCount === 1 ? "" : "s"}`,
       score: `Group ${selectedGroup} · Hole ${selectedHole}`,
+      comments: `Hole ${selectedCommentHole} stories`,
       leaderboard: `${savedResults ? "Saved standings" : "All groups"} · ${playerCount} player${playerCount === 1 ? "" : "s"}`,
       tournament: `Event controls · ${playerCount} player${playerCount === 1 ? "" : "s"}`
     };
@@ -1220,7 +1222,6 @@
     $("#noGroupPlayers").hidden = players.length > 0;
     list.hidden = players.length === 0;
     renderGroupScorecard(players);
-    renderHoleComments();
     updateScorecardVisibility();
     renderRoundIdentity();
     requestAnimationFrame(updateScrollAffordances);
@@ -1343,14 +1344,17 @@
   }
 
   function renderHoleComments() {
-    const comments = (state.holeComments || []).filter((comment) => comment.hole === selectedHole).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-    $("#holeCommentsTitle").textContent = `Hole ${selectedHole} comments`;
+    const holeSelector = $("#commentHoleSelect");
+    if (!holeSelector.options.length) holeSelector.innerHTML = E.COURSE.holes.map((hole) => `<option value="${hole.number}">Hole ${hole.number}</option>`).join("");
+    holeSelector.value = String(selectedCommentHole);
+    const comments = (state.holeComments || []).filter((comment) => comment.hole === selectedCommentHole).sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    $("#holeCommentsTitle").textContent = `Hole ${selectedCommentHole} comments`;
     $("#holeCommentCount").textContent = `${comments.length} comment${comments.length === 1 ? "" : "s"}`;
     $("#holeCommentList").innerHTML = comments.length ? comments.map((comment) => {
       const identity = comment.authorGroup ? `Group ${comment.authorGroup}` : comment.authorRole === "admin" ? "Admin" : "Player";
       const timestamp = commentTimestamp(comment.createdAt);
       return `<article class="hole-comment"><div class="hole-comment-meta"><div><strong>${esc(comment.authorName)}</strong><span>${esc(identity)}${timestamp ? ` · ${esc(timestamp)}` : ""}</span></div>${mayDeleteComment(comment) ? `<button class="text-button delete-hole-comment" type="button" data-comment-id="${esc(comment.id)}" aria-label="Remove ${esc(comment.authorName)}'s comment">Remove</button>` : ""}</div><p>${esc(comment.text)}</p></article>`;
-    }).join("") : `<div class="hole-comment-empty">No comments have been posted for Hole ${selectedHole}.</div>`;
+    }).join("") : `<div class="hole-comment-empty">No comments have been posted for Hole ${selectedCommentHole}.</div>`;
     const form = $("#holeCommentForm");
     const input = $("#holeCommentInput");
     const postButton = $("#postHoleCommentBtn");
@@ -1358,7 +1362,7 @@
     form.hidden = !currentUser;
     input.disabled = !canPost;
     postButton.disabled = !canPost;
-    input.placeholder = `Share a note about Hole ${selectedHole}`;
+    input.placeholder = `Share a note about Hole ${selectedCommentHole}`;
     const access = $("#holeCommentAccess");
     access.hidden = canPost;
     access.textContent = !currentUser ? "Sign in to leave a comment." : isLocked() ? "This round is locked; comments are view only." : connectionMode !== "live" ? "Reconnect to post a shared comment." : "";
@@ -1368,10 +1372,10 @@
     const gmailLink = $("#gmailHolePhotoLink");
     photoAction.hidden = !photoEmail;
     if (photoEmail) {
-      const subject = `${state.roundName} · Hole ${selectedHole} photo`;
-      const body = `Round: ${state.roundName}\nDate: ${state.date}\nHole: ${selectedHole}\nGroup viewed: ${selectedGroup}\n\nPlease attach the photo before sending.`;
+      const subject = `${state.roundName} · Hole ${selectedCommentHole} photo`;
+      const body = `Round: ${state.roundName}\nDate: ${state.date}\nHole: ${selectedCommentHole}\nSent from: DH Game Comments\n\nPlease attach the photo before sending.`;
       photoLink.href = `mailto:${photoEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      photoLink.textContent = `Email a photo for Hole ${selectedHole}`;
+      photoLink.textContent = `Email a photo for Hole ${selectedCommentHole}`;
       const gmailTargets = gmailComposeTargets(photoEmail, subject, body);
       gmailLink.href = gmailTargets.native;
       gmailLink.target = gmailTargets.platform === "web" ? "_blank" : "_self";
@@ -1396,12 +1400,12 @@
     const text = input.value.trim();
     if (!currentUser) { openAdminDialog(); return showToast("Sign in to leave a comment.", "error"); }
     if (!text) return showToast("Enter a comment before posting.", "error");
-    const posted = await dispatch({ type: "ADD_HOLE_COMMENT", payload: { hole: selectedHole, text } });
+    const posted = await dispatch({ type: "ADD_HOLE_COMMENT", payload: { hole: selectedCommentHole, text } });
     if (!posted) return;
     input.value = "";
     await refreshState().catch(() => {});
     render();
-    showToast(`Comment posted for Hole ${selectedHole}.`, "success");
+    showToast(`Comment posted for Hole ${selectedCommentHole}.`, "success");
   }
 
   async function deleteHoleComment(commentId) {
@@ -2225,6 +2229,7 @@
     renderPlayers();
     renderSavedPlayers();
     renderGroupScoring();
+    renderHoleComments();
     renderLeaderboard();
     renderTournament();
     renderAdminState();
@@ -2373,6 +2378,7 @@
       saveLocal();
       selectedGroup = "A";
       selectedHole = 1;
+      selectedCommentHole = 1;
       shareTokens = {};
       groupPresence = {};
       await refreshState();
@@ -2535,6 +2541,7 @@
     if (!await dispatch({ type: "START_FROM_SAVED", payload: { state: nextState } })) return;
     pendingReuseRound = null;
     selectedHole = 1;
+    selectedCommentHole = 1;
     selectedGroup = "A";
     shareTokens = {};
     groupPresence = {};
@@ -2640,6 +2647,7 @@
 
   async function startNewRoundNow() {
     selectedHole = 1;
+    selectedCommentHole = 1;
     selectedGroup = "A";
     savedPlayerGroupSelections.clear();
     if (!await dispatch({ type: "CLEAR_ROUND" })) return false;
@@ -2689,6 +2697,7 @@
   $("#mobileHoleSelect").addEventListener("change", (event) => moveToHole(Number(event.target.value)));
   $("#mobilePrevHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 1 ? 18 : selectedHole - 1, { skipMissingCheck: true }));
   $("#mobileNextHoleBtn").addEventListener("click", () => moveToHole(selectedHole === 18 ? 1 : selectedHole + 1));
+  $("#commentHoleSelect").addEventListener("change", (event) => { selectedCommentHole = Number(event.target.value); renderHoleComments(); renderRoundIdentity(); });
   $("#advanceHoleBtn").addEventListener("click", () => moveToHole(Math.min(18, selectedHole + 1), { skipMissingCheck: true }));
   $("#advanceHoleBtnBottom").addEventListener("click", () => moveToHole(Math.min(18, selectedHole + 1), { skipMissingCheck: true }));
   $("#toggleScorecardBtn").addEventListener("click", () => { scorecardOpen = !scorecardOpen; updateScorecardVisibility(); });
@@ -2755,9 +2764,10 @@
   const resetDialog = $("#confirmDialog");
   $("#resetAppBtn").addEventListener("click", () => { resetDialog.returnValue = "cancel"; resetDialog.showModal(); });
   resetDialog.addEventListener("close", async () => {
-    if (resetDialog.returnValue === "scores") { selectedHole = 1; dispatch({ type: "RESET_SCORES" }); }
+    if (resetDialog.returnValue === "scores") { selectedHole = 1; selectedCommentHole = 1; dispatch({ type: "RESET_SCORES" }); }
     if (resetDialog.returnValue === "everything") {
       selectedHole = 1;
+      selectedCommentHole = 1;
       selectedGroup = "A";
       if (await dispatch({ type: "CLEAR_ROUND" })) {
         shareTokens = {};
@@ -2805,7 +2815,7 @@
   openAdminInvitation();
   openPlayerInvitation();
   const initialView = spectatorMode ? "leaderboard" : params.get("view") || "score";
-  if (["setup", "score", "leaderboard", "tournament"].includes(initialView)) switchView(initialView);
+  if (["setup", "score", "comments", "leaderboard", "tournament"].includes(initialView)) switchView(initialView);
   connect();
   registerServiceWorker();
   checkVersion();

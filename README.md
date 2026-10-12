@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Version 9.21.0 moves hole comments into a dedicated **Comments** tab, removing the entire comments block from the Scoring page. Players can select any hole without changing the scorekeeper's active scoring hole, browse stories from every group, and—when signed in—post or remove their own comments. Admins retain moderation access, photo-email actions follow the selected comments hole, and the phone navigation now accommodates five primary tabs.
+
 Version 9.20.1 reduces the vertical height of each phone scoring card by approximately 15 percent. It also tightens the spacing between player cards and compacts the group selector, hole navigation, status line, and hole banner so more of a five-player group remains visible without scrolling. Score, SD, KP, Match Net, automatic tic indicators, and touch feedback remain available.
 
 Version 9.20.0 adds round comments to completed-round reporting. Printed or PDF results now include a dedicated Hole Comments section grouped by hole with the commenter, group, timestamp, and story. Downloaded result spreadsheets append the same comments below the scoring and settlement results. Because comments already travel with saved rounds, historical reports include their original comments as well.

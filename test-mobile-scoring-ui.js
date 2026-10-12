@@ -43,7 +43,7 @@ assert.match(css, /\.mobile-scoring-dock \{ position: fixed; right: 0; bottom: c
 assert.match(css, /\.mobile-missing-scores-reminder \{[^}]*background: var\(--danger\)/s);
 assert.match(css, /env\(safe-area-inset-bottom\)/);
 assert.match(css, /\.app-header \{ position: sticky; top: 0; z-index: 40;/);
-assert.match(css, /\.tabs \{ position: fixed; top: auto; right: 0; bottom: 0; left: 0; z-index: 50;[^}]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/s);
+assert.match(css, /\.tabs \{ position: fixed; top: auto; right: 0; bottom: 0; left: 0; z-index: 50;[^}]*grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/s);
 assert.match(css, /\.tab \{ display: grid; justify-items: center;[^}]*min-height: 3\.45rem/s);
 assert.match(css, /body\.header-compact \.compact-app-title \{ display: block; \}/);
 assert.match(css, /body:has\(\.score-stepper input:focus\) \.mobile-scoring-dock \{ display: none; \}/);

@@ -10,7 +10,7 @@ const css = fs.readFileSync("styles.css", "utf8");
 assert.match(css, /--forest:\s*#b51222/);
 assert.match(css, /--radius-lg:\s*16px/);
 assert.match(css, /\.tab-icon\s*\{/);
-assert.equal((html.match(/class="tab-icon"/g) || []).length, 4, "Each main navigation item needs an icon");
+assert.equal((html.match(/class="tab-icon"/g) || []).length, 5, "Each main navigation item needs an icon");
 assert.match(app, /class="score-card-header"/);
 assert.match(app, /class="score-card-auto-tics"/);
 assert.doesNotMatch(app, /class="score-group-pill">Group/);
