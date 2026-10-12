@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Version 9.20.0 adds round comments to completed-round reporting. Printed or PDF results now include a dedicated Hole Comments section grouped by hole with the commenter, group, timestamp, and story. Downloaded result spreadsheets append the same comments below the scoring and settlement results. Because comments already travel with saved rounds, historical reports include their original comments as well.
+
 Version 9.19.1 keeps each player's Match Net box on the same row as the compact SD and KP controls on phones. The older mobile hole-summary rule is now scoped to that summary only, eliminating the unintended empty second row in every scoring card.
 
 Version 9.19.0 makes each Scoring-page player card substantially more compact for five-player groups on phones. Redundant Group and Saved/Missing labels are removed, automatic birdie/eagle, skin, and KP-status indicators move beside the player name, and Score, SD, KP, and Match Net now share one concise control row. Saved, pending, missing, and error states remain visible through the card's colored edge and touch feedback.

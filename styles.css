@@ -752,6 +752,13 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .print-group .scorecard-indicators { min-height: 8pt; }
   .print-columns { display: grid; grid-template-columns: 1fr 2fr; gap: 1rem; }
   .print-group { break-before: page; }
+  .print-hole-comments { break-before: page; }
+  .print-hole-comment-group { break-inside: avoid; }
+  .print-hole-comment-group table { width: 100%; table-layout: fixed; }
+  .print-hole-comment-group th:nth-child(1), .print-hole-comment-group td:nth-child(1) { width: 18%; }
+  .print-hole-comment-group th:nth-child(2), .print-hole-comment-group td:nth-child(2) { width: 12%; }
+  .print-hole-comment-group th:nth-child(3), .print-hole-comment-group td:nth-child(3) { width: 18%; }
+  .print-hole-comment-group td:last-child { text-align: left; white-space: normal; }
 }
 
 @media print {

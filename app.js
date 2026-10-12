@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.19.1";
+  const APP_VERSION = "9.20.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -2546,6 +2546,26 @@
     showToast("New round created from the saved roster. Current saved-player details were used where available.", "success");
   }
 
+  function reportHoleComments(round) {
+    return [...(round.holeComments || [])].sort((a, b) => Number(a.hole) - Number(b.hole) || String(a.createdAt).localeCompare(String(b.createdAt)));
+  }
+
+  function reportCommentIdentity(comment) {
+    return comment.authorGroup ? `Group ${comment.authorGroup}` : comment.authorRole === "admin" ? "Admin" : "Player";
+  }
+
+  function printHoleCommentsMarkup(round) {
+    const comments = reportHoleComments(round);
+    if (!comments.length) return "";
+    const groups = E.COURSE.holes.map((hole) => {
+      const holeComments = comments.filter((comment) => Number(comment.hole) === hole.number);
+      if (!holeComments.length) return "";
+      const rows = holeComments.map((comment) => `<tr><td>${esc(comment.authorName)}</td><td>${esc(reportCommentIdentity(comment))}</td><td>${esc(commentTimestamp(comment.createdAt) || "—")}</td><td>${esc(comment.text)}</td></tr>`).join("");
+      return `<section class="print-hole-comment-group"><h3>Hole ${hole.number}</h3><table><thead><tr><th>Commenter</th><th>Group</th><th>Time</th><th>Comment</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+    }).join("");
+    return `<section class="print-hole-comments"><h2>Hole Comments</h2>${groups}</section>`;
+  }
+
   function downloadCsv() {
     const reportState = leaderboardRound();
     const settlement = E.pointsSettlement(reportState.players, E.COURSE, reportState.settings);
@@ -2571,7 +2591,13 @@
       tipsRow[tipsRow.length - 1] = settlement.tips.toFixed(0);
       rows.push(tipsRow.map(csvCell).join(","));
     }
-    downloadBlob([headers.map(csvCell).join(","), ...rows].join("\r\n"), "text/csv;charset=utf-8", `berry-creek-results-${reportState.date}.csv`);
+    const csvLines = [headers.map(csvCell).join(","), ...rows];
+    const comments = reportHoleComments(reportState);
+    if (comments.length) {
+      csvLines.push("", csvCell("Hole Comments"), ["Hole", "Commenter", "Group", "Time", "Comment"].map(csvCell).join(","));
+      comments.forEach((comment) => csvLines.push([`Hole ${comment.hole}`, comment.authorName, reportCommentIdentity(comment), commentTimestamp(comment.createdAt), comment.text].map(csvCell).join(",")));
+    }
+    downloadBlob(csvLines.join("\r\n"), "text/csv;charset=utf-8", `berry-creek-results-${reportState.date}.csv`);
   }
 
   function preparePrintReport() {
@@ -2594,7 +2620,8 @@
     const groupPlayersForReport = (group) => reportState.players.filter((player) => player.group === group);
     const groupTables = R.GROUPS.filter((group) => groupPlayersForReport(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>All tees use the standard Upper hole handicap ratings. Skin pops are capped at one stroke per hole, 1/2 on par 3s; Out, In, and Total net scores use each player's full HDCP. S marks a skin, KP marks the qualifying holder, KPM marks a claim that earned no tic, and an outlined KP is pending.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.slice(0, 9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>Out</th>${E.COURSE.holes.slice(9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>In</th><th>Total</th></tr></thead><tbody>${groupPlayersForReport(group).map((player) => { const totals = E.playerTotals(player, E.COURSE, reportState.settings, reportState.players); const front = scorecardSegment(player, totals.front, 0, 9); const back = scorecardSegment(player, totals.back, 9, 18); const total = scorecardSegment(player, totals.total, 0, 18); const cells = player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceivedFor(player, holeIndex, reportState))}</span>${scorecardIndicators(player, holeIndex, reportState)}</td>`); return `<tr class="${player.inGame ? "" : "score-only-row"}"><td>${esc(playerExportName(player, reportState.players.indexOf(player)))}</td>${cells.slice(0, 9).join("")}<td>${front.text}</td>${cells.slice(9).join("")}<td>${back.text}</td><td>${total.text}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
     const leaders = rankedPlayers(reportState).map((item) => `<tr><td>${playerNameHtml(item.player, item.index)}</td><td>${displayPlayingHandicap(hcpForRound(item.player, reportState))}</td><td>${item.player.group}</td><td>${leaderboardThruText(item.player, item.totals)}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.ghinAdjusted.gross, item.ghinAdjusted.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.eagles}</td><td>${item.tics.birdies}</td><td>${item.tics.sandies}</td><td class="kp-count-column">${item.tics.kps}</td><td>${item.tics.skins}</td><td>${item.tics.frontWeight}</td><td>${item.tics.backWeight}</td><td>${item.tics.totalNetWeight}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${settledPointText(item.ledger.settledNet, settlement.complete)}</td></tr>`).join("") + bccTipsRow(settlement, LEADERBOARD_COLUMNS.length);
-    $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(reportState.roundName)}</h1><p>${esc(reportState.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table class="leaderboard"><thead><tr><th>PLAYER</th><th>HCP</th><th>G</th><th>THRU</th><th>TOT</th><th>GHIN</th><th>NET</th><th>E</th><th>B</th><th>SD</th><th class="kp-count-column">KP</th><th>S</th><th>FN</th><th>BN</th><th>TN</th><th>$+</th><th>$-</th><th>Net $</th></tr></thead><tbody>${leaders}</tbody></table><section class="print-leaderboard-legend"><h3>Leaderboard legend</h3><dl>${leaderboardLegendMarkup()}</dl></section><div class="print-columns"><section><h2>KPs</h2><table><thead><tr><th>Hole</th><th>KP</th><th>KPM</th></tr></thead><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}`;
+    const holeComments = printHoleCommentsMarkup(reportState);
+    $("#printReport").innerHTML = `<header><img src="berry-creek-logo.jpeg" alt=""><div><h1>${esc(reportState.roundName)}</h1><p>${esc(reportState.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table class="leaderboard"><thead><tr><th>PLAYER</th><th>HCP</th><th>G</th><th>THRU</th><th>TOT</th><th>GHIN</th><th>NET</th><th>E</th><th>B</th><th>SD</th><th class="kp-count-column">KP</th><th>S</th><th>FN</th><th>BN</th><th>TN</th><th>$+</th><th>$-</th><th>Net $</th></tr></thead><tbody>${leaders}</tbody></table><section class="print-leaderboard-legend"><h3>Leaderboard legend</h3><dl>${leaderboardLegendMarkup()}</dl></section><div class="print-columns"><section><h2>KPs</h2><table><thead><tr><th>Hole</th><th>KP</th><th>KPM</th></tr></thead><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}${holeComments}`;
   }
 
   async function checkVersion() {
