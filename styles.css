@@ -607,6 +607,15 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .mobile-hole-button { padding: 0.45rem 0.35rem; color: #fff; background: var(--forest); }
   body:has(.score-stepper input:focus) .mobile-scoring-dock { display: none; }
   .save-status { display: none; }
+  #scoreView { margin-top: -1rem; }
+  .score-heading { margin-bottom: 0.3rem; }
+  .hole-nav { gap: 0.4rem; margin-bottom: 0.35rem; }
+  .hole-warning { min-height: 1.1rem; margin-bottom: 0.2rem; font-size: 0.74rem; }
+  .hole-banner { gap: 0.3rem 0.6rem; margin-bottom: 0.4rem; padding: 0.48rem 0.65rem; }
+  .hole-banner strong { font-size: 1.08rem; }
+  .hole-banner span { font-size: 0.72rem; }
+  .hole-banner .kp-status, .hole-banner .skin-status { padding: 0.2rem 0.42rem; }
+  .group-score-list { gap: 0.22rem; }
   .settings-panel { grid-template-columns: 1fr 1fr; }
   .settings-panel label:first-child { grid-column: 1 / -1; }
   .player-row { grid-template-columns: 2rem 1fr 1fr 44px; }
@@ -631,7 +640,16 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .guest-player-form .button { grid-column: 1 / -1; width: 100%; }
   .not-in-game-toggle { grid-column: 2 / 4; }
   .player-type-badge { grid-column: 2 / 4; }
-  .score-card-controls { grid-template-columns: minmax(132px, 1fr) auto auto 58px; }
+  .group-score-card { gap: 0.3rem; padding: 0.42rem; }
+  .score-card-header { margin: -0.42rem -0.42rem 0; padding: 0.34rem 0.42rem; }
+  .score-card-controls { grid-template-columns: minmax(124px, 1fr) auto auto 54px; gap: 0.28rem; }
+  .group-score-card .score-stepper { grid-template-columns: 36px minmax(46px, 60px) 36px; gap: 0.22rem; }
+  .group-score-card .score-stepper button { width: 36px; height: 36px; }
+  .group-score-card .score-stepper input { min-height: 38px; font-size: 1.38rem; }
+  .score-card-controls .compact-tic-toggle { min-height: 36px; padding: 0.2rem 0.32rem; }
+  .group-score-card .net-box { min-height: 36px; }
+  body[data-display="outdoor"] .group-score-card .score-stepper input { min-height: 38px; }
+  body[data-display="outdoor"] .score-card-controls .compact-tic-toggle { min-height: 36px; }
   .hole-comment-form > div { grid-template-columns: 1fr; }
   .hole-comment-form .button { width: 100%; }
   .hole-photo-email-action { align-items: stretch; flex-direction: column; }
@@ -663,25 +681,26 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .club-logo { width: 64px; height: 64px; }
   .app-header h1 { font-size: 1.45rem; }
   .app-header .button { padding-inline: 0.7rem; }
-  .group-score-card { gap: 0.28rem; padding: 0.42rem; }
-  .score-card-header { gap: 0.35rem; margin: -0.42rem -0.42rem 0; padding: 0.32rem 0.42rem; }
-  .score-player-heading { gap: 0.3rem; }
-  .score-player strong { font-size: 0.94rem; }
-  .score-player span { font-size: 0.62rem; }
-  .scorekeeper-toggle { min-height: 28px; padding: 0.15rem 0.28rem; font-size: 0.62rem; }
-  .score-card-auto-tics { gap: 0.18rem; }
-  .score-card-auto-tics .auto-tic, .prior-kp-note { min-height: 21px; padding: 0.12rem 0.28rem; font-size: 0.59rem; }
-  .score-card-controls { grid-template-columns: minmax(124px, 1fr) auto auto 54px; gap: 0.25rem; }
-  .group-score-card .score-stepper { grid-template-columns: 38px minmax(44px, 58px) 38px; gap: 0.2rem; }
-  .group-score-card .score-stepper button { width: 38px; height: 38px; font-size: 1.15rem; }
-  .group-score-card .score-stepper input { min-height: 40px; font-size: 1.35rem; }
-  .score-card-controls .compact-tic-toggle { min-height: 38px; padding: 0.2rem 0.3rem; font-size: 0.68rem; }
-  .score-card-controls .compact-tic-toggle input { width: 15px; height: 15px; }
-  .group-score-card .net-box { min-height: 38px; padding: 0.16rem 0.2rem; }
-  .group-score-card .net-box span { font-size: 0.59rem; letter-spacing: 0.03em; }
-  .group-score-card .net-box strong { font-size: 1.15rem; }
-  body[data-display="outdoor"] .group-score-card .score-stepper input { min-height: 40px; font-size: 1.45rem; }
-  body[data-display="outdoor"] .score-card-controls .compact-tic-toggle { min-height: 38px; }
+  .group-score-card { gap: 0.2rem; padding: 0.35rem; }
+  .score-card-header { gap: 0.3rem; margin: -0.35rem -0.35rem 0; padding: 0.22rem 0.35rem; }
+  .score-player-heading { gap: 0.25rem; }
+  .score-player strong { font-size: 0.9rem; }
+  .score-player span { font-size: 0.58rem; }
+  .scorekeeper-toggle { min-height: 24px; padding: 0.1rem 0.22rem; font-size: 0.58rem; }
+  .scorekeeper-toggle input { width: 13px; height: 13px; }
+  .score-card-auto-tics { gap: 0.14rem; }
+  .score-card-auto-tics .auto-tic, .prior-kp-note { min-height: 18px; padding: 0.08rem 0.22rem; font-size: 0.55rem; }
+  .score-card-controls { grid-template-columns: minmax(116px, 1fr) auto auto 50px; gap: 0.2rem; }
+  .group-score-card .score-stepper { grid-template-columns: 34px minmax(42px, 54px) 34px; gap: 0.16rem; }
+  .group-score-card .score-stepper button { width: 34px; height: 34px; font-size: 1.05rem; }
+  .group-score-card .score-stepper input { min-height: 36px; padding-block: 0.12rem; font-size: 1.28rem; }
+  .score-card-controls .compact-tic-toggle { min-height: 34px; padding: 0.14rem 0.25rem; font-size: 0.64rem; }
+  .score-card-controls .compact-tic-toggle input { width: 14px; height: 14px; }
+  .group-score-card .net-box { min-height: 34px; padding: 0.12rem 0.16rem; }
+  .group-score-card .net-box span { font-size: 0.55rem; letter-spacing: 0.02em; }
+  .group-score-card .net-box strong { font-size: 1.05rem; }
+  body[data-display="outdoor"] .group-score-card .score-stepper input { min-height: 36px; font-size: 1.35rem; }
+  body[data-display="outdoor"] .score-card-controls .compact-tic-toggle { min-height: 34px; }
   main { width: min(100% - 1rem, 1180px); }
   .section-heading { align-items: stretch; flex-direction: column; }
   .section-heading .button { width: 100%; }

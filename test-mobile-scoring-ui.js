@@ -47,11 +47,17 @@ assert.match(css, /\.tabs \{ position: fixed; top: auto; right: 0; bottom: 0; le
 assert.match(css, /\.tab \{ display: grid; justify-items: center;[^}]*min-height: 3\.45rem/s);
 assert.match(css, /body\.header-compact \.compact-app-title \{ display: block; \}/);
 assert.match(css, /body:has\(\.score-stepper input:focus\) \.mobile-scoring-dock \{ display: none; \}/);
+assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.hole-banner \{ gap: 0\.3rem 0\.6rem; margin-bottom: 0\.4rem; padding: 0\.48rem 0\.65rem; \}/);
+assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.group-score-list \{ gap: 0\.22rem; \}/);
 assert.match(css, /\.score-card-controls \{ display: grid; grid-template-columns: minmax\(132px, 1fr\) auto auto 58px;/);
 assert.match(css, /\.group-score-card \.net-box \{ grid-column: 4; grid-row: 1;/);
 assert.doesNotMatch(css, /\.hole-meta, \.net-box \{ grid-row: 2; \}/);
 assert.match(css, /\.hole-entry > \.hole-meta, \.hole-entry > \.net-box \{ grid-row: 2; \}/);
-assert.match(css, /@media \(max-width: 480px\)[\s\S]*\.score-card-controls \{ grid-template-columns: minmax\(124px, 1fr\) auto auto 54px;/);
+assert.match(css, /@media \(max-width: 480px\)[\s\S]*\.group-score-card \{ gap: 0\.2rem; padding: 0\.35rem; \}/);
+assert.match(css, /@media \(max-width: 480px\)[\s\S]*\.score-card-controls \{ grid-template-columns: minmax\(116px, 1fr\) auto auto 50px;/);
+assert.match(css, /@media \(max-width: 480px\)[\s\S]*\.group-score-card \.score-stepper button \{ width: 34px; height: 34px;/);
+assert.match(css, /@media \(max-width: 480px\)[\s\S]*\.score-card-controls \.compact-tic-toggle \{ min-height: 34px;/);
+assert.match(css, /@media \(max-width: 480px\)[\s\S]*\.group-score-card \.net-box \{ min-height: 34px;/);
 assert.match(css, /button:not\(:disabled\):active/);
 assert.match(css, /\.touch-confirmation/);
 assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
