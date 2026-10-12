@@ -182,22 +182,17 @@ main { width: min(1180px, calc(100% - 2rem)); margin: 1.25rem auto 3rem; }
 .group-scorecard-panel { margin-top: 0.8rem; }
 .group-scorecard-panel[hidden], .scorecard-toggle-row[hidden] { display: none !important; }
 .hide-scorecard-button { display: block; margin: 0.75rem auto 0; }
-.group-score-list { display: grid; gap: 0.85rem; }
-.group-score-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 90px; align-items: center; gap: 0.8rem 1rem; overflow: hidden; padding: 0.85rem; border: 1px solid var(--line); border-left: 4px solid var(--forest); border-radius: var(--radius-lg); background: var(--paper); box-shadow: var(--shadow); }
+.group-score-list { display: grid; gap: 0.4rem; }
+.group-score-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 0.38rem; overflow: hidden; padding: 0.5rem; border: 1px solid var(--line); border-left: 4px solid var(--forest); border-radius: 12px; background: var(--paper); box-shadow: var(--shadow); }
 .group-score-card.is-score-only { border: 1px dashed #bd6d77; background: #fbf6f7; }
 .group-score-card.score-saved { border-left-color: var(--success); }
 .group-score-card.score-missing { border-left-color: #c65a68; background: color-mix(in srgb, var(--paper) 97%, #f8e7ea); }
 .group-score-card.score-pending { border-left-color: var(--warning); }
 .group-score-card.score-error { border-left-color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger), var(--shadow); }
-.score-card-header { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin: -0.85rem -0.85rem 0; padding: 0.72rem 0.85rem; border-bottom: 1px solid var(--line); background: linear-gradient(105deg, var(--gold-soft), color-mix(in srgb, var(--paper) 88%, var(--gold-soft))); }
-.score-group-pill, .group-pill { display: inline-grid; place-items: center; min-width: 2rem; min-height: 1.65rem; border-radius: 999px; color: #fff; background: var(--forest-2); font-size: 0.68rem; font-weight: 900; white-space: nowrap; }
-.score-group-pill { padding: 0.3rem 0.55rem; }
-.score-card-meta { display: inline-flex; align-items: center; gap: 0.38rem; }
-.score-state-badge { display: inline-flex; align-items: center; gap: 0.25rem; min-height: 1.65rem; padding: 0.25rem 0.45rem; border-radius: 999px; color: #8a2633; background: #fff; font-size: 0.66rem; font-weight: 900; white-space: nowrap; }
-.score-state-badge svg { width: 0.8rem; height: 0.8rem; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-.score-state-badge.is-saved { color: var(--success); }
-.score-state-badge.is-pending { color: var(--warning); }
-.score-state-badge.is-error { color: var(--danger); }
+.score-card-header { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 0.55rem; margin: -0.5rem -0.5rem 0; padding: 0.42rem 0.5rem; border-bottom: 1px solid var(--line); background: linear-gradient(105deg, var(--gold-soft), color-mix(in srgb, var(--paper) 88%, var(--gold-soft))); }
+.group-pill { display: inline-grid; place-items: center; min-width: 2rem; min-height: 1.65rem; border-radius: 999px; color: #fff; background: var(--forest-2); font-size: 0.68rem; font-weight: 900; white-space: nowrap; }
+.score-card-auto-tics { display: inline-flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 0.25rem; }
+.score-card-auto-tics:empty { display: none; }
 .group-score-card.touch-feedback--pending { animation: touch-pending 700ms ease-out; }
 .group-score-card.touch-feedback--success { animation: touch-success 700ms ease-out; }
 .group-score-card.touch-feedback--warning { animation: touch-warning 700ms ease-out; }
@@ -211,29 +206,29 @@ main { width: min(1180px, calc(100% - 2rem)); margin: 1.25rem auto 3rem; }
 @keyframes touch-error { 0%, 100% { box-shadow: var(--shadow); } 45% { box-shadow: 0 0 0 4px rgba(181, 18, 34, 0.3), var(--shadow); } }
 .score-only-note { color: var(--forest-2) !important; font-weight: 850; }
 .score-player { min-width: 0; }
-.score-player strong { display: block; overflow: hidden; color: var(--forest-2); font-family: Georgia, serif; font-size: 1.16rem; font-weight: 700; letter-spacing: -0.01em; text-overflow: ellipsis; white-space: nowrap; }
-.score-player-heading { display: flex; align-items: center; gap: 0.6rem; }
-.scorekeeper-toggle { display: inline-flex; align-items: center; gap: 0.25rem; min-height: 36px; padding: 0.3rem 0.5rem; border: 1px solid var(--forest); border-radius: 7px; color: var(--forest); background: var(--paper); font-size: 0.74rem; font-weight: 900; cursor: pointer; }
+.score-player strong { display: block; overflow: hidden; color: var(--forest-2); font-family: Georgia, serif; font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; text-overflow: ellipsis; white-space: nowrap; }
+.score-player-heading { display: flex; align-items: center; gap: 0.4rem; }
+.scorekeeper-toggle { display: inline-flex; align-items: center; gap: 0.2rem; min-height: 30px; padding: 0.2rem 0.35rem; border: 1px solid var(--forest); border-radius: 6px; color: var(--forest); background: var(--paper); font-size: 0.68rem; font-weight: 900; cursor: pointer; }
 .scorekeeper-toggle:has(input:checked) { color: #fff; background: var(--forest); }
-.scorekeeper-toggle input { width: 18px; height: 18px; min-height: 0; margin: 0; accent-color: var(--forest); }
-.score-player span { display: block; margin-top: 0.2rem; color: var(--muted); font-size: 0.76rem; }
-.group-score-card .score-stepper { grid-template-columns: 50px minmax(72px, 104px) 50px; }
-.group-score-card .score-stepper button { width: 50px; height: 50px; border: 2px solid color-mix(in srgb, var(--forest) 18%, transparent); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5); }
-.group-score-card .score-stepper input { min-height: 58px; font-size: 2rem; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--forest) 10%, transparent); }
-.score-entry-wrap { display: grid; justify-items: center; gap: 0.2rem; }
-.score-sync { min-height: 1rem; color: var(--muted); font-size: 0.68rem; font-weight: 800; }
-.score-sync--saving, .score-sync--pending { color: #8a4800; }
-.score-sync--synced { color: #176c31; }
-.score-sync--error { color: var(--danger); }
-.group-score-card .net-box { padding: 0.65rem 0.35rem; border-radius: var(--radius-sm); background: var(--gold-soft); }
+.scorekeeper-toggle input { width: 15px; height: 15px; min-height: 0; margin: 0; accent-color: var(--forest); }
+.score-player span { display: block; margin-top: 0.05rem; color: var(--muted); font-size: 0.68rem; }
+.score-card-controls { display: grid; grid-template-columns: minmax(132px, 1fr) auto auto 58px; align-items: center; gap: 0.35rem; min-width: 0; }
+.group-score-card .score-entry-wrap { grid-column: 1; }
+.group-score-card .score-stepper { grid-template-columns: 40px minmax(48px, 64px) 40px; gap: 0.28rem; }
+.group-score-card .score-stepper button { width: 40px; height: 40px; border: 2px solid color-mix(in srgb, var(--forest) 18%, transparent); font-size: 1.25rem; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5); }
+.group-score-card .score-stepper input { min-height: 42px; padding: 0.25rem; font-size: 1.45rem; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--forest) 10%, transparent); }
+.score-entry-wrap { display: grid; justify-items: start; }
+.group-score-card .net-box { grid-column: 4; min-height: 40px; padding: 0.22rem 0.25rem; border-radius: var(--radius-sm); background: var(--gold-soft); }
 .group-score-card .net-box span { color: var(--muted); }
-.group-score-card .net-box strong { color: var(--forest); }
-.card-tics { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.5rem; padding-top: 0.65rem; border-top: 1px solid var(--line); }
-.card-tics .tic-toggle { border: 1px solid transparent; color: var(--forest-2); background: var(--gold-soft); }
-.card-tics .tic-toggle:has(input:checked) { border-color: var(--forest); box-shadow: inset 0 0 0 1px var(--forest); }
-.card-tics .kp-toggle:has(input:checked) { color: #fff; background: var(--forest); }
-.card-tics .sandy-toggle:has(input:checked) { color: #fff; background: var(--forest-2); }
-.prior-kp-note { display: inline-flex; align-items: center; min-height: 44px; padding: 0.55rem 0.8rem; border: 1px solid var(--forest); border-radius: 999px; color: var(--forest); background: var(--paper); font-size: 0.82rem; font-weight: 800; }
+.group-score-card .net-box strong { color: var(--forest); font-size: 1.25rem; }
+.score-card-controls .compact-tic-toggle { min-height: 40px; padding: 0.25rem 0.4rem; border: 1px solid transparent; border-radius: 7px; color: var(--forest-2); background: var(--gold-soft); font-size: 0.72rem; font-weight: 900; }
+.score-card-controls .compact-tic-toggle input { width: 16px; height: 16px; }
+.score-card-controls .sandy-toggle { grid-column: 2; }
+.score-card-controls .kp-toggle { grid-column: 3; }
+.score-card-controls .compact-tic-toggle:has(input:checked) { border-color: var(--forest); box-shadow: inset 0 0 0 1px var(--forest); }
+.score-card-controls .kp-toggle:has(input:checked) { color: #fff; background: var(--forest); }
+.score-card-controls .sandy-toggle:has(input:checked) { color: #fff; background: var(--forest-2); }
+.score-card-auto-tics .auto-tic, .prior-kp-note { display: inline-flex; align-items: center; min-height: 24px; padding: 0.18rem 0.38rem; border: 1px solid color-mix(in srgb, var(--forest) 22%, transparent); border-radius: 999px; color: var(--forest); background: var(--paper); font-size: 0.65rem; font-weight: 900; white-space: nowrap; }
 .kp-marked-note { color: var(--forest); background: var(--paper); }
 .hole-entry { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: 1rem; padding: 1.1rem; background: var(--forest); color: #fff; border-radius: 14px; box-shadow: var(--shadow); }
 .hole-meta { display: grid; align-content: center; }
@@ -551,6 +546,9 @@ body[data-display="outdoor"] { --cream: #fff; --paper: #fff; --ink: #000; --mute
 body[data-display="outdoor"] .button, body[data-display="outdoor"] .icon-button, body[data-display="outdoor"] input, body[data-display="outdoor"] select { min-height: 50px; border-width: 2px; }
 body[data-display="outdoor"] .group-score-card { border: 2px solid #222; box-shadow: none; }
 body[data-display="outdoor"] .score-stepper input { font-size: 2rem; }
+body[data-display="outdoor"] .group-score-card .score-stepper input { min-height: 42px; font-size: 1.55rem; }
+body[data-display="outdoor"] .score-card-controls .compact-tic-toggle { min-height: 40px; }
+body[data-display="outdoor"] .score-card-controls input[type="checkbox"], body[data-display="outdoor"] .scorekeeper-toggle input { min-height: 0; }
 body[data-display="dark"] { --cream: #111; --paper: #1d1d1d; --ink: #fff; --muted: #c8c8c8; --line: #474747; --gold-soft: #4a1118; --shadow: 0 10px 30px rgba(0,0,0,0.35); }
 body[data-display="dark"] .club-logo { padding: 0.2rem; border-radius: 6px; background: #fff; }
 body[data-display="dark"] .leaderboard td:first-child, body[data-display="dark"] .scorecard td:first-child { background: var(--paper); }
@@ -563,7 +561,6 @@ body[data-display="dark"] .leaderboard .points-positive { color: #8ee0a2; backgr
 body[data-display="dark"] .leaderboard .points-negative { color: #ff9dab; background: #43151b; }
 body[data-display="dark"] .notice-missing-scores { color: #ffd8dd; background: #53151d; }
 body[data-display="dark"] .group-score-card.score-missing { background: #281d1f; }
-body[data-display="dark"] .score-state-badge { background: #171717; }
 body[data-display="dark"] .dialog-callout { color: #ffd8dd !important; border-color: #78303a; background: #53151d; }
 body[data-display="dark"] .group-progress-ring::before { background: var(--paper); }
 body[data-display="dark"] .skeleton-block { background: linear-gradient(90deg, #34282a 20%, #4c3a3d 40%, #34282a 60%); background-size: 240% 100%; }
@@ -634,10 +631,7 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .guest-player-form .button { grid-column: 1 / -1; width: 100%; }
   .not-in-game-toggle { grid-column: 2 / 4; }
   .player-type-badge { grid-column: 2 / 4; }
-  .group-score-card { grid-template-columns: minmax(0, 1fr) 82px; }
-  .score-card-header { grid-column: 1 / -1; }
-  .group-score-card .score-entry-wrap { grid-column: 1; grid-row: 2; }
-  .group-score-card .net-box { grid-column: 2; grid-row: 2; }
+  .score-card-controls { grid-template-columns: minmax(132px, 1fr) auto auto 58px; }
   .hole-comment-form > div { grid-template-columns: 1fr; }
   .hole-comment-form .button { width: 100%; }
   .hole-photo-email-action { align-items: stretch; flex-direction: column; }
@@ -669,15 +663,25 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .club-logo { width: 64px; height: 64px; }
   .app-header h1 { font-size: 1.45rem; }
   .app-header .button { padding-inline: 0.7rem; }
-  .group-score-card { padding: 0.72rem; }
-  .score-card-header { margin: -0.72rem -0.72rem 0; padding: 0.65rem 0.72rem; }
-  .score-player-heading { gap: 0.42rem; }
-  .score-player strong { font-size: 1.02rem; }
-  .score-card-meta { align-items: flex-end; flex-direction: column-reverse; gap: 0.24rem; }
-  .score-state-badge { min-height: 1.4rem; padding: 0.18rem 0.35rem; font-size: 0.6rem; }
-  .group-score-card .score-stepper { grid-template-columns: 46px minmax(68px, 86px) 46px; gap: 0.38rem; }
-  .group-score-card .score-stepper button { width: 46px; height: 46px; }
-  .group-score-card .score-stepper input { min-height: 54px; }
+  .group-score-card { gap: 0.28rem; padding: 0.42rem; }
+  .score-card-header { gap: 0.35rem; margin: -0.42rem -0.42rem 0; padding: 0.32rem 0.42rem; }
+  .score-player-heading { gap: 0.3rem; }
+  .score-player strong { font-size: 0.94rem; }
+  .score-player span { font-size: 0.62rem; }
+  .scorekeeper-toggle { min-height: 28px; padding: 0.15rem 0.28rem; font-size: 0.62rem; }
+  .score-card-auto-tics { gap: 0.18rem; }
+  .score-card-auto-tics .auto-tic, .prior-kp-note { min-height: 21px; padding: 0.12rem 0.28rem; font-size: 0.59rem; }
+  .score-card-controls { grid-template-columns: minmax(124px, 1fr) auto auto 54px; gap: 0.25rem; }
+  .group-score-card .score-stepper { grid-template-columns: 38px minmax(44px, 58px) 38px; gap: 0.2rem; }
+  .group-score-card .score-stepper button { width: 38px; height: 38px; font-size: 1.15rem; }
+  .group-score-card .score-stepper input { min-height: 40px; font-size: 1.35rem; }
+  .score-card-controls .compact-tic-toggle { min-height: 38px; padding: 0.2rem 0.3rem; font-size: 0.68rem; }
+  .score-card-controls .compact-tic-toggle input { width: 15px; height: 15px; }
+  .group-score-card .net-box { min-height: 38px; padding: 0.16rem 0.2rem; }
+  .group-score-card .net-box span { font-size: 0.59rem; letter-spacing: 0.03em; }
+  .group-score-card .net-box strong { font-size: 1.15rem; }
+  body[data-display="outdoor"] .group-score-card .score-stepper input { min-height: 40px; font-size: 1.45rem; }
+  body[data-display="outdoor"] .score-card-controls .compact-tic-toggle { min-height: 38px; }
   main { width: min(100% - 1rem, 1180px); }
   .section-heading { align-items: stretch; flex-direction: column; }
   .section-heading .button { width: 100%; }

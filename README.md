@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Version 9.19.0 makes each Scoring-page player card substantially more compact for five-player groups on phones. Redundant Group and Saved/Missing labels are removed, automatic birdie/eagle, skin, and KP-status indicators move beside the player name, and Score, SD, KP, and Match Net now share one concise control row. Saved, pending, missing, and error states remain visible through the card's colored edge and touch feedback.
+
 Version 9.18.0 adds a sortable **GHIN** leaderboard column between TOT and NET. It displays the player's adjusted gross score for handicap posting by capping each completed hole at net double bogey using the selected tee's Course Handicap and the standard Upper hole handicap ratings. Plus handicaps and the USGA Course Handicap-above-54 exception are handled automatically. The value is also included in saved-round results, printed leaderboards, and downloaded spreadsheets, without changing the DH Game's actual gross, net, skins, tics, or points calculations.
 
 Version 9.17.3 makes **Send with Gmail** prefer the installed Gmail app on iPhone, iPad, and Android. The recipient, subject, and message are passed directly to Gmail; if Gmail is unavailable, the app falls back to Gmail's browser composer.

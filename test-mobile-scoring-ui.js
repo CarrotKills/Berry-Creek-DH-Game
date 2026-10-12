@@ -31,6 +31,12 @@ assert.match(app, /Sandy marked/);
 assert.match(app, /KP marked/);
 assert.match(app, /Scorekeeper assigned/);
 assert.match(app, /navigator\.vibrate\(12\)/);
+assert.match(app, /class="score-card-controls"/);
+assert.match(app, /class="tic-toggle compact-tic-toggle sandy-toggle"[^>]*>[\s\S]*?SD<\/label>/);
+assert.match(app, /class="tic-toggle compact-tic-toggle kp-toggle"[^>]*>[\s\S]*?KP<\/label>/);
+assert.match(app, /score-stepper[\s\S]*?sandy-toggle[\s\S]*?kp-toggle[\s\S]*?<span>Match net<\/span>/);
+assert.doesNotMatch(app, /class="score-group-pill">Group/);
+assert.doesNotMatch(app, /class="score-state-badge/);
 
 assert.match(css, /\.mobile-scoring-dock \{ display: none; \}/);
 assert.match(css, /\.mobile-scoring-dock \{ position: fixed; right: 0; bottom: calc\(4\.05rem \+ env\(safe-area-inset-bottom\)\); left: 0;/);
@@ -41,6 +47,8 @@ assert.match(css, /\.tabs \{ position: fixed; top: auto; right: 0; bottom: 0; le
 assert.match(css, /\.tab \{ display: grid; justify-items: center;[^}]*min-height: 3\.45rem/s);
 assert.match(css, /body\.header-compact \.compact-app-title \{ display: block; \}/);
 assert.match(css, /body:has\(\.score-stepper input:focus\) \.mobile-scoring-dock \{ display: none; \}/);
+assert.match(css, /\.score-card-controls \{ display: grid; grid-template-columns: minmax\(132px, 1fr\) auto auto 58px;/);
+assert.match(css, /@media \(max-width: 480px\)[\s\S]*\.score-card-controls \{ grid-template-columns: minmax\(124px, 1fr\) auto auto 54px;/);
 assert.match(css, /button:not\(:disabled\):active/);
 assert.match(css, /\.touch-confirmation/);
 assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);

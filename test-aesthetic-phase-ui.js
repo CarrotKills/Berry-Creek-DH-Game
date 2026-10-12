@@ -41,7 +41,8 @@ assert.doesNotMatch(css, /#startNewRoundBtn::before/);
 
 assert.match(app, /const scoreVisualState = syncState === "error"/);
 assert.match(app, /group-score-card score-\$\{scoreVisualState\}/);
-assert.match(app, /class="score-state-badge is-\$\{scoreVisualState\}"/);
+assert.doesNotMatch(app, /class="score-state-badge is-\$\{scoreVisualState\}"/);
+assert.match(app, /class="score-card-auto-tics"/);
 assert.match(css, /\.group-score-card\.score-saved[^}]*var\(--success\)/s);
 assert.match(css, /\.group-score-card\.score-missing/);
 assert.match(css, /font-variant-numeric: tabular-nums/);

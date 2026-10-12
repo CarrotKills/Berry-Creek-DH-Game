@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.18.0";
+  const APP_VERSION = "9.19.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -247,13 +247,6 @@
     toast.hidden = false;
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { toast.hidden = true; }, 4200);
-  }
-
-  function scoreStateIcon(kind) {
-    if (kind === "saved") return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10"/></svg>';
-    if (kind === "pending") return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
-    if (kind === "error") return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 17h.01"/></svg>';
-    return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></svg>';
   }
 
   function renderRoundIdentity() {
@@ -1194,17 +1187,15 @@
       const hasKp = (state.settings.kpClaims[String(selectedHole)] || []).includes(player.id);
       const kpClaimState = E.kpClaimStatus(player, E.COURSE, state.settings, index, state.players);
       const kpNote = kpClaimState === "marked"
-        ? '<span class="prior-kp-note kp-marked-note">KP Marked · 0 tics</span>'
-        : kpClaimState === "pending" ? '<span class="prior-kp-note">KP Pending · 0 tics</span>' : "";
+        ? '<span class="prior-kp-note kp-marked-note" title="KP Marked · 0 tics">KPM</span>'
+        : kpClaimState === "pending" ? '<span class="prior-kp-note" title="KP Pending · 0 tics">KP Pending</span>' : "";
       const hasSkin = E.skinResult(state.players, E.COURSE, state.settings, index).winnerId === player.id;
       const disabled = canScore() ? "" : "disabled";
       const sandyDisabled = disabled || (isKpHole && hasKp) ? "disabled" : "";
       const kpDisabled = disabled || player.sandies[index] ? "disabled" : "";
       const syncState = scoreSyncStatus.get(scoreSyncKey(player.id, index));
-      const syncLabel = { saving: "Saving…", pending: "Waiting to sync", synced: "Saved", error: "Sync problem" }[syncState] || "";
       const scoreEntered = gross !== "" && gross !== null && gross !== undefined;
       const scoreVisualState = syncState === "error" ? "error" : syncState === "saving" || syncState === "pending" ? "pending" : scoreEntered ? "saved" : "missing";
-      const scoreStateLabel = { saved: "Saved", pending: "Saving", error: "Check", missing: "Missing" }[scoreVisualState];
       const touch = touchFeedback.get(player.id);
       const feedbackKind = touch?.kind || (syncState === "synced" ? "success" : syncState === "error" ? "error" : syncState === "saving" || syncState === "pending" ? "pending" : "");
       const scorekeeperId = state.settings.scorekeepers[selectedGroup] || "";
@@ -1212,10 +1203,8 @@
       const canChangeScorekeeper = adminUnlocked || (signedInPlayer?.group === selectedGroup && (!scorekeeperId || scorekeeperId === signedInPlayer.id));
       const achievementClass = achievement ? `achievement-tic achievement-tic--${achievement.toLowerCase()}` : "";
       return `<article class="group-score-card score-${scoreVisualState} ${competitive ? "" : "is-score-only"} ${feedbackKind ? `touch-feedback--${feedbackKind}` : ""}" data-player-id="${player.id}">
-        <header class="score-card-header"><div class="score-player"><div class="score-player-heading"><label class="scorekeeper-toggle" title="Group scorekeeper"><input data-kind="scorekeeper" type="checkbox" ${scorekeeperId === player.id ? "checked" : ""} ${canChangeScorekeeper ? "" : "disabled"}>SK</label><strong>${playerNameHtml(player, state.players.indexOf(player))}</strong></div><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${skinPops > 0 ? `gets ${skinPops === 0.5 ? "1/2" : skinPops}` : skinPops < 0 ? `gives ${Math.abs(skinPops) === 0.5 ? "1/2" : Math.abs(skinPops)}` : "no stroke"}</span>${competitive ? "" : '<span class="score-only-note">Not in the game · score only</span>'}</div><div class="score-card-meta"><span class="score-state-badge is-${scoreVisualState}">${scoreStateIcon(scoreVisualState)}${scoreStateLabel}</span><span class="score-group-pill">Group ${player.group}</span></div></header>
-        <div class="score-entry-wrap"><div class="score-stepper"><button type="button" data-delta="-1" ${disabled} aria-label="Decrease score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" ${disabled} aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" ${disabled} aria-label="Increase score">+</button></div>${syncLabel ? `<span class="score-sync score-sync--${syncState}" role="status">${syncLabel}</span>` : ""}</div>
-        <div class="net-box"><span>Match net</span><strong>${net ?? "—"}</strong></div>
-        <div class="card-tics">${achievement ? `<span class="auto-tic ${achievementClass}">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic skin-tic">Skin ✓</span>' : ""}${canMarkSandy ? `<label class="tic-toggle sandy-toggle" title="${hasKp ? "Remove KP before marking a Sandy" : "Mark Sandy"}"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${sandyDisabled}>Sandy</label>` : ""}${isKpHole ? `<label class="tic-toggle kp-toggle" title="${player.sandies[index] ? "Remove Sandy before marking KP" : "Mark KP"}"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${kpDisabled}>KP</label>` : ""}${kpNote}</div>
+        <header class="score-card-header"><div class="score-player"><div class="score-player-heading"><label class="scorekeeper-toggle" title="Group scorekeeper"><input data-kind="scorekeeper" type="checkbox" ${scorekeeperId === player.id ? "checked" : ""} ${canChangeScorekeeper ? "" : "disabled"}>SK</label><strong>${playerNameHtml(player, state.players.indexOf(player))}</strong></div><span>${esc(teeOf(player).name)} · Hcp ${displayPlayingHandicap(hcp(player))} · ${skinPops > 0 ? `gets ${skinPops === 0.5 ? "1/2" : skinPops}` : skinPops < 0 ? `gives ${Math.abs(skinPops) === 0.5 ? "1/2" : Math.abs(skinPops)}` : "no stroke"}</span>${competitive ? "" : '<span class="score-only-note">Not in the game · score only</span>'}</div><div class="score-card-auto-tics">${achievement ? `<span class="auto-tic ${achievementClass}">${achievement} ✓</span>` : ""}${hasSkin ? '<span class="auto-tic skin-tic">Skin ✓</span>' : ""}${kpNote}</div></header>
+        <div class="score-card-controls"><div class="score-entry-wrap"><div class="score-stepper"><button type="button" data-delta="-1" ${disabled} aria-label="Decrease score">−</button><input type="number" min="1" max="20" inputmode="numeric" value="${gross}" ${disabled} aria-label="${esc(nameOf(player, 0))}'s gross score"><button type="button" data-delta="1" ${disabled} aria-label="Increase score">+</button></div></div>${canMarkSandy ? `<label class="tic-toggle compact-tic-toggle sandy-toggle" title="${hasKp ? "Remove KP before marking a Sandy" : "Mark Sandy"}"><input data-kind="sandy" type="checkbox" ${player.sandies[index] ? "checked" : ""} ${sandyDisabled}>SD</label>` : ""}${isKpHole ? `<label class="tic-toggle compact-tic-toggle kp-toggle" title="${player.sandies[index] ? "Remove Sandy before marking KP" : "Mark KP"}"><input data-kind="kp" type="checkbox" ${hasKp ? "checked" : ""} ${kpDisabled}>KP</label>` : ""}<div class="net-box"><span>Match net</span><strong>${net ?? "—"}</strong></div></div>
         ${touch ? `<span class="touch-confirmation touch-confirmation--${touch.kind}" role="status">${touch.kind === "success" ? "✓" : touch.kind === "warning" ? "!" : "×"} ${esc(touch.message)}</span>` : ""}
       </article>`;
     }).join("");
