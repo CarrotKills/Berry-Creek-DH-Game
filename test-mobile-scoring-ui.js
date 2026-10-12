@@ -48,6 +48,9 @@ assert.match(css, /\.tab \{ display: grid; justify-items: center;[^}]*min-height
 assert.match(css, /body\.header-compact \.compact-app-title \{ display: block; \}/);
 assert.match(css, /body:has\(\.score-stepper input:focus\) \.mobile-scoring-dock \{ display: none; \}/);
 assert.match(css, /\.score-card-controls \{ display: grid; grid-template-columns: minmax\(132px, 1fr\) auto auto 58px;/);
+assert.match(css, /\.group-score-card \.net-box \{ grid-column: 4; grid-row: 1;/);
+assert.doesNotMatch(css, /\.hole-meta, \.net-box \{ grid-row: 2; \}/);
+assert.match(css, /\.hole-entry > \.hole-meta, \.hole-entry > \.net-box \{ grid-row: 2; \}/);
 assert.match(css, /@media \(max-width: 480px\)[\s\S]*\.score-card-controls \{ grid-template-columns: minmax\(124px, 1fr\) auto auto 54px;/);
 assert.match(css, /button:not\(:disabled\):active/);
 assert.match(css, /\.touch-confirmation/);

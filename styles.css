@@ -218,7 +218,7 @@ main { width: min(1180px, calc(100% - 2rem)); margin: 1.25rem auto 3rem; }
 .group-score-card .score-stepper button { width: 40px; height: 40px; border: 2px solid color-mix(in srgb, var(--forest) 18%, transparent); font-size: 1.25rem; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5); }
 .group-score-card .score-stepper input { min-height: 42px; padding: 0.25rem; font-size: 1.45rem; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--forest) 10%, transparent); }
 .score-entry-wrap { display: grid; justify-items: start; }
-.group-score-card .net-box { grid-column: 4; min-height: 40px; padding: 0.22rem 0.25rem; border-radius: var(--radius-sm); background: var(--gold-soft); }
+.group-score-card .net-box { grid-column: 4; grid-row: 1; min-height: 40px; padding: 0.22rem 0.25rem; border-radius: var(--radius-sm); background: var(--gold-soft); }
 .group-score-card .net-box span { color: var(--muted); }
 .group-score-card .net-box strong { color: var(--forest); font-size: 1.25rem; }
 .score-card-controls .compact-tic-toggle { min-height: 40px; padding: 0.25rem 0.4rem; border: 1px solid transparent; border-radius: 7px; color: var(--forest-2); background: var(--gold-soft); font-size: 0.72rem; font-weight: 900; }
@@ -641,7 +641,7 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .score-heading .player-picker { flex: 1 1 180px; min-width: 0; }
   .hole-entry { grid-template-columns: 1fr 1fr; }
   .score-stepper { grid-column: 1 / -1; grid-row: 1; }
-  .hole-meta, .net-box { grid-row: 2; }
+  .hole-entry > .hole-meta, .hole-entry > .net-box { grid-row: 2; }
   .kp-panel { grid-template-columns: 1fr 1fr; }
   .leaderboard-legend dl { grid-template-columns: 1fr; }
   .leaderboard-legend dl > div:nth-child(odd), .leaderboard-legend dl > div:nth-child(even) { padding-right: 0; padding-left: 0; }
