@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Version 9.18.0 adds a sortable **GHIN** leaderboard column between TOT and NET. It displays the player's adjusted gross score for handicap posting by capping each completed hole at net double bogey using the selected tee's Course Handicap and the standard Upper hole handicap ratings. Plus handicaps and the USGA Course Handicap-above-54 exception are handled automatically. The value is also included in saved-round results, printed leaderboards, and downloaded spreadsheets, without changing the DH Game's actual gross, net, skins, tics, or points calculations.
+
 Version 9.17.3 makes **Send with Gmail** prefer the installed Gmail app on iPhone, iPad, and Android. The recipient, subject, and message are passed directly to Gmail; if Gmail is unavailable, the app falls back to Gmail's browser composer.
 
 Version 9.17.2 adds a dedicated **Send with Gmail** option for hole photos. It opens a pre-addressed Gmail draft with the round, date, hole, and viewed group filled in, while preserving the original default-email option.

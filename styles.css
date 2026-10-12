@@ -340,7 +340,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .leaderboard-legend dt { color: var(--forest-2); font-weight: 900; }
 .leaderboard-legend dd { margin: 0; color: var(--muted); font-size: 0.82rem; line-height: 1.35; }
 .leaderboard th, .leaderboard td { border-right: 0; border-left: 0; }
-.leaderboard { width: 58rem; table-layout: fixed; }
+.leaderboard { width: 61rem; table-layout: fixed; }
 .leaderboard tbody tr:not(.bcc-tips-row):nth-child(even) td { background: #fdf5f6; }
 .leaderboard tbody tr:not(.bcc-tips-row):hover td { background: #fae8eb; }
 .leaderboard th:first-child, .leaderboard tbody tr:not(.bcc-tips-row) td:first-child { box-sizing: border-box; width: 10rem; min-width: 10rem; max-width: 10rem; }

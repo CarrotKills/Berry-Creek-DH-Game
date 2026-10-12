@@ -85,6 +85,37 @@ assert.ok(highPlayingHandicap > 54);
 assert.equal(allocatedFullStrokes, highPlayingHandicap, "Full-handicap net calculations do not cap allocated strokes");
 assert.equal(E.playerTotals(highHandicapPlayer, E.COURSE, settings).total.net, 72 - highPlayingHandicap);
 
+const ghinScratch = { ...fieldLow, id: "ghin-scratch", scores: E.COURSE.holes.map((hole) => hole.par) };
+ghinScratch.scores[0] = 9;
+assert.equal(E.courseHandicapForPlayer(ghinScratch, E.COURSE, settings), 0);
+assert.equal(E.ghinMaximumHoleScore(ghinScratch, E.COURSE, settings, 0), 6, "A scratch player is capped at double bogey on Hole 1");
+assert.equal(E.ghinAdjustedHoleScore(ghinScratch, E.COURSE, settings, 0), 6);
+assert.deepEqual(E.ghinAdjustedTotal(ghinScratch, E.COURSE, settings), { gross: 74, completed: true }, "GHIN adjusted gross totals capped hole scores");
+
+const ghinReceiving = { ...fieldHigh, id: "ghin-receiving", ghin: 10, scores: E.COURSE.holes.map((hole) => hole.par) };
+ghinReceiving.scores[2] = 10;
+assert.equal(E.ghinStrokesForPlayerHole(ghinReceiving, E.COURSE, settings, 2), 1);
+assert.equal(E.ghinMaximumHoleScore(ghinReceiving, E.COURSE, settings, 2), 8, "Net double bogey includes the Course Handicap stroke received");
+assert.equal(E.ghinAdjustedTotal(ghinReceiving, E.COURSE, settings).gross, 75);
+assert.equal(E.ghinMaximumHoleScore(ghinReceiving, E.COURSE, { ...settings, allowance: 50 }, 2), 8, "GHIN adjustment ignores the game handicap allowance");
+
+const ghinPlus = { ...fieldLow, id: "ghin-plus", ghin: -2, scores: E.COURSE.holes.map((hole) => hole.par) };
+ghinPlus.scores[1] = 8;
+assert.equal(E.courseHandicapForPlayer(ghinPlus, E.COURSE, settings), -2);
+assert.equal(E.ghinStrokesForPlayerHole(ghinPlus, E.COURSE, settings, 1), -1);
+assert.equal(E.ghinMaximumHoleScore(ghinPlus, E.COURSE, settings, 1), 4, "A plus Course Handicap gives back a stroke when establishing net double bogey");
+assert.equal(E.ghinAdjustedTotal(ghinPlus, E.COURSE, settings).gross, 73);
+
+const ghinAboveMaximum = { ...fieldHigh, id: "ghin-above-maximum", ghin: 54, scores: E.COURSE.holes.map((hole) => hole.par) };
+ghinAboveMaximum.scores[2] = 15;
+assert.ok(E.courseHandicapForPlayer(ghinAboveMaximum, E.COURSE, settings) > 54);
+assert.equal(E.ghinStrokesForPlayerHole(ghinAboveMaximum, E.COURSE, settings, 2), 4);
+assert.equal(E.ghinMaximumHoleScore(ghinAboveMaximum, E.COURSE, settings, 2), 10, "Course Handicaps above 54 use the USGA par-plus-five exception when four strokes fall on a hole");
+
+const incompleteGhin = { ...ghinScratch, scores: [...ghinScratch.scores] };
+incompleteGhin.scores[17] = "";
+assert.deepEqual(E.ghinAdjustedTotal(incompleteGhin, E.COURSE, settings), { gross: 70, completed: false });
+
 assert.equal(E.netScore(5, 2), 3);
 assert.equal(E.isEagle(3, 5), true);
 assert.equal(E.isEagle(2, 4), true);

@@ -173,6 +173,43 @@
     return strokesForHole(handicap, hole.strokeIndex);
   }
 
+  function courseHandicapForPlayer(player, course, settings) {
+    const tee = teeForPlayer(course, player);
+    return courseHandicap(player.ghin, tee.slope, tee.rating, settings?.par ?? course.par);
+  }
+
+  function ghinStrokesForPlayerHole(player, course, settings, holeIndex) {
+    const hole = holesForPlayer(course, player)[holeIndex];
+    if (!hole) return 0;
+    return strokesForHole(courseHandicapForPlayer(player, course, settings), hole.strokeIndex);
+  }
+
+  function ghinMaximumHoleScore(player, course, settings, holeIndex) {
+    const hole = holesForPlayer(course, player)[holeIndex];
+    if (!hole) return null;
+    const handicap = courseHandicapForPlayer(player, course, settings);
+    const strokes = ghinStrokesForPlayerHole(player, course, settings, holeIndex);
+    if (handicap > 54 && strokes >= 4) return hole.par + 5;
+    return Math.max(1, hole.par + 2 + strokes);
+  }
+
+  function ghinAdjustedHoleScore(player, course, settings, holeIndex) {
+    const score = player?.scores?.[holeIndex];
+    if (!Number.isFinite(Number(score)) || Number(score) < 1) return null;
+    return Math.min(Number(score), ghinMaximumHoleScore(player, course, settings, holeIndex));
+  }
+
+  function ghinAdjustedTotal(player, course, settings) {
+    let gross = 0;
+    let completed = true;
+    for (let holeIndex = 0; holeIndex < course.holes.length; holeIndex += 1) {
+      const adjusted = ghinAdjustedHoleScore(player, course, settings, holeIndex);
+      if (adjusted === null) completed = false;
+      else gross += adjusted;
+    }
+    return { gross, completed };
+  }
+
   function segmentTotals(player, course, settings, start, end) {
     let gross = 0;
     let net = 0;
@@ -422,6 +459,11 @@
     strokesForPlayerHole,
     skinStrokesForPlayerHole,
     fullHandicapStrokesForPlayerHole,
+    courseHandicapForPlayer,
+    ghinStrokesForPlayerHole,
+    ghinMaximumHoleScore,
+    ghinAdjustedHoleScore,
+    ghinAdjustedTotal,
     segmentTotals,
     playerTotals,
     leaders,
