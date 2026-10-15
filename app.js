@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.22.0";
+  const APP_VERSION = "9.23.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -1689,7 +1689,7 @@
     status.textContent = `${savedRounds.length} saved round${savedRounds.length === 1 ? "" : "s"}`;
     list.innerHTML = savedRounds.length ? savedRounds.map((round) => {
       const savedAt = Number.isNaN(Date.parse(round.savedAt)) ? round.savedAt : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(round.savedAt));
-      return `<article class="saved-round-card"><div><strong>${esc(round.roundName)}</strong><span>${esc(round.date)} · ${round.playerCount} player${round.playerCount === 1 ? "" : "s"} · ${round.completed ? "Complete" : "In progress when saved"}</span><span>Saved ${esc(savedAt)}</span></div><div class="saved-round-actions"><button class="button button-primary" type="button" data-round-action="view" data-round-id="${round.id}">View results</button><button class="button button-quiet" type="button" data-round-action="roster" data-round-id="${round.id}">Reuse roster</button><button class="button button-quiet" type="button" data-round-action="download" data-round-id="${round.id}">Download</button><button class="button button-quiet" type="button" data-round-action="delete" data-round-id="${round.id}">Delete</button></div></article>`;
+      return `<article class="saved-round-card"><div><strong>${esc(round.roundName)}</strong><span>${esc(round.date)} · ${round.playerCount} player${round.playerCount === 1 ? "" : "s"} · ${round.completed ? "Complete" : "In progress when saved"}</span><span>Saved ${esc(savedAt)}</span></div><div class="saved-round-actions"><button class="button button-primary" type="button" data-round-action="view" data-round-id="${round.id}">View results</button><button class="button button-quiet" type="button" data-round-action="print" data-round-id="${round.id}">Print results</button><button class="button button-quiet" type="button" data-round-action="roster" data-round-id="${round.id}">Reuse roster</button><button class="button button-quiet" type="button" data-round-action="download" data-round-id="${round.id}">Download</button><button class="button button-quiet" type="button" data-round-action="delete" data-round-id="${round.id}">Delete</button></div></article>`;
     }).join("") : '<div class="empty-state">No rounds have been saved yet.</div>';
     document.querySelectorAll("[data-round-action]").forEach((button) => button.addEventListener("click", () => handleSavedRoundAction(button.dataset.roundAction, button.dataset.roundId)));
   }
@@ -1749,6 +1749,11 @@
         return showToast("Saved round deleted.", "success");
       }
       const round = await fetchSavedRound(id);
+      if (action === "print") {
+        preparePrintReport(round.state);
+        window.print();
+        return;
+      }
       if (action === "download") {
         return downloadBlob(JSON.stringify(round.state, null, 2), "application/json", `berry-creek-${round.date}-saved.json`);
       }
@@ -2628,8 +2633,8 @@
     downloadBlob(csvLines.join("\r\n"), "text/csv;charset=utf-8", `berry-creek-results-${reportState.date}.csv`);
   }
 
-  function preparePrintReport() {
-    const reportState = leaderboardRound();
+  function preparePrintReport(roundState = null) {
+    const reportState = roundState ? R.normalizeState(roundState) : leaderboardRound();
     const settlement = E.pointsSettlement(reportState.players, E.COURSE, reportState.settings);
     const kpRows = KP_HOLES.map((hole) => {
       const player = reportState.players.find((item) => item.id === reportState.settings.kpWinners[String(hole)]);
@@ -2785,6 +2790,11 @@
   $("#cancelPlayerInviteBtn").addEventListener("click", () => $("#playerInviteDialog").close());
   $("#csvBtn").addEventListener("click", downloadCsv);
   $("#printBtn").addEventListener("click", () => { preparePrintReport(); window.print(); });
+  $("#printSavedRoundBtn").addEventListener("click", () => {
+    if (!activeSavedRound) return;
+    preparePrintReport(activeSavedRound.state);
+    window.print();
+  });
   const resetDialog = $("#confirmDialog");
   $("#resetAppBtn").addEventListener("click", () => { resetDialog.returnValue = "cancel"; resetDialog.showModal(); });
   resetDialog.addEventListener("close", async () => {

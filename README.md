@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Version 9.23.0 adds **Print results** to every entry in the Saved Rounds Archive. Admins can print an individual historical round directly from its archive card or from the saved-round results dialog. The report uses that archived round's leaderboard, KP and skin results, group scorecards, settlement totals, and hole comments without loading it into—or changing—the active round.
+
 Version 9.22.0 moves saved-player group assignment controls beside **Search by name** on the Players tab. Search for a golfer, select their roster card, choose the destination group, and add them from the compact top row; group controls no longer repeat at the bottom of every card. A single filtered search result is selected automatically, and existing duplicate-player, group-capacity, and round-lock safeguards remain in place.
 
 Version 9.21.0 moves hole comments into a dedicated **Comments** tab, removing the entire comments block from the Scoring page. Players can select any hole without changing the scorekeeper's active scoring hole, browse stories from every group, and—when signed in—post or remove their own comments. Admins retain moderation access, photo-email actions follow the selected comments hole, and the phone navigation now accommodates five primary tabs.

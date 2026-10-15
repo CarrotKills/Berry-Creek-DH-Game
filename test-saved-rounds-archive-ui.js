@@ -19,11 +19,16 @@ assert.doesNotMatch(app, /REPLACE_ROUND/);
 assert.ok(html.indexOf('id="savedRoundsStatus"') < html.indexOf('id="savedRoundsList"'), "Archive count must appear before its round list");
 assert.match(app, /status\.textContent = `\$\{savedRounds\.length\} saved round/);
 assert.match(app, /data-round-action="view"/);
+assert.match(app, /data-round-action="print"/);
 assert.match(app, /data-round-action="roster"/);
 assert.match(app, /data-round-action="download"/);
 assert.match(app, /data-round-action="delete"/);
 assert.match(css, /\.saved-rounds-archive\s*\{/);
 assert.match(css, /\.saved-rounds-archive > summary/);
 assert.match(css, /\.archive-folder-icon/);
+assert.match(html, /id="printSavedRoundBtn"[^>]*>Print Results</);
+assert.match(app, /if \(action === "print"\) \{\s*preparePrintReport\(round\.state\);\s*window\.print\(\);/);
+assert.match(app, /function preparePrintReport\(roundState = null\)/);
+assert.match(app, /preparePrintReport\(activeSavedRound\.state\)/);
 
 console.log("Saved-round archive UI tests passed.");
