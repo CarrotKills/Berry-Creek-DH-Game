@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Version 9.22.0 moves saved-player group assignment controls beside **Search by name** on the Players tab. Search for a golfer, select their roster card, choose the destination group, and add them from the compact top row; group controls no longer repeat at the bottom of every card. A single filtered search result is selected automatically, and existing duplicate-player, group-capacity, and round-lock safeguards remain in place.
+
 Version 9.21.0 moves hole comments into a dedicated **Comments** tab, removing the entire comments block from the Scoring page. Players can select any hole without changing the scorekeeper's active scoring hole, browse stories from every group, and—when signed in—post or remove their own comments. Admins retain moderation access, photo-email actions follow the selected comments hole, and the phone navigation now accommodates five primary tabs.
 
 Version 9.20.1 reduces the vertical height of each phone scoring card by approximately 15 percent. It also tightens the spacing between player cards and compacts the group selector, hole navigation, status line, and hole banner so more of a five-player group remains visible without scrolling. Score, SD, KP, Match Net, automatic tic indicators, and touch feedback remain available.

@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.21.0";
+  const APP_VERSION = "9.22.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -66,11 +66,12 @@
   let activeSavedRound = null;
   let pendingReuseRound = null;
   let savedPlayerSearch = "";
+  let selectedSavedPlayerId = "";
+  let savedRosterGroupSelection = "A";
   let playerEntryMode = "";
   let indexUpdateInProgress = false;
   let indexUpdateMessage = "";
   let indexUpdateError = false;
-  const savedPlayerGroupSelections = new Map();
   const scoreSyncStatus = new Map();
   const scoreSyncTimers = new Map();
   const touchFeedback = new Map();
@@ -795,6 +796,22 @@
     }).join("");
   }
 
+  function renderSavedPlayerAssignment(canEdit = false) {
+    const groupSelect = $("#savedRosterGroup");
+    const addButton = $("#addSelectedSavedPlayerBtn");
+    if (!groupSelect || !addButton) return;
+    const selectedPlayer = savedPlayers.find((player) => player.id === selectedSavedPlayerId);
+    const activePlayer = selectedPlayer ? state.players.find((player) => player.directoryId === selectedPlayer.id) : null;
+    if (!R.GROUPS.includes(savedRosterGroupSelection) || groupPlayers(savedRosterGroupSelection).length >= R.MAX_GROUP_SIZE) savedRosterGroupSelection = nextAvailableGroup();
+    groupSelect.innerHTML = savedGroupOptions(savedRosterGroupSelection);
+    groupSelect.value = savedRosterGroupSelection;
+    const groupFull = groupPlayers(savedRosterGroupSelection).length >= R.MAX_GROUP_SIZE;
+    groupSelect.disabled = !canEdit || state.players.length >= R.MAX_PLAYERS;
+    addButton.disabled = !canEdit || !selectedPlayer || Boolean(activePlayer) || state.players.length >= R.MAX_PLAYERS || groupFull;
+    addButton.textContent = activePlayer ? `In Group ${activePlayer.group}` : selectedPlayer ? "Add to group" : "Select player";
+    addButton.title = selectedPlayer ? `${selectedPlayer.name} → Group ${savedRosterGroupSelection}` : "Select a saved player below first";
+  }
+
   function renderSavedPlayers(errorMessage = "") {
     const list = $("#savedPlayerList");
     const status = $("#playerDatabaseStatus");
@@ -804,6 +821,7 @@
     list.replaceChildren();
     search.disabled = !adminUnlocked || connectionMode !== "live";
     search.value = savedPlayerSearch;
+    renderSavedPlayerAssignment(false);
     if (!adminUnlocked) {
       status.textContent = "Sign in as an admin to view saved players and manage their logins.";
       return;
@@ -824,35 +842,33 @@
     }
     const query = savedPlayerSearch.trim().toLowerCase();
     const filtered = savedPlayers.filter((player) => player.name.toLowerCase().includes(query));
+    if (selectedSavedPlayerId && !filtered.some((player) => player.id === selectedSavedPlayerId)) selectedSavedPlayerId = "";
+    if (!selectedSavedPlayerId && query && filtered.length === 1 && !state.players.some((player) => player.directoryId === filtered[0].id)) selectedSavedPlayerId = filtered[0].id;
     const activeCount = savedPlayers.filter((saved) => state.players.some((player) => player.directoryId === saved.id)).length;
     status.textContent = `${savedPlayers.length} saved player${savedPlayers.length === 1 ? "" : "s"} · ${activeCount} in this round`;
+    const canEdit = adminUnlocked && connectionMode === "live" && !isLocked();
+    renderSavedPlayerAssignment(canEdit);
     if (!filtered.length) {
       list.innerHTML = `<div class="empty-state">${savedPlayers.length ? "No saved players match that search." : "No saved players yet. Use Add Player above to create the reusable roster."}</div>`;
       return;
     }
-    const canEdit = adminUnlocked && connectionMode === "live" && !isLocked();
     filtered.forEach((saved) => {
       const linkedAdmin = admins.find((admin) => admin.playerId === saved.id);
       const activePlayer = state.players.find((player) => player.directoryId === saved.id);
-      let selected = savedPlayerGroupSelections.get(saved.id) || nextAvailableGroup();
-      if (groupPlayers(selected).length >= R.MAX_GROUP_SIZE) selected = nextAvailableGroup();
-      savedPlayerGroupSelections.set(saved.id, selected);
-      const addDisabled = !canEdit || Boolean(activePlayer) || state.players.length >= R.MAX_PLAYERS || groupPlayers(selected).length >= R.MAX_GROUP_SIZE;
+      const isSelected = selectedSavedPlayerId === saved.id;
       const row = document.createElement("article");
-      row.className = "saved-player-row";
+      row.className = `saved-player-row${isSelected ? " is-selected" : ""}`;
       row.dataset.savedPlayerId = saved.id;
       row.innerHTML = `<label class="saved-player-name">Name<input class="saved-name" type="text" maxlength="40" value="${esc(saved.name)}" ${canEdit ? "" : "disabled"}></label>
         <div class="handicap-field saved-ghin-field"><span class="field-label">GHIN IDX</span><div class="handicap-input-row"><input class="saved-ghin" type="text" maxlength="6" inputmode="decimal" value="${displayIndex(saved.ghin)}" placeholder="12.4" aria-label="GHIN Index for ${esc(saved.name)}" ${canEdit ? "" : "disabled"}><button class="saved-ghin-plus plus-handicap-toggle" type="button" aria-pressed="false" aria-label="Mark ${esc(saved.name)} as plus handicap" ${canEdit ? "" : "disabled"}><span aria-hidden="true">+</span><span class="plus-label">HCP</span></button></div></div>
         <div class="playing-hcp form-hcp"><span>HDCP</span><strong>${displayPlayingHandicap(hcpForValues(saved.ghin, saved.teeKey))}</strong></div>
         <label class="saved-tee-field">Tee<select class="saved-tee" ${canEdit ? "" : "disabled"}>${teeOptions(saved.teeKey)}</select></label>
-        <label class="saved-group-field">Add to<select class="saved-group" ${addDisabled ? "disabled" : ""}>${savedGroupOptions(selected)}</select></label>
-        <div class="saved-player-actions"><button class="button button-quiet create-player-invite" type="button" ${canEdit && !linkedAdmin ? "" : "disabled"}>${linkedAdmin ? "Admin-linked login" : saved.loginConfigured ? "Create reset link" : "Create login link"}</button><button class="button button-primary add-saved-player" type="button" ${addDisabled ? "disabled" : ""}>${activePlayer ? `In Group ${activePlayer.group}` : "Add to group"}</button><button class="button button-quiet delete-saved-player" type="button" ${canEdit && !linkedAdmin ? "" : "disabled"}>${linkedAdmin ? "Unlink before deleting" : "Delete"}</button></div>`;
+        <div class="saved-player-actions"><button class="button button-quiet create-player-invite" type="button" ${canEdit && !linkedAdmin ? "" : "disabled"}>${linkedAdmin ? "Admin-linked login" : saved.loginConfigured ? "Create reset link" : "Create login link"}</button><button class="button ${isSelected ? "button-primary" : "button-quiet"} select-saved-player" type="button" ${canEdit && !activePlayer ? "" : "disabled"}>${activePlayer ? `In Group ${activePlayer.group}` : isSelected ? "Selected" : "Select"}</button><button class="button button-quiet delete-saved-player" type="button" ${canEdit && !linkedAdmin ? "" : "disabled"}>${linkedAdmin ? "Unlink before deleting" : "Delete"}</button></div>`;
       const name = row.querySelector(".saved-name");
       const ghin = row.querySelector(".saved-ghin");
       const plusHandicap = row.querySelector(".saved-ghin-plus");
       const tee = row.querySelector(".saved-tee");
       const handicap = row.querySelector(".playing-hcp strong");
-      const group = row.querySelector(".saved-group");
       syncPlusHandicapToggle(ghin, plusHandicap);
       name.addEventListener("change", () => updateSavedPlayer(saved.id, { name: name.value }));
       ghin.addEventListener("input", () => { syncPlusHandicapToggle(ghin, plusHandicap); handicap.textContent = displayPlayingHandicap(hcpForValues(ghin.value, tee.value)); });
@@ -863,9 +879,8 @@
       });
       plusHandicap.addEventListener("click", () => { togglePlusHandicapInput(ghin, plusHandicap); updateSavedPlayer(saved.id, { ghin: E.parseHandicapInput(ghin.value) }); });
       tee.addEventListener("change", () => { handicap.textContent = displayPlayingHandicap(hcpForValues(ghin.value, tee.value)); updateSavedPlayer(saved.id, { teeKey: tee.value }); });
-      group.addEventListener("change", () => savedPlayerGroupSelections.set(saved.id, group.value));
       row.querySelector(".create-player-invite").addEventListener("click", () => createPlayerInvitation(saved.id));
-      row.querySelector(".add-saved-player").addEventListener("click", () => addSavedPlayerToRound(saved.id, group.value));
+      row.querySelector(".select-saved-player").addEventListener("click", () => { selectedSavedPlayerId = saved.id; renderSavedPlayers(); });
       row.querySelector(".delete-saved-player").addEventListener("click", () => deleteSavedPlayer(saved.id));
       list.append(row);
     });
@@ -885,6 +900,8 @@
         body: JSON.stringify({ name, ghin, teeKey })
       });
       savedPlayers = [...savedPlayers, body.player].sort((a, b) => a.name.localeCompare(b.name));
+      selectedSavedPlayerId = body.player.id;
+      savedPlayerSearch = body.player.name;
       $("#savedPlayerName").value = "";
       $("#savedPlayerGhin").value = "";
       playerEntryMode = "";
@@ -940,6 +957,9 @@
     if (!R.GROUPS.includes(group) || groupPlayers(group).length >= R.MAX_GROUP_SIZE) return showValidation(`Group ${group} already has five players.`);
     const player = R.normalizePlayer({ id: makeId(), directoryId: saved.id, name: saved.name, ghin: saved.ghin, teeKey: saved.teeKey, group });
     if (!await dispatch({ type: "ADD_PLAYER", payload: { player } })) return;
+    selectedSavedPlayerId = "";
+    savedPlayerSearch = "";
+    renderSavedPlayers();
     showToast(`${saved.name} added to Group ${group}.`, "success");
   }
 
@@ -950,7 +970,7 @@
       await databaseRequest(`/api/players/${encodeURIComponent(id)}`, { method: "DELETE" });
       const linkedPlayers = state.players.filter((player) => player.directoryId === id);
       savedPlayers = savedPlayers.filter((player) => player.id !== id);
-      savedPlayerGroupSelections.delete(id);
+      if (selectedSavedPlayerId === id) selectedSavedPlayerId = "";
       for (const player of linkedPlayers) await dispatch({ type: "UPDATE_PLAYER", payload: { playerId: player.id, directoryId: "" } });
       render();
       showToast(`${saved.name} deleted from the saved player database.`, "success");
@@ -2545,7 +2565,8 @@
     selectedGroup = "A";
     shareTokens = {};
     groupPresence = {};
-    savedPlayerGroupSelections.clear();
+    selectedSavedPlayerId = "";
+    savedRosterGroupSelection = nextAvailableGroup();
     scoreSyncStatus.clear();
     await refreshState().catch(() => {});
     await loadShareTokens();
@@ -2649,7 +2670,8 @@
     selectedHole = 1;
     selectedCommentHole = 1;
     selectedGroup = "A";
-    savedPlayerGroupSelections.clear();
+    selectedSavedPlayerId = "";
+    savedRosterGroupSelection = nextAvailableGroup();
     if (!await dispatch({ type: "CLEAR_ROUND" })) return false;
     shareTokens = {};
     groupPresence = {};
@@ -2688,6 +2710,8 @@
     $(`#${id}`).addEventListener(id.endsWith("Tee") ? "change" : "input", renderDraftHandicaps);
   });
   $("#savedPlayerSearch").addEventListener("input", (event) => { savedPlayerSearch = event.target.value; renderSavedPlayers(); });
+  $("#savedRosterGroup").addEventListener("change", (event) => { savedRosterGroupSelection = event.target.value; renderSavedPlayers(); });
+  $("#addSelectedSavedPlayerBtn").addEventListener("click", () => addSavedPlayerToRound(selectedSavedPlayerId, savedRosterGroupSelection));
   $("#updateIndexesBtn").addEventListener("click", updateIndexesFromSheet);
   $("#resetLeaderboardSortBtn").addEventListener("click", () => { leaderboardSort = { key: "standing", direction: "asc" }; renderLeaderboard(); });
   $("#activeGroupSelect").addEventListener("change", (event) => { clearTimeout(autoAdvanceTimer); groupWasChosen = true; selectedGroup = event.target.value; const url = new URL(location.href); url.searchParams.set("group", selectedGroup); history.replaceState(null, "", url); renderGroupScoring(); });
@@ -2708,7 +2732,7 @@
   $("#roundDate").addEventListener("change", (event) => dispatch({ type: "SET_META", payload: { date: event.target.value } }));
   $("#allowance").addEventListener("change", (event) => dispatch({ type: "SET_ALLOWANCE", payload: { allowance: Number(event.target.value) } }));
   $("#adminBtn").addEventListener("click", () => {
-    if (currentUser) { const name = currentUser.name; lockAdminControls(); savedPlayerSearch = ""; savedPlayerGroupSelections.clear(); render(); showToast(`${name} signed out.`); }
+    if (currentUser) { const name = currentUser.name; lockAdminControls(); savedPlayerSearch = ""; selectedSavedPlayerId = ""; savedRosterGroupSelection = nextAvailableGroup(); render(); showToast(`${name} signed out.`); }
     else openAdminDialog();
   });
   $("#adminSubmitBtn").addEventListener("click", (event) => { event.preventDefault(); verifyAdmin(); });
