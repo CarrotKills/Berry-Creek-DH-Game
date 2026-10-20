@@ -608,6 +608,17 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   body.header-compact .header-actions { flex-wrap: nowrap; gap: 0.3rem; }
   body.header-compact #adminBtn, body.header-compact #spectatorStatus { display: none; }
   body.header-compact .status-pill { min-height: 30px; padding: 0.25rem 0.45rem; font-size: 0.68rem; }
+  body.android-device .app-header { height: 50px; min-height: 50px; overflow: hidden; align-items: center; gap: 0.45rem; padding-top: 0.3rem; padding-bottom: 0.3rem; border-top-width: 3px; background: var(--paper); -webkit-backdrop-filter: none; backdrop-filter: none; contain: paint; }
+  body.android-device .brand-lockup { gap: 0.45rem; }
+  body.android-device .club-logo { width: 36px; height: 36px; }
+  body.android-device .app-header .eyebrow, body.android-device .app-header h1 { display: none; }
+  body.android-device .compact-app-title { display: block; }
+  body.android-device .header-actions { flex-wrap: nowrap; gap: 0.3rem; }
+  body.android-device #adminBtn, body.android-device #spectatorStatus { display: none; }
+  body.android-device .status-pill { min-height: 30px; padding: 0.25rem 0.45rem; font-size: 0.68rem; }
+  body.android-device .round-identity-bar { top: 50px; }
+  body.android-device .update-banner { top: 90px; }
+  body.android-device .tabs, body.android-device .mobile-scoring-dock { background: var(--paper); -webkit-backdrop-filter: none; backdrop-filter: none; }
   body.score-view-active main { padding-bottom: calc(11.5rem + env(safe-area-inset-bottom)); }
   body.score-view-active footer { margin-bottom: calc(11.5rem + env(safe-area-inset-bottom)); }
   .mobile-scoring-dock { position: fixed; right: 0; bottom: calc(4.05rem + env(safe-area-inset-bottom)); left: 0; z-index: 45; display: grid; grid-template-columns: 1fr minmax(86px, 0.72fr) 1fr; gap: 0.4rem; padding: 0.45rem max(0.55rem, env(safe-area-inset-right)) 0.45rem max(0.55rem, env(safe-area-inset-left)); border-top: 1px solid color-mix(in srgb, var(--forest) 30%, var(--line)); background: color-mix(in srgb, var(--paper) 94%, transparent); box-shadow: 0 -8px 24px rgba(0,0,0,0.16); backdrop-filter: blur(12px); }

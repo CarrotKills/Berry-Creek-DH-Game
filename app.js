@@ -4,13 +4,16 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.26.0";
+  const APP_VERSION = "9.26.1";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
   const SESSION_KEY = "berry-creek-user-session-v1";
   const HEADER_COMPACT_ENTER_Y = 112;
   const HEADER_COMPACT_EXIT_Y = 32;
+  const HEADER_MODE_SETTLE_MS = 120;
+  const MOBILE_HEADER_MEDIA = window.matchMedia("(max-width: 760px)");
+  const IS_ANDROID = /Android/i.test(navigator.userAgent || "") || navigator.userAgentData?.platform === "Android";
   const KP_HOLES = [2, 8, 12, 17];
   const LEADERBOARD_COLUMNS = [
     { key: "player", label: "PLAYER", description: "Player name. *G identifies a guest.", firstDirection: "asc", text: true },
@@ -86,8 +89,12 @@
   let autoAdvanceTimer;
   let headerLayoutFrame;
   let headerHeightFrame;
+  let headerModeTimer;
+  let pendingHeaderCompact = null;
   let leaderboardSort = { key: "standing", direction: "asc" };
   let preferences = loadPreferences();
+
+  document.body.classList.toggle("android-device", IS_ANDROID);
 
   function loadLocal() {
     try { return R.normalizeState(JSON.parse(localStorage.getItem(STORAGE_KEY))); }
@@ -237,7 +244,10 @@
   function measureHeaderHeight() {
     const appHeader = $(".app-header");
     if (!appHeader) return;
-    document.documentElement.style.setProperty("--app-header-height", `${Math.ceil(appHeader.getBoundingClientRect().height)}px`);
+    const nextHeight = `${Math.ceil(appHeader.getBoundingClientRect().height)}px`;
+    if (document.documentElement.style.getPropertyValue("--app-header-height") !== nextHeight) {
+      document.documentElement.style.setProperty("--app-header-height", nextHeight);
+    }
   }
 
   function scheduleHeaderHeight() {
@@ -248,16 +258,51 @@
     });
   }
 
+  function applyHeaderLayout(compact) {
+    pendingHeaderCompact = null;
+    clearTimeout(headerModeTimer);
+    headerModeTimer = 0;
+    document.body.classList.toggle("header-compact", compact);
+    scheduleHeaderHeight();
+  }
+
   function scheduleHeaderLayout() {
     if (headerLayoutFrame) return;
     headerLayoutFrame = requestAnimationFrame(() => {
       headerLayoutFrame = 0;
-      const mobile = window.innerWidth <= 760;
+      const mobile = MOBILE_HEADER_MEDIA.matches;
       const compact = document.body.classList.contains("header-compact");
-      const shouldCompact = mobile && (compact ? window.scrollY > HEADER_COMPACT_EXIT_Y : window.scrollY >= HEADER_COMPACT_ENTER_Y);
-      document.body.classList.toggle("header-compact", shouldCompact);
-      measureHeaderHeight();
+      const shouldCompact = mobile && (IS_ANDROID || (compact ? window.scrollY > HEADER_COMPACT_EXIT_Y : window.scrollY >= HEADER_COMPACT_ENTER_Y));
+
+      if (IS_ANDROID || !mobile || shouldCompact === compact) {
+        if (shouldCompact === compact) {
+          pendingHeaderCompact = null;
+          clearTimeout(headerModeTimer);
+          headerModeTimer = 0;
+          scheduleHeaderHeight();
+        } else {
+          applyHeaderLayout(shouldCompact);
+        }
+        return;
+      }
+
+      if (pendingHeaderCompact === shouldCompact) return;
+      pendingHeaderCompact = shouldCompact;
+      clearTimeout(headerModeTimer);
+      headerModeTimer = setTimeout(() => {
+        const currentCompact = document.body.classList.contains("header-compact");
+        const stillMobile = MOBILE_HEADER_MEDIA.matches;
+        const stableCompact = stillMobile && (currentCompact ? window.scrollY > HEADER_COMPACT_EXIT_Y : window.scrollY >= HEADER_COMPACT_ENTER_Y);
+        if (stableCompact === pendingHeaderCompact) applyHeaderLayout(stableCompact);
+        else pendingHeaderCompact = null;
+      }, HEADER_MODE_SETTLE_MS);
     });
+  }
+
+  function settleHeaderAfterOrientationChange() {
+    pendingHeaderCompact = null;
+    clearTimeout(headerModeTimer);
+    setTimeout(scheduleHeaderLayout, 180);
   }
 
   function showToast(message, kind = "info") {
@@ -2886,7 +2931,8 @@
   window.addEventListener("orientationchange", updateLeaderboardWakeLock);
   window.addEventListener("resize", updateLeaderboardWakeLock);
   window.addEventListener("scroll", scheduleHeaderLayout, { passive: true });
-  window.addEventListener("resize", scheduleHeaderLayout);
+  window.addEventListener("orientationchange", settleHeaderAfterOrientationChange);
+  if (typeof MOBILE_HEADER_MEDIA.addEventListener === "function") MOBILE_HEADER_MEDIA.addEventListener("change", scheduleHeaderLayout);
   window.addEventListener("pagehide", releaseLeaderboardWakeLock);
 
   if (typeof ResizeObserver === "function") new ResizeObserver(scheduleHeaderHeight).observe($(".app-header"));

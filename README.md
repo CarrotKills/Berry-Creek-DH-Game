@@ -1,6 +1,6 @@
 # Berry Creek DH Game
 
-Version 9.26.0 preserves accountability when a new round begins. Unsaved or incomplete outgoing rounds are automatically archived before the active event is cleared, saved-round views now show who made every retained change and when, and the complete change history is appended to printed results. Audit retention was expanded for full 30-player events, and historical JPEG/PDF scorecard exports now use the DH golfer logo.
+Version 9.26.1 stabilizes the compact banner on Android phones. Android now uses a fixed-height compact header, ignores browser-toolbar resize noise when selecting the header mode, and removes GPU-heavy blur from sticky mobile controls. Other mobile devices retain the scrolling compact-header behavior with a short stability delay.
 
 Version 9.25.0 stabilizes the compact mobile header near the top scroll boundary. Separate enter and exit thresholds prevent the header from rapidly toggling when its height changes, header-height measurement no longer re-runs compact-state decisions, and size-changing transitions were removed to prevent intermediate layout jumps.
 
