@@ -4,11 +4,13 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.24.0";
+  const APP_VERSION = "9.25.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
   const SESSION_KEY = "berry-creek-user-session-v1";
+  const HEADER_COMPACT_ENTER_Y = 112;
+  const HEADER_COMPACT_EXIT_Y = 32;
   const KP_HOLES = [2, 8, 12, 17];
   const LEADERBOARD_COLUMNS = [
     { key: "player", label: "PLAYER", description: "Player name. *G identifies a guest.", firstDirection: "asc", text: true },
@@ -83,6 +85,7 @@
   let leaderboardWakeLockRequesting = false;
   let autoAdvanceTimer;
   let headerLayoutFrame;
+  let headerHeightFrame;
   let leaderboardSort = { key: "standing", direction: "asc" };
   let preferences = loadPreferences();
 
@@ -231,14 +234,29 @@
     return accepted;
   }
 
+  function measureHeaderHeight() {
+    const appHeader = $(".app-header");
+    if (!appHeader) return;
+    document.documentElement.style.setProperty("--app-header-height", `${Math.ceil(appHeader.getBoundingClientRect().height)}px`);
+  }
+
+  function scheduleHeaderHeight() {
+    if (headerHeightFrame) return;
+    headerHeightFrame = requestAnimationFrame(() => {
+      headerHeightFrame = 0;
+      measureHeaderHeight();
+    });
+  }
+
   function scheduleHeaderLayout() {
     if (headerLayoutFrame) return;
     headerLayoutFrame = requestAnimationFrame(() => {
       headerLayoutFrame = 0;
-      const appHeader = $(".app-header");
-      if (!appHeader) return;
-      document.body.classList.toggle("header-compact", window.innerWidth <= 760 && window.scrollY > 72);
-      document.documentElement.style.setProperty("--app-header-height", `${Math.ceil(appHeader.getBoundingClientRect().height)}px`);
+      const mobile = window.innerWidth <= 760;
+      const compact = document.body.classList.contains("header-compact");
+      const shouldCompact = mobile && (compact ? window.scrollY > HEADER_COMPACT_EXIT_Y : window.scrollY >= HEADER_COMPACT_ENTER_Y);
+      document.body.classList.toggle("header-compact", shouldCompact);
+      measureHeaderHeight();
     });
   }
 
@@ -2838,7 +2856,7 @@
   window.addEventListener("resize", scheduleHeaderLayout);
   window.addEventListener("pagehide", releaseLeaderboardWakeLock);
 
-  if (typeof ResizeObserver === "function") new ResizeObserver(scheduleHeaderLayout).observe($(".app-header"));
+  if (typeof ResizeObserver === "function") new ResizeObserver(scheduleHeaderHeight).observe($(".app-header"));
 
   document.body.dataset.display = preferences.display;
   setupScrollAffordances();

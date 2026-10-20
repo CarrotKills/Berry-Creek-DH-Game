@@ -23,9 +23,13 @@ assert.match(app, /mobileScoringStatus"\)\.textContent = `Group \$\{selectedGrou
 assert.match(app, /mobileHoleSelect"\)\.addEventListener\("change"/);
 assert.match(app, /mobilePrevHoleBtn"\)\.addEventListener\("click"/);
 assert.match(app, /mobileNextHoleBtn"\)\.addEventListener\("click"/);
-assert.match(app, /classList\.toggle\("header-compact", window\.innerWidth <= 760 && window\.scrollY > 72\)/);
-assert.match(app, /new ResizeObserver\(scheduleHeaderLayout\)/);
+assert.match(app, /const HEADER_COMPACT_ENTER_Y = 112;/);
+assert.match(app, /const HEADER_COMPACT_EXIT_Y = 32;/);
+assert.match(app, /const shouldCompact = mobile && \(compact \? window\.scrollY > HEADER_COMPACT_EXIT_Y : window\.scrollY >= HEADER_COMPACT_ENTER_Y\);/);
+assert.match(app, /new ResizeObserver\(scheduleHeaderHeight\)/);
 assert.match(app, /window\.addEventListener\("scroll", scheduleHeaderLayout, \{ passive: true \}\)/);
+assert.doesNotMatch(css, /\.app-header \{[^}]*transition:\s*padding/s);
+assert.doesNotMatch(css, /\.club-logo \{[^}]*transition:\s*width/s);
 assert.match(app, /dispatchWithTouchFeedback/);
 assert.match(app, /Sandy marked/);
 assert.match(app, /KP marked/);

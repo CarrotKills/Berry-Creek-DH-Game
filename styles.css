@@ -38,7 +38,7 @@ h3 { letter-spacing: -0.012em; }
 
 .app-header { background: color-mix(in srgb, var(--paper) 96%, transparent); color: var(--ink); display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.65rem max(1rem, calc((100% - 1180px) / 2)); border-top: 6px solid var(--forest); border-bottom: 1px solid var(--line); backdrop-filter: blur(12px); }
 .brand-lockup { display: flex; align-items: center; gap: 1rem; min-width: 0; }
-.club-logo { width: 76px; height: 76px; object-fit: contain; object-position: center; transition: width 160ms ease, height 160ms ease; }
+.club-logo { width: 76px; height: 76px; object-fit: contain; object-position: center; }
 .compact-app-title { display: none; color: var(--forest); font-family: Georgia, serif; font-size: 1.1rem; font-weight: 700; white-space: nowrap; }
 .eyebrow, .kicker { margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.72rem; font-weight: 800; }
 .eyebrow { color: var(--forest); }
@@ -584,7 +584,7 @@ body.spectator-mode #leaderboardView .section-actions { display: none; }
 body.spectator-mode #kpPanel select { pointer-events: none; }
 
 @media (max-width: 760px) {
-  .app-header { position: sticky; top: 0; z-index: 40; transition: padding 160ms ease, border-width 160ms ease; }
+  .app-header { position: sticky; top: 0; z-index: 40; }
   .tabs { position: fixed; top: auto; right: 0; bottom: 0; left: 0; z-index: 50; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.12rem; padding: 0.32rem max(0.35rem, env(safe-area-inset-right)) calc(0.32rem + env(safe-area-inset-bottom)) max(0.35rem, env(safe-area-inset-left)); border-top: 1px solid var(--line); border-bottom: 0; box-shadow: 0 -7px 20px rgba(75,18,25,0.13); }
   .tab { display: grid; justify-items: center; gap: 0.1rem; min-height: 3.45rem; padding: 0.25rem 0.08rem; border-radius: 10px; font-size: 0.62rem; line-height: 1; }
   .tab-icon { width: 1.25rem; height: 1.25rem; }
