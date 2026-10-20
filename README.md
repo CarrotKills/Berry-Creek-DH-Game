@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Version 9.24.0 replaces the Berry Creek poppy in printed results with the supplied DH golfer artwork used by the app icon and banner. The updated square treatment appears on both live and historical-round print reports.
+
 Version 9.23.0 adds **Print results** to every entry in the Saved Rounds Archive. Admins can print an individual historical round directly from its archive card or from the saved-round results dialog. The report uses that archived round's leaderboard, KP and skin results, group scorecards, settlement totals, and hole comments without loading it into—or changing—the active round.
 
 Version 9.22.0 moves saved-player group assignment controls beside **Search by name** on the Players tab. Search for a golfer, select their roster card, choose the destination group, and add them from the compact top row; group controls no longer repeat at the bottom of every card. A single filtered search result is selected automatically, and existing duplicate-player, group-capacity, and round-lock safeguards remain in place.

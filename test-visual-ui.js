@@ -26,5 +26,8 @@ assert.match(app, /No saved players yet\. Use Add Player above/);
 assert.match(html, /No round is ready yet\. Ask an admin to start a round/);
 assert.match(css, /@media \(hover: none\)[\s\S]*transform:\s*scale\(0\.96\)/);
 assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+assert.match(app, /#printReport"\)\.innerHTML = `<header><img src="app-icon-master\.png\?v=\$\{APP_VERSION\}" alt="DH Game golfer">/);
+assert.doesNotMatch(app, /#printReport"\)\.innerHTML = `<header><img src="berry-creek-logo\.jpeg"/);
+assert.match(css, /\.print-report header img\s*\{[^}]*width:\s*90px;[^}]*height:\s*90px;/s);
 
 console.log("Visual UI tests passed.");
