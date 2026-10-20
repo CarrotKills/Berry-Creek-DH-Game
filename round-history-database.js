@@ -7,9 +7,20 @@ const { DatabaseSync } = require("node:sqlite");
 
 function metadataFromRow(row) {
   let roundId = String(row?.round_id || "");
+  let changeCount = 0;
   if (!roundId && row?.state_json) {
-    try { roundId = String(JSON.parse(row.state_json).roundId || ""); }
+    try {
+      const parsedState = JSON.parse(row.state_json);
+      roundId = String(parsedState.roundId || "");
+      changeCount = Array.isArray(parsedState.auditLog) ? parsedState.auditLog.length : 0;
+    }
     catch (_) { roundId = ""; }
+  } else if (row?.state_json) {
+    try {
+      const parsedState = JSON.parse(row.state_json);
+      changeCount = Array.isArray(parsedState.auditLog) ? parsedState.auditLog.length : 0;
+    }
+    catch (_) { changeCount = 0; }
   }
   return row ? {
     id: row.id,
@@ -19,7 +30,8 @@ function metadataFromRow(row) {
     playerCount: Number(row.player_count),
     completed: Boolean(row.completed),
     locked: Boolean(row.locked),
-    savedAt: row.saved_at
+    savedAt: row.saved_at,
+    changeCount
   } : null;
 }
 
@@ -63,12 +75,15 @@ class RoundHistoryDatabase {
     return { ...metadataFromRow(row), state: JSON.parse(row.state_json) };
   }
 
-  create(state) {
-    if (!state || !Array.isArray(state.players) || !state.players.length) throw new Error("Add at least one player before saving the round");
+  create(state, options = {}) {
+    const allowIncomplete = options.allowIncomplete === true;
+    if (!state || !Array.isArray(state.players)) throw new Error("The round data is invalid");
+    if (!state.players.length && !allowIncomplete) throw new Error("Add at least one player before saving the round");
+    if (!state.players.length && !(Array.isArray(state.auditLog) && state.auditLog.length)) throw new Error("There is no round activity to archive");
     const id = crypto.randomUUID();
     const savedAt = new Date().toISOString();
-    const completed = state.players.every((player) => Array.isArray(player.scores) && player.scores.length === 18 && player.scores.every((score) => Number(score) >= 1));
-    if (!completed) throw new Error("Complete every player's 18-hole scorecard before saving the round");
+    const completed = state.players.length > 0 && state.players.every((player) => Array.isArray(player.scores) && player.scores.length === 18 && player.scores.every((score) => Number(score) >= 1));
+    if (!completed && !allowIncomplete) throw new Error("Complete every player's 18-hole scorecard before saving the round");
     this.insertStatement.run(
       id,
       String(state.roundName || "Berry Creek Round").slice(0, 60),

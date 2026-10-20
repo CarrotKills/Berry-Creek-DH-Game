@@ -7,7 +7,7 @@
 
   const MAX_PLAYERS = 30;
   const MAX_GROUP_SIZE = 5;
-  const MAX_AUDIT_ENTRIES = 250;
+  const MAX_AUDIT_ENTRIES = 1000;
   const MAX_UNDO_ENTRIES = 100;
   const MAX_HOLE_COMMENTS = 300;
   const GROUPS = ["A", "B", "C", "D", "E", "F"];

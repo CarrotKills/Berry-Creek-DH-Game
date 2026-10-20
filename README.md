@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Version 9.26.0 preserves accountability when a new round begins. Unsaved or incomplete outgoing rounds are automatically archived before the active event is cleared, saved-round views now show who made every retained change and when, and the complete change history is appended to printed results. Audit retention was expanded for full 30-player events, and historical JPEG/PDF scorecard exports now use the DH golfer logo.
+
 Version 9.25.0 stabilizes the compact mobile header near the top scroll boundary. Separate enter and exit thresholds prevent the header from rapidly toggling when its height changes, header-height measurement no longer re-runs compact-state decisions, and size-changing transitions were removed to prevent intermediate layout jumps.
 
 Version 9.24.0 replaces the Berry Creek poppy in printed results with the supplied DH golfer artwork used by the app icon and banner. The updated square treatment appears on both live and historical-round print reports.

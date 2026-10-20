@@ -1,5 +1,7 @@
 const assert = require("node:assert/strict");
 const R = require("./round-state.js");
+
+assert.equal(R.MAX_AUDIT_ENTRIES, 1000, "A full 30-player round must retain more than 250 recorded changes");
 let state = R.defaultState();
 assert.equal(state.version, 8);
 assert.deepEqual(state.holeComments, []);

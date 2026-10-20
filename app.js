@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.25.0";
+  const APP_VERSION = "9.26.0";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -1707,7 +1707,7 @@
     status.textContent = `${savedRounds.length} saved round${savedRounds.length === 1 ? "" : "s"}`;
     list.innerHTML = savedRounds.length ? savedRounds.map((round) => {
       const savedAt = Number.isNaN(Date.parse(round.savedAt)) ? round.savedAt : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(round.savedAt));
-      return `<article class="saved-round-card"><div><strong>${esc(round.roundName)}</strong><span>${esc(round.date)} · ${round.playerCount} player${round.playerCount === 1 ? "" : "s"} · ${round.completed ? "Complete" : "In progress when saved"}</span><span>Saved ${esc(savedAt)}</span></div><div class="saved-round-actions"><button class="button button-primary" type="button" data-round-action="view" data-round-id="${round.id}">View results</button><button class="button button-quiet" type="button" data-round-action="print" data-round-id="${round.id}">Print results</button><button class="button button-quiet" type="button" data-round-action="roster" data-round-id="${round.id}">Reuse roster</button><button class="button button-quiet" type="button" data-round-action="download" data-round-id="${round.id}">Download</button><button class="button button-quiet" type="button" data-round-action="delete" data-round-id="${round.id}">Delete</button></div></article>`;
+      return `<article class="saved-round-card"><div><strong>${esc(round.roundName)}</strong><span>${esc(round.date)} · ${round.playerCount} player${round.playerCount === 1 ? "" : "s"} · ${round.completed ? "Complete" : "In progress when saved"}</span><span>Saved ${esc(savedAt)} · ${Number(round.changeCount) || 0} recorded change${Number(round.changeCount) === 1 ? "" : "s"}</span></div><div class="saved-round-actions"><button class="button button-primary" type="button" data-round-action="view" data-round-id="${round.id}">View results</button><button class="button button-quiet" type="button" data-round-action="print" data-round-id="${round.id}">Print results</button><button class="button button-quiet" type="button" data-round-action="roster" data-round-id="${round.id}">Reuse roster</button><button class="button button-quiet" type="button" data-round-action="download" data-round-id="${round.id}">Download</button><button class="button button-quiet" type="button" data-round-action="delete" data-round-id="${round.id}">Delete</button></div></article>`;
     }).join("") : '<div class="empty-state">No rounds have been saved yet.</div>';
     document.querySelectorAll("[data-round-action]").forEach((button) => button.addEventListener("click", () => handleSavedRoundAction(button.dataset.roundAction, button.dataset.roundId)));
   }
@@ -1789,6 +1789,8 @@
       $("#savedRoundDialogTitle").textContent = round.roundName;
       $("#savedRoundDialogMeta").textContent = `${round.date} · ${round.playerCount} player${round.playerCount === 1 ? "" : "s"} · ${round.completed ? "Complete round" : "Saved before every score was entered"}`;
       $("#savedRoundDialogBody").innerHTML = archivedPlayerRows(roundState);
+      $("#savedRoundHistoryCount").textContent = `${roundState.auditLog.length} recorded change${roundState.auditLog.length === 1 ? "" : "s"}`;
+      $("#savedRoundHistoryList").innerHTML = auditEntriesMarkup(roundState);
       const groups = R.GROUPS.filter((group) => roundState.players.some((player) => player.group === group));
       $("#savedRoundGroupSelect").innerHTML = groups.map((group) => `<option value="${group}">Group ${group}</option>`).join("");
       $("#exportSavedRoundJpegBtn").disabled = groups.length === 0;
@@ -1802,12 +1804,17 @@
     }
   }
 
-  function renderAudit() {
-    const log = [...state.auditLog].reverse();
-    $("#auditList").innerHTML = log.length ? log.map((entry) => {
+  function auditEntriesMarkup(roundState, newestFirst = true) {
+    const log = [...(roundState.auditLog || [])];
+    if (newestFirst) log.reverse();
+    return log.length ? log.map((entry) => {
       const when = Number.isNaN(Date.parse(entry.at)) ? entry.at : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.at));
       return `<article class="audit-entry"><div><strong>${esc(entry.detail)}</strong><span>${esc(entry.actor)}</span></div><time>${esc(when)}</time></article>`;
-    }).join("") : '<div class="empty-state">No changes recorded yet.</div>';
+    }).join("") : '<div class="empty-state">No changes were recorded for this round.</div>';
+  }
+
+  function renderAudit() {
+    $("#auditList").innerHTML = auditEntriesMarkup(state);
   }
 
   function renderGroupProgress() {
@@ -2463,7 +2470,7 @@
       roundName: roundState.roundName,
       date: roundState.date,
       scoring: E,
-      logoUrl: "berry-creek-logo.jpeg"
+      logoUrl: `app-icon-master.png?v=${APP_VERSION}`
     };
   }
 
@@ -2617,6 +2624,15 @@
     return `<section class="print-hole-comments"><h2>Hole Comments</h2>${groups}</section>`;
   }
 
+  function printRoundHistoryMarkup(round) {
+    const history = [...(round.auditLog || [])];
+    const rows = history.map((entry) => {
+      const when = Number.isNaN(Date.parse(entry.at)) ? entry.at : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.at));
+      return `<tr><td>${esc(when)}</td><td>${esc(entry.actor)}</td><td>${esc(entry.detail)}</td></tr>`;
+    }).join("");
+    return `<section class="print-round-history"><h2>Round Change History</h2><p>${history.length} recorded change${history.length === 1 ? "" : "s"}, shown from earliest to latest.</p>${rows ? `<table><thead><tr><th>Time</th><th>User</th><th>Change</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>No changes were recorded for this round.</p>'}</section>`;
+  }
+
   function downloadCsv() {
     const reportState = leaderboardRound();
     const settlement = E.pointsSettlement(reportState.players, E.COURSE, reportState.settings);
@@ -2672,7 +2688,8 @@
     const groupTables = R.GROUPS.filter((group) => groupPlayersForReport(group).length).map((group) => `<section class="print-group"><h3>Group ${group} scorecard</h3><p>All tees use the standard Upper hole handicap ratings. Skin pops are capped at one stroke per hole, 1/2 on par 3s; Out, In, and Total net scores use each player's full HDCP. S marks a skin, KP marks the qualifying holder, KPM marks a claim that earned no tic, and an outlined KP is pending.</p><table><thead><tr><th>Player</th>${E.COURSE.holes.slice(0, 9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>Out</th>${E.COURSE.holes.slice(9).map((hole) => `<th>${hole.number}</th>`).join("")}<th>In</th><th>Total</th></tr></thead><tbody>${groupPlayersForReport(group).map((player) => { const totals = E.playerTotals(player, E.COURSE, reportState.settings, reportState.players); const front = scorecardSegment(player, totals.front, 0, 9); const back = scorecardSegment(player, totals.back, 9, 18); const total = scorecardSegment(player, totals.total, 0, 18); const cells = player.scores.map((score, holeIndex) => `<td><span class="print-score-value${scoreMarkClasses(score, holeIndex)}">${score || "—"}</span><span class="print-dots">${"●".repeat(strokesReceivedFor(player, holeIndex, reportState))}</span>${scorecardIndicators(player, holeIndex, reportState)}</td>`); return `<tr class="${player.inGame ? "" : "score-only-row"}"><td>${esc(playerExportName(player, reportState.players.indexOf(player)))}</td>${cells.slice(0, 9).join("")}<td>${front.text}</td>${cells.slice(9).join("")}<td>${back.text}</td><td>${total.text}</td></tr>`; }).join("")}</tbody></table></section>`).join("");
     const leaders = rankedPlayers(reportState).map((item) => `<tr><td>${playerNameHtml(item.player, item.index)}</td><td>${displayPlayingHandicap(hcpForRound(item.player, reportState))}</td><td>${item.player.group}</td><td>${leaderboardThruText(item.player, item.totals)}</td><td>${complete(item.totals.total.gross, item.totals.total.completed)}</td><td>${complete(item.ghinAdjusted.gross, item.ghinAdjusted.completed)}</td><td>${complete(item.totals.total.net, item.totals.total.completed)}</td><td>${item.tics.eagles}</td><td>${item.tics.birdies}</td><td>${item.tics.sandies}</td><td class="kp-count-column">${item.tics.kps}</td><td>${item.tics.skins}</td><td>${item.tics.frontWeight}</td><td>${item.tics.backWeight}</td><td>${item.tics.totalNetWeight}</td><td>+${item.ledger.positive.toFixed(1)}</td><td>${item.ledger.negative.toFixed(1)}</td><td>${settledPointText(item.ledger.settledNet, settlement.complete)}</td></tr>`).join("") + bccTipsRow(settlement, LEADERBOARD_COLUMNS.length);
     const holeComments = printHoleCommentsMarkup(reportState);
-    $("#printReport").innerHTML = `<header><img src="app-icon-master.png?v=${APP_VERSION}" alt="DH Game golfer"><div><h1>${esc(reportState.roundName)}</h1><p>${esc(reportState.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table class="leaderboard"><thead><tr><th>PLAYER</th><th>HCP</th><th>G</th><th>THRU</th><th>TOT</th><th>GHIN</th><th>NET</th><th>E</th><th>B</th><th>SD</th><th class="kp-count-column">KP</th><th>S</th><th>FN</th><th>BN</th><th>TN</th><th>$+</th><th>$-</th><th>Net $</th></tr></thead><tbody>${leaders}</tbody></table><section class="print-leaderboard-legend"><h3>Leaderboard legend</h3><dl>${leaderboardLegendMarkup()}</dl></section><div class="print-columns"><section><h2>KPs</h2><table><thead><tr><th>Hole</th><th>KP</th><th>KPM</th></tr></thead><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}${holeComments}`;
+    const roundHistory = printRoundHistoryMarkup(reportState);
+    $("#printReport").innerHTML = `<header><img src="app-icon-master.png?v=${APP_VERSION}" alt="DH Game golfer"><div><h1>${esc(reportState.roundName)}</h1><p>${esc(reportState.date)} · The Club at Berry Creek</p></div></header><h2>Leaderboard</h2><table class="leaderboard"><thead><tr><th>PLAYER</th><th>HCP</th><th>G</th><th>THRU</th><th>TOT</th><th>GHIN</th><th>NET</th><th>E</th><th>B</th><th>SD</th><th class="kp-count-column">KP</th><th>S</th><th>FN</th><th>BN</th><th>TN</th><th>$+</th><th>$-</th><th>Net $</th></tr></thead><tbody>${leaders}</tbody></table><section class="print-leaderboard-legend"><h3>Leaderboard legend</h3><dl>${leaderboardLegendMarkup()}</dl></section><div class="print-columns"><section><h2>KPs</h2><table><thead><tr><th>Hole</th><th>KP</th><th>KPM</th></tr></thead><tbody>${kpRows}</tbody></table></section><section><h2>Net skins</h2><table><thead><tr><th>Hole</th><th>Winner</th></tr></thead><tbody>${skinRows}</tbody></table></section></div>${groupTables}${holeComments}${roundHistory}`;
   }
 
   async function checkVersion() {
@@ -2689,7 +2706,23 @@
     }
   }
 
+  async function preserveCurrentRoundBeforeReset() {
+    const hasMeaningfulHistory = state.auditLog.some((entry) => entry.type !== "CLEAR_ROUND");
+    if ((!state.players.length && !state.holeComments.length && !hasMeaningfulHistory) || currentRoundIsLockedAndSaved()) return { ok: true, archived: false };
+    try {
+      const body = await databaseRequest("/api/rounds", { method: "POST", body: JSON.stringify({ preserveBeforeReset: true }) });
+      savedRounds = [body.round, ...savedRounds];
+      renderSavedRounds();
+      return { ok: true, archived: true };
+    } catch (error) {
+      showToast(`The current round was not cleared because its history could not be archived: ${error.message}`, "error");
+      return { ok: false, archived: false };
+    }
+  }
+
   async function startNewRoundNow() {
+    const preservation = await preserveCurrentRoundBeforeReset();
+    if (!preservation.ok) return false;
     selectedHole = 1;
     selectedCommentHole = 1;
     selectedGroup = "A";
@@ -2702,7 +2735,7 @@
     await refreshState().catch(() => {});
     await loadShareTokens();
     switchView("setup");
-    showToast("New round ready. Saved players and round history were kept.", "success");
+    showToast(preservation.archived ? "New round ready. The previous round and its complete change history were archived." : "New round ready. Saved players and round history were kept.", "success");
     return true;
   }
 

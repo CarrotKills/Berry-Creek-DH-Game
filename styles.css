@@ -537,6 +537,11 @@ dialog form > p { color: var(--muted); line-height: 1.48; }
 .archived-leaderboard th:first-child, .archived-leaderboard td:first-child { position: sticky; left: 0; z-index: 2; text-align: left; }
 .archived-leaderboard th:first-child { background: var(--forest); }
 .archived-leaderboard td:first-child { background: var(--paper); font-weight: 800; }
+.saved-round-change-history { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--line); }
+.saved-round-history-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+.saved-round-history-heading h3 { margin: 0; }
+.saved-round-history-heading span { color: var(--muted); font-size: 0.78rem; font-weight: 750; }
+.saved-round-audit-list { max-height: 320px; padding: 0 0.2rem; border: 1px solid var(--line); border-radius: 10px; }
 .audit-list { display: grid; gap: 0.45rem; max-height: 440px; overflow-y: auto; }
 .audit-entry { display: flex; justify-content: space-between; align-items: start; gap: 1rem; padding: 0.7rem; border-bottom: 1px solid var(--line); }
 .audit-entry strong, .audit-entry span { display: block; }
@@ -791,6 +796,13 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .print-hole-comment-group th:nth-child(2), .print-hole-comment-group td:nth-child(2) { width: 12%; }
   .print-hole-comment-group th:nth-child(3), .print-hole-comment-group td:nth-child(3) { width: 18%; }
   .print-hole-comment-group td:last-child { text-align: left; white-space: normal; }
+  .print-round-history { break-before: page; }
+  .print-round-history > p { margin: 0 0 0.35rem; }
+  .print-round-history table { width: 100%; table-layout: fixed; page-break-inside: auto; }
+  .print-round-history tr { break-inside: avoid; page-break-inside: avoid; }
+  .print-round-history th:nth-child(1), .print-round-history td:nth-child(1) { width: 20%; }
+  .print-round-history th:nth-child(2), .print-round-history td:nth-child(2) { width: 18%; }
+  .print-round-history td { text-align: left; white-space: normal; }
 }
 
 @media print {

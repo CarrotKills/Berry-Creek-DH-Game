@@ -15,7 +15,7 @@ const IndexUpdateSchedule = require("./index-update-schedule.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.25.0";
+const APP_VERSION = "9.26.0";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -589,7 +589,7 @@ function recordFailedLogin(req) {
 function recordSystemAudit(actor, type, detail) {
   const at = new Date().toISOString();
   state.auditLog.push({ id: `${at}-${state.revision + 1}`, at, actor: String(actor || "Admin").slice(0, 40), type: String(type || "ADMIN_UPDATE").slice(0, 30), detail: String(detail || "Admin update").slice(0, 180) });
-  state.auditLog = state.auditLog.slice(-250);
+  state.auditLog = state.auditLog.slice(-Round.MAX_AUDIT_ENTRIES);
   state.revision = Number(state.revision || 0) + 1;
   persist();
   broadcast();
@@ -893,8 +893,11 @@ const server = http.createServer(async (req, res) => {
     try {
       if (req.method === "GET" && url.pathname === "/api/rounds") return sendJson(res, 200, { rounds: roundHistoryDatabase.list() });
       if (req.method === "POST" && url.pathname === "/api/rounds") {
-        const round = roundHistoryDatabase.create(state);
-        recordSystemAudit(adminIdentity.name, "ROUND_SAVE", `Saved ${round.roundName} to round history`);
+        const body = await readBody(req);
+        const preserveBeforeReset = body?.preserveBeforeReset === true;
+        if (preserveBeforeReset) recordSystemAudit(adminIdentity.name, "ROUND_ARCHIVE", `Archived ${state.roundName} before starting a new round`);
+        const round = roundHistoryDatabase.create(state, { allowIncomplete: preserveBeforeReset });
+        if (!preserveBeforeReset) recordSystemAudit(adminIdentity.name, "ROUND_SAVE", `Saved ${round.roundName} to round history`);
         return sendJson(res, 201, { round });
       }
       if (req.method === "GET" && roundRoute) {

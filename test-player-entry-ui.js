@@ -85,7 +85,7 @@ assert.doesNotMatch(app, /#checkUpdateBtn/);
 assert.match(app, /checkVersion\(\);\s*\}\)\(\);/);
 assert.match(html, /id="lockStatus"[^>]*>Round Active</);
 assert.match(app, /textContent = isLocked\(\) \? "Round Locked" : "Round Active"/);
-assert.match(html, /The current round has not been Locked and Saved; you will lose all data for the current round if you continue\./);
+assert.match(html, /The current round has not been Locked and Saved\. Its current results and complete change history will be archived before the new round starts\./);
 assert.match(app, /currentRoundIsLockedAndSaved\(\)/);
 assert.match(app, /lockAndSaveCurrentRound\(\)/);
 assert.match(app, /Complete every player's 18-hole scorecard before saving the round\./);
