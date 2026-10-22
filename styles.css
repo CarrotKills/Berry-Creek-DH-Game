@@ -614,7 +614,10 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   body.android-device .app-header .eyebrow, body.android-device .app-header h1 { display: none; }
   body.android-device .compact-app-title { display: block; }
   body.android-device .header-actions { flex-wrap: nowrap; gap: 0.3rem; }
-  body.android-device #adminBtn, body.android-device #spectatorStatus { display: none; }
+  body.android-device #spectatorStatus { display: none; }
+  body.android-device #adminBtn { display: inline-flex; flex: 0 0 auto; min-width: 0; min-height: 36px; max-width: 58px; padding: 0.25rem 0.42rem; overflow: hidden; font-size: 0; line-height: 1; white-space: nowrap; }
+  body.android-device #adminBtn::after { content: attr(data-compact-label); font-size: 0.66rem; font-weight: 850; }
+  body.android-device.spectator-mode #adminBtn { display: none; }
   body.android-device .status-pill { min-height: 30px; padding: 0.25rem 0.45rem; font-size: 0.68rem; }
   body.android-device .round-identity-bar { top: 50px; }
   body.android-device .update-banner { top: 90px; }
@@ -698,6 +701,12 @@ body.spectator-mode #kpPanel select { pointer-events: none; }
   .admin-row-meta, .admin-row-actions { grid-column: 1 / -1; }
   .toast { bottom: calc(4.8rem + env(safe-area-inset-bottom)); }
   body.spectator-mode .tabs { grid-template-columns: minmax(180px, 260px); justify-content: center; }
+}
+
+@media (max-width: 380px) {
+  body.android-device .compact-app-title { display: none; }
+  body.android-device .brand-lockup { gap: 0; }
+  body.android-device .header-actions { gap: 0.2rem; }
 }
 
 @media (max-width: 480px) {

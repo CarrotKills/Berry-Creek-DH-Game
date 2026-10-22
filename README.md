@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Version 9.26.2 restores account access in the stable Android header. Android users now see a compact **Login** or **Logout** control that preserves the fixed banner height, includes the signed-in player's name in its accessible label, and remains hidden only on view-only spectator links.
+
 Version 9.26.1 stabilizes the compact banner on Android phones. Android now uses a fixed-height compact header, ignores browser-toolbar resize noise when selecting the header mode, and removes GPU-heavy blur from sticky mobile controls. Other mobile devices retain the scrolling compact-header behavior with a short stability delay.
 
 Version 9.25.0 stabilizes the compact mobile header near the top scroll boundary. Separate enter and exit thresholds prevent the header from rapidly toggling when its height changes, header-height measurement no longer re-runs compact-state decisions, and size-changing transitions were removed to prevent intermediate layout jumps.

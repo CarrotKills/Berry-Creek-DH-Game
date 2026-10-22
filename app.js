@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.26.1";
+  const APP_VERSION = "9.26.2";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -2282,7 +2282,11 @@
   }
 
   function renderAdminState() {
-    $("#adminBtn").textContent = currentUser ? `Sign out · ${currentUser.name}` : "Sign in";
+    const adminButton = $("#adminBtn");
+    adminButton.textContent = currentUser ? `Sign out · ${currentUser.name}` : "Sign in";
+    adminButton.dataset.compactLabel = currentUser ? "Logout" : "Login";
+    adminButton.setAttribute("aria-label", currentUser ? `Sign out ${currentUser.name}` : "Sign in");
+    adminButton.title = currentUser ? `Sign out ${currentUser.name}` : "Sign in";
     $("#setupLockedNotice").hidden = adminUnlocked;
     document.querySelectorAll(".admin-control").forEach((control) => {
       const isRoundLockControl = control.id === "toggleRoundLockBtn";
