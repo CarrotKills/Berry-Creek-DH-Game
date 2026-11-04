@@ -4,11 +4,13 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.26.4";
+  const APP_VERSION = "9.26.5";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
   const SESSION_KEY = "berry-creek-user-session-v1";
+  const ANNOUNCEMENT_STORAGE_KEY = "berry-creek-player-announcements-v1";
+  const PLAYER_ANNOUNCEMENT_ID = "gazette-comments-and-photos-v1";
   const HEADER_COMPACT_ENTER_Y = 112;
   const HEADER_COMPACT_EXIT_Y = 32;
   const HEADER_MODE_SETTLE_MS = 120;
@@ -93,6 +95,7 @@
   let pendingHeaderCompact = null;
   let leaderboardSort = { key: "standing", direction: "asc" };
   let preferences = loadPreferences();
+  let playerAnnouncementQueued = false;
 
   document.body.classList.toggle("android-device", IS_ANDROID);
 
@@ -106,6 +109,45 @@
     catch (_) { return { sound: true, autoAdvance: false, display: "normal" }; }
   }
   function savePreferences() { localStorage.setItem(PREFS_KEY, JSON.stringify(preferences)); }
+  function playerAnnouncementAudienceKey() {
+    if (!currentUser?.id || currentUser.bootstrap || spectatorMode) return "";
+    if (currentUser.role === "player") return `${currentUser.role}:${currentUser.id}`;
+    if (currentUser.role === "admin" && currentUser.playerId) return `${currentUser.role}:${currentUser.id}`;
+    return "";
+  }
+  function playerAnnouncementAcknowledgements() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(ANNOUNCEMENT_STORAGE_KEY));
+      return stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+    } catch (_) { return {}; }
+  }
+  function acknowledgePlayerAnnouncement(audienceKey) {
+    if (!audienceKey) return;
+    const acknowledgements = playerAnnouncementAcknowledgements();
+    acknowledgements[`${PLAYER_ANNOUNCEMENT_ID}:${audienceKey}`] = new Date().toISOString();
+    localStorage.setItem(ANNOUNCEMENT_STORAGE_KEY, JSON.stringify(acknowledgements));
+  }
+  function maybeShowPlayerAnnouncement() {
+    const dialog = $("#playerAnnouncementDialog");
+    const audienceKey = playerAnnouncementAudienceKey();
+    if (!dialog || !audienceKey || dialog.open) return;
+    if (playerAnnouncementAcknowledgements()[`${PLAYER_ANNOUNCEMENT_ID}:${audienceKey}`]) return;
+    const openDialog = document.querySelector("dialog[open]");
+    if (openDialog) {
+      if (!playerAnnouncementQueued) {
+        playerAnnouncementQueued = true;
+        openDialog.addEventListener("close", () => {
+          playerAnnouncementQueued = false;
+          maybeShowPlayerAnnouncement();
+        }, { once: true });
+      }
+      return;
+    }
+    playerAnnouncementQueued = false;
+    dialog.dataset.audienceKey = audienceKey;
+    dialog.returnValue = "";
+    dialog.showModal();
+  }
   function applyUserGroupDefault(force = false) {
     if (groupWasChosen && !force) return;
     const player = currentRoundPlayer();
@@ -732,6 +774,7 @@
       applyUserGroupDefault(Boolean(currentUser && !scorerLinkLocked));
       render();
       setConnection("live");
+      maybeShowPlayerAnnouncement();
       await flushQueue();
       await loadAdminData();
       eventSource?.close();
@@ -2110,6 +2153,7 @@
       renderAdminManagement();
       if (id === currentAdmin?.id) await connect();
       showToast(`${body.admin.name}'s account was updated. Login: ${body.admin.username}${body.retiredPlayerLogin ? "; the separate player login was retired" : ""}.`, "success");
+      if (id === currentAdmin?.id) maybeShowPlayerAnnouncement();
     } catch (error) {
       showToast(error.message, "error");
     }
@@ -2241,6 +2285,7 @@
       render();
       switchView("score");
       showToast(`${body.wasReset ? "Login reset" : "Player access created"} for ${body.player.name}. You are signed in.`, "success");
+      maybeShowPlayerAnnouncement();
     } catch (error) {
       errorBox.textContent = error.message;
       errorBox.hidden = false;
@@ -2430,6 +2475,7 @@
       if (adminUnlocked) await loadAdminData();
       switchView(adminUnlocked && body.setupRequired ? "tournament" : "score");
       showToast(body.setupRequired ? "Setup access unlocked. Create the first named admin in Settings." : `Signed in as ${currentUser.name}.`, "success");
+      maybeShowPlayerAnnouncement();
     } catch (error) {
       $("#adminError").textContent = error.message;
       $("#adminError").hidden = false;
@@ -2925,6 +2971,11 @@
   reuseRosterDialog.addEventListener("close", () => {
     if (reuseRosterDialog.returnValue === "confirm") startFromSavedRoster();
     else pendingReuseRound = null;
+  });
+  const playerAnnouncementDialog = $("#playerAnnouncementDialog");
+  playerAnnouncementDialog.addEventListener("close", () => {
+    if (playerAnnouncementDialog.returnValue === "acknowledge") acknowledgePlayerAnnouncement(playerAnnouncementDialog.dataset.audienceKey);
+    delete playerAnnouncementDialog.dataset.audienceKey;
   });
   $("#clearHistoryBtn").addEventListener("click", () => { if (window.confirm("Clear the complete change history?")) dispatch({ type: "CLEAR_AUDIT" }); });
   $("#footerVersionBtn").addEventListener("click", () => { switchView("tournament"); checkVersion(); });

@@ -404,6 +404,9 @@ dialog form > p { color: var(--muted); line-height: 1.48; }
 .decision-dialog-danger .dialog-symbol { background: var(--danger); }
 .decision-dialog-save { border-top-color: var(--success); }
 .decision-dialog-save .dialog-symbol { background: var(--success); }
+.player-announcement-dialog { width: min(520px, calc(100% - 1.5rem)); max-width: 520px; border-top-color: var(--forest); }
+.player-announcement-dialog .dialog-symbol { background: linear-gradient(135deg, var(--forest), var(--forest-2)); }
+.player-announcement-copy { margin: 1rem 0 0; padding: 0.9rem 1rem; border: 1px solid color-mix(in srgb, var(--forest) 20%, var(--line)); border-radius: var(--radius-md); color: var(--ink) !important; background: var(--gold-soft); font-size: 0.95rem; line-height: 1.58 !important; }
 .dialog-callout { padding: 0.7rem 0.8rem; border: 1px solid #efc9cf; border-left: 4px solid var(--danger); border-radius: var(--radius-sm); color: #7f101d !important; background: #fbe7ea; font-size: 0.84rem; line-height: 1.4; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1rem; }
 .reset-actions { flex-wrap: wrap; }
