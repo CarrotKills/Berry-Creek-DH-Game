@@ -1,5 +1,9 @@
 # Berry Creek DH Game
 
+Version 9.26.4 expands the Event Readiness **Last index update** status. It now reports how many saved players were not found in the published index roster and lists those players by name; a nonzero result is shown as a readiness warning. The result is retained for both scheduled and manual index updates, including across server restarts.
+
+Version 9.26.3 makes manual handicap changes fully accountable. The change history now identifies the acting admin, timestamp, player, and the old and new handicap—including accidental use of the **+ HCP** control—while unchanged values do not create noise. Scheduled roster index updates remain summarized as scheduled updates rather than being mistaken for manual edits.
+
 Version 9.26.2 restores account access in the stable Android header. Android users now see a compact **Login** or **Logout** control that preserves the fixed banner height, includes the signed-in player's name in its accessible label, and remains hidden only on view-only spectator links.
 
 Version 9.26.1 stabilizes the compact banner on Android phones. Android now uses a fixed-height compact header, ignores browser-toolbar resize noise when selecting the header mode, and removes GPU-heavy blur from sticky mobile controls. Other mobile devices retain the scrolling compact-header behavior with a short stability delay.

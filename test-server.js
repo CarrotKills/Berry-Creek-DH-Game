@@ -52,7 +52,7 @@ async function createPlayerLogin(playerId, username, pin) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.26.2");
+  assert.equal(config.appVersion, "9.26.4");
   assert.equal(config.adminSetupRequired, true);
   const emptyPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
   assert.equal(emptyPublicLeaderboard.source, "empty");
@@ -149,6 +149,12 @@ async function createPlayerLogin(playerId, username, pin) {
   assert.equal(listedSaved.players.some((player) => player.id === createdSaved.player.id), true);
   const updatedSaved = await playerRequest(`/${createdSaved.player.id}`, { method: "PUT", body: { ghin: 13.7 } });
   assert.equal(updatedSaved.player.ghin, 13.7);
+  const savedHandicapAudit = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(savedHandicapAudit.auditLog.at(-1).actor, "Alice Admin");
+  assert.equal(savedHandicapAudit.auditLog.at(-1).detail, "Changed Saved Golfer's handicap from 15.2 to 13.7");
+  const unchangedSavedRevision = savedHandicapAudit.revision;
+  await playerRequest(`/${createdSaved.player.id}`, { method: "PUT", body: { ghin: 13.7 } });
+  assert.equal((await (await fetch(`${base}/api/state`)).json()).revision, unchangedSavedRevision);
   const linkedAdmin = await adminRequest(`/${firstAdmin.admin.id}`, { method: "PUT", body: { playerId: createdSaved.player.id } });
   assert.equal(linkedAdmin.admin.playerId, createdSaved.player.id);
   assert.equal(linkedAdmin.admin.name, "Saved Golfer");

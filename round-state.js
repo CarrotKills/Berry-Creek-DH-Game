@@ -180,6 +180,11 @@
     return player?.name?.trim() || "Player";
   }
 
+  function formatHandicapIndex(value) {
+    const index = Number(value) || 0;
+    return index < 0 ? `+${Math.abs(index).toFixed(1)}` : index.toFixed(1);
+  }
+
   function actionDescription(before, after, action) {
     const p = action?.payload || {};
     switch (action?.type) {
@@ -188,7 +193,14 @@
       case "SET_PHOTO_EMAIL": return p.email ? "Updated the photo email address" : "Cleared the photo email address";
       case "ADD_PLAYER": return `Added ${p.player?.name?.trim() || "a player"} to Group ${p.player?.group || "A"}`;
       case "REMOVE_PLAYER": return `Removed ${playerName(before, p.playerId)}`;
-      case "UPDATE_PLAYER": return `Updated ${playerName(after, p.playerId)}`;
+      case "UPDATE_PLAYER": {
+        const previousPlayer = before.players.find((item) => item.id === p.playerId);
+        const updatedPlayer = after.players.find((item) => item.id === p.playerId);
+        if (previousPlayer && updatedPlayer && Number(previousPlayer.ghin) !== Number(updatedPlayer.ghin)) {
+          return `Changed ${playerName(after, p.playerId)}'s handicap from ${formatHandicapIndex(previousPlayer.ghin)} to ${formatHandicapIndex(updatedPlayer.ghin)}`;
+        }
+        return `Updated ${playerName(after, p.playerId)}`;
+      }
       case "SET_SCORE": {
         const oldScore = before.players.find((item) => item.id === p.playerId)?.scores?.[Number(p.holeIndex)] || "blank";
         const newScore = after.players.find((item) => item.id === p.playerId)?.scores?.[Number(p.holeIndex)] || "blank";
@@ -349,13 +361,13 @@
       case "UPDATE_PLAYER": {
         const player = state.players.find((item) => item.id === p.playerId);
         if (!player) { changed = false; break; }
+        if (typeof p.directoryId === "string") {
+          const requestedDirectoryId = String(p.directoryId);
+          if (requestedDirectoryId && activePlayerConflict(state.players, { ...player, directoryId: requestedDirectoryId }, player.id)) { changed = false; break; }
+        }
         const previousGroup = player.group;
         if (typeof p.name === "string") player.name = p.name.slice(0, 40);
-        if (typeof p.directoryId === "string") {
-          const directoryId = String(p.directoryId);
-          if (directoryId && activePlayerConflict(state.players, { ...player, directoryId }, player.id)) { changed = false; break; }
-          player.directoryId = directoryId;
-        }
+        if (typeof p.directoryId === "string") player.directoryId = String(p.directoryId);
         if (Number.isFinite(Number(p.ghin))) player.ghin = Math.max(-10, Math.min(54, Number(p.ghin)));
         if (typeof p.inGame === "boolean") player.inGame = p.inGame;
         if (typeof p.teeKey === "string") player.teeKey = p.teeKey;
@@ -377,6 +389,7 @@
           });
           state.undoStack = state.undoStack.filter((entry) => entry.playerId !== player.id && entry.beforeValue !== player.id && entry.afterValue !== player.id && !entry.beforeClaims.includes(player.id));
         }
+        if (JSON.stringify(state) === JSON.stringify(before)) changed = false;
         break;
       }
       case "SET_SCORE": {
@@ -530,6 +543,7 @@
     normalizePlayer,
     activePlayerConflict,
     normalizeState,
+    formatHandicapIndex,
     isAdminAction,
     isScoringAction,
     isCommentAction,

@@ -15,7 +15,7 @@ const IndexUpdateSchedule = require("./index-update-schedule.js");
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || "0.0.0.0";
 const ADMIN_PIN = String(process.env.ADMIN_PIN || "2468");
-const APP_VERSION = "9.26.2";
+const APP_VERSION = "9.26.4";
 const ROOT = __dirname;
 const DEFAULT_DATA_DIR = process.env.PLAYERS_DB_FILE ? path.dirname(path.resolve(process.env.PLAYERS_DB_FILE)) : path.join(ROOT, "data");
 const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
@@ -334,7 +334,21 @@ function autoIndexReadinessDetail() {
 }
 
 function lastIndexUpdateRecord() {
-  if (autoIndexUpdateStatus.lastUpdate?.completedAt) return autoIndexUpdateStatus.lastUpdate;
+  const fallbackUnmatchedNames = Array.isArray(autoIndexUpdateStatus.unmatchedNames)
+    ? autoIndexUpdateStatus.unmatchedNames.map((name) => String(name || "").trim()).filter(Boolean)
+    : null;
+  const fallbackUnmatchedCount = Number.isFinite(Number(autoIndexUpdateStatus.unmatched))
+    ? Number(autoIndexUpdateStatus.unmatched)
+    : fallbackUnmatchedNames?.length ?? null;
+  if (autoIndexUpdateStatus.lastUpdate?.completedAt) {
+    const recordedNames = Array.isArray(autoIndexUpdateStatus.lastUpdate.unmatchedNames)
+      ? autoIndexUpdateStatus.lastUpdate.unmatchedNames.map((name) => String(name || "").trim()).filter(Boolean)
+      : fallbackUnmatchedNames;
+    const recordedCount = Number.isFinite(Number(autoIndexUpdateStatus.lastUpdate.unmatchedCount))
+      ? Number(autoIndexUpdateStatus.lastUpdate.unmatchedCount)
+      : fallbackUnmatchedCount;
+    return { ...autoIndexUpdateStatus.lastUpdate, unmatchedCount: recordedCount, unmatchedNames: recordedNames };
+  }
   if (!autoIndexUpdateStatus.lastSuccessAt) return null;
   return {
     completedAt: autoIndexUpdateStatus.lastSuccessAt,
@@ -342,7 +356,9 @@ function lastIndexUpdateRecord() {
     performedBy: "Automatic schedule",
     sheetDate: autoIndexUpdateStatus.sheetDate || null,
     updated: Number.isFinite(Number(autoIndexUpdateStatus.updated)) ? Number(autoIndexUpdateStatus.updated) : null,
-    unchanged: Number.isFinite(Number(autoIndexUpdateStatus.unchanged)) ? Number(autoIndexUpdateStatus.unchanged) : null
+    unchanged: Number.isFinite(Number(autoIndexUpdateStatus.unchanged)) ? Number(autoIndexUpdateStatus.unchanged) : null,
+    unmatchedCount: fallbackUnmatchedCount,
+    unmatchedNames: fallbackUnmatchedNames
   };
 }
 
@@ -378,16 +394,29 @@ function indexUpdateHistoryCheck() {
     : "Updated and unchanged counts were not recorded for this earlier update.";
   const source = lastUpdate.performedBy || (lastUpdate.source === "manual" ? "Manual update" : "Automatic schedule");
   const roster = lastUpdate.sheetDate ? ` Roster date: ${lastUpdate.sheetDate}.` : "";
+  const unmatchedNames = Array.isArray(lastUpdate.unmatchedNames)
+    ? lastUpdate.unmatchedNames.map((name) => String(name || "").trim()).filter(Boolean)
+    : null;
+  const unmatchedCount = Number.isFinite(Number(lastUpdate.unmatchedCount))
+    ? Number(lastUpdate.unmatchedCount)
+    : unmatchedNames?.length ?? null;
+  const notFound = unmatchedCount === null
+    ? " Saved-player not-found results were not recorded for this earlier update."
+    : unmatchedCount > 0
+      ? ` ${unmatchedCount} saved player${unmatchedCount === 1 ? " was" : "s were"} not found${unmatchedNames?.length ? `: ${unmatchedNames.join(", ")}` : ". Names were not recorded for this earlier update"}.`
+      : " 0 saved players were not found.";
   const warning = currentProblem && autoIndexUpdateStatus.message ? ` Current warning: ${autoIndexUpdateStatus.message}` : "";
   return {
     key: "index-history",
     label: "Last index update",
-    ok: !currentProblem,
+    ok: !currentProblem && unmatchedCount === 0,
     severity: "warning",
-    detail: `${formatCentralDateTime(lastUpdate.completedAt)} · ${source}. ${counts}${roster}${warning}`,
+    detail: `${formatCentralDateTime(lastUpdate.completedAt)} · ${source}. ${counts}${roster}${notFound}${warning}`,
     completedAt: lastUpdate.completedAt,
     updated: lastUpdate.updated,
-    unchanged: lastUpdate.unchanged
+    unchanged: lastUpdate.unchanged,
+    unmatchedCount,
+    unmatchedNames: unmatchedNames || []
   };
 }
 
@@ -426,6 +455,7 @@ async function runAutomaticIndexUpdate(now = new Date()) {
       unchanged,
       activePlayersUpdated,
       unmatched: plan.unmatched.length,
+      unmatchedNames: plan.unmatched.map((player) => player.name),
       ambiguous: plan.ambiguous.length,
       source: "automatic",
       lastUpdate: {
@@ -435,7 +465,9 @@ async function runAutomaticIndexUpdate(now = new Date()) {
         sheetDate: parsed.updateDate,
         updated,
         unchanged,
-        activePlayersUpdated
+        activePlayersUpdated,
+        unmatchedCount: plan.unmatched.length,
+        unmatchedNames: plan.unmatched.map((player) => player.name)
       },
       message
     };
@@ -965,6 +997,7 @@ const server = http.createServer(async (req, res) => {
             unchanged: plan.unchanged.length,
             activePlayersUpdated,
             unmatched: plan.unmatched.length,
+            unmatchedNames: plan.unmatched.map((player) => player.name),
             ambiguous: plan.ambiguous.length,
             source: "manual",
             lastUpdate: {
@@ -974,7 +1007,9 @@ const server = http.createServer(async (req, res) => {
               sheetDate: parsed.updateDate || null,
               updated: plan.updates.length,
               unchanged: plan.unchanged.length,
-              activePlayersUpdated
+              activePlayersUpdated,
+              unmatchedCount: plan.unmatched.length,
+              unmatchedNames: plan.unmatched.map((player) => player.name)
             },
             message: outdated ? `${statusMessage} The roster date does not match ${today}.` : statusMessage
           };
@@ -1007,8 +1042,27 @@ const server = http.createServer(async (req, res) => {
         const targetId = decodeURIComponent(playerRoute[1]);
         const candidate = body.player || body;
         if (Object.hasOwn(candidate, "username") || Object.hasOwn(candidate, "pin")) return sendJson(res, 403, { ok: false, error: "Use a private player reset link so the player can privately choose a new PIN" });
+        const previousPlayer = playerDatabase.find(targetId);
         const player = playerDatabase.update(targetId, candidate);
-        recordSystemAudit(adminIdentity.name, "PLAYER_UPDATE", `Updated saved player ${player.name}`);
+        const savedDetailsChanged = previousPlayer && (
+          previousPlayer.name !== player.name
+          || Number(previousPlayer.ghin) !== Number(player.ghin)
+          || previousPlayer.teeKey !== player.teeKey
+        );
+        if (savedDetailsChanged) {
+          state.players.filter((activePlayer) => activePlayer.directoryId === targetId).forEach((activePlayer) => {
+            state = Round.applyAction(state, {
+              type: "UPDATE_PLAYER",
+              payload: { playerId: activePlayer.id, directoryId: targetId, name: player.name, ghin: player.ghin, teeKey: player.teeKey },
+              meta: { actor: adminIdentity.name, skipAudit: true }
+            });
+          });
+          const handicapChanged = Number(previousPlayer.ghin) !== Number(player.ghin);
+          const detail = handicapChanged
+            ? `Changed ${player.name}'s handicap from ${Round.formatHandicapIndex(previousPlayer.ghin)} to ${Round.formatHandicapIndex(player.ghin)}`
+            : `Updated saved player ${player.name}`;
+          recordSystemAudit(adminIdentity.name, "PLAYER_UPDATE", detail);
+        }
         return sendJson(res, 200, { player });
       }
       if (req.method === "DELETE" && playerRoute) {

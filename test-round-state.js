@@ -46,8 +46,17 @@ const normalizedUniqueRoster = R.normalizeState({ players: [
 ] });
 assert.equal(normalizedUniqueRoster.players.length, 1);
 assert.equal(normalizedUniqueRoster.players[0].id, "saved-first");
-state = R.applyAction(state, { type: "UPDATE_PLAYER", payload: { playerId: "b1", ghin: 8.6, directoryId: "saved-b1" } });
+state = R.applyAction(state, { type: "UPDATE_PLAYER", payload: { playerId: "b1", ghin: 8.6, directoryId: "saved-b1" }, meta: { actor: "Adam Admin", at: "2026-10-29T14:00:00.000Z" } });
 assert.equal(state.players.find((p) => p.id === "b1").ghin, 8.6);
+assert.equal(state.auditLog.at(-1).actor, "Adam Admin");
+assert.equal(state.auditLog.at(-1).detail, "Changed B1's handicap from 0.0 to 8.6");
+state = R.applyAction(state, { type: "UPDATE_PLAYER", payload: { playerId: "b1", ghin: -8.6 }, meta: { actor: "Roy Faltesek", at: "2026-10-29T14:01:00.000Z" } });
+assert.equal(state.players.find((p) => p.id === "b1").ghin, -8.6);
+assert.equal(state.auditLog.at(-1).actor, "Roy Faltesek");
+assert.equal(state.auditLog.at(-1).detail, "Changed B1's handicap from 8.6 to +8.6");
+const noOpHandicapRevision = state.revision;
+state = R.applyAction(state, { type: "UPDATE_PLAYER", payload: { playerId: "b1", ghin: -8.6 }, meta: { actor: "Roy Faltesek" } });
+assert.equal(state.revision, noOpHandicapRevision, "An unchanged handicap should not create another history entry");
 state = R.applyAction(state, { type: "UPDATE_PLAYER", payload: { playerId: "b1", group: "C" } });
 assert.equal(state.settings.scorekeepers.B, undefined);
 state = R.applyAction(state, { type: "UPDATE_PLAYER", payload: { playerId: "b1", group: "B" } });
