@@ -52,7 +52,7 @@ async function createPlayerLogin(playerId, username, pin) {
 
 (async () => {
   const config = await (await fetch(`${base}/api/config`)).json();
-  assert.equal(config.appVersion, "9.26.5");
+  assert.equal(config.appVersion, "9.26.6");
   assert.equal(config.adminSetupRequired, true);
   const emptyPublicLeaderboard = await (await fetch(`${base}/api/public-leaderboard`)).json();
   assert.equal(emptyPublicLeaderboard.source, "empty");
@@ -285,6 +285,14 @@ async function createPlayerLogin(playerId, username, pin) {
   let kpState = await (await fetch(`${base}/api/state`)).json();
   assert.equal(kpState.settings.kpWinners["2"], "live-b");
   assert.deepEqual(kpState.settings.kpClaims["2"], ["live-a", "live-b"]);
+  await action("SET_KP", { hole: 2, playerId: "live-a" }, { group: "A" });
+  kpState = await (await fetch(`${base}/api/state`)).json();
+  assert.equal(kpState.settings.kpWinners["2"], "live-b", "Group B remains the KP holder when Group A records a delayed claim");
+  assert.deepEqual(kpState.settings.kpClaims["2"], ["live-b", "live-a"]);
+  await action("SET_KP", { hole: 2, playerId: "" }, { group: "B" });
+  await action("SET_KP", { hole: 2, playerId: "live-a" }, { group: "A" });
+  await action("SET_KP", { hole: 2, playerId: "live-b" }, { group: "B" });
+  kpState = await (await fetch(`${base}/api/state`)).json();
   assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-a"), kpState.players, E.COURSE, kpState.settings).kps, 0);
   assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-a"), kpState.players, E.COURSE, kpState.settings).kpMarked, 1);
   assert.equal(E.ticSummary(kpState.players.find((player) => player.id === "live-b"), kpState.players, E.COURSE, kpState.settings).kps, 0, "KP stays pending until every competing score is entered");

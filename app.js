@@ -4,7 +4,7 @@
   const R = window.BerryCreekRoundState;
   const L = window.BerryCreekLeaderboardSort;
   const X = window.BerryCreekScorecardExport;
-  const APP_VERSION = "9.26.5";
+  const APP_VERSION = "9.26.6";
   const STORAGE_KEY = "berry-creek-tics-v2";
   const QUEUE_KEY = "berry-creek-pending-actions-v1";
   const PREFS_KEY = "berry-creek-device-prefs-v1";
@@ -1550,7 +1550,7 @@
     $("#kpPanel").innerHTML = KP_HOLES.map((hole) => {
       const winnerId = round.settings.kpWinners[String(hole)];
       const markedNames = (round.settings.kpClaims[String(hole)] || []).map((playerId) => round.players.find((item) => item.id === playerId)).filter((player) => player && E.isInGame(player) && E.kpClaimStatus(player, E.COURSE, round.settings, hole - 1, round.players) === "marked").map((player) => esc(nameOf(player, round.players.indexOf(player))));
-      return `<div class="kp-card"><label>Hole ${hole} latest KP claim<select data-kp-hole="${hole}" ${canAdminEdit ? "" : "disabled"}><option value="">No claim</option>${E.gamePlayers(round.players).map((item) => `<option value="${item.id}" ${winnerId === item.id ? "selected" : ""}>${esc(nameOf(item, round.players.indexOf(item)))}${item.isGuest ? " *G" : ""} · ${item.group}</option>`).join("")}</select></label><span class="kp-card-status">KPM: ${markedNames.length ? markedNames.join(" / ") : "None"}</span></div>`;
+      return `<div class="kp-card"><label>Hole ${hole} KP result by group order<select data-kp-hole="${hole}" ${canAdminEdit ? "" : "disabled"}><option value="">No claim</option>${E.gamePlayers(round.players).map((item) => `<option value="${item.id}" ${winnerId === item.id ? "selected" : ""}>${esc(nameOf(item, round.players.indexOf(item)))}${item.isGuest ? " *G" : ""} · ${item.group}</option>`).join("")}</select></label><span class="kp-card-status">KPM: ${markedNames.length ? markedNames.join(" / ") : "None"}</span></div>`;
     }).join("");
     document.querySelectorAll("[data-kp-hole]").forEach((select) => select.addEventListener("change", (event) => dispatch({ type: "SET_KP", payload: { hole: Number(event.target.dataset.kpHole), playerId: event.target.value } }, { admin: true })));
   }
@@ -1949,7 +1949,7 @@
     const noAwardKps = kpResults.filter((result) => result.status === "marked").map((result) => result.hole);
     if (missingKps.length) items.push({ ok: false, text: `KP${missingKps.length === 1 ? " is" : "s are"} unassigned on Hole${missingKps.length === 1 ? "" : "s"} ${missingKps.join(", ")}.` });
     if (pendingKps.length) items.push({ ok: false, text: `KP score${pendingKps.length === 1 ? " is" : "s are"} pending on Hole${pendingKps.length === 1 ? "" : "s"} ${pendingKps.join(", ")}.` });
-    if (noAwardKps.length) items.push({ ok: true, text: `No KP tic is awarded on Hole${noAwardKps.length === 1 ? "" : "s"} ${noAwardKps.join(", ")} because the latest marked player scored over par.` });
+    if (noAwardKps.length) items.push({ ok: true, text: `No KP tic is awarded on Hole${noAwardKps.length === 1 ? "" : "s"} ${noAwardKps.join(", ")} because the final claim by group order scored over par.` });
     if (!missingKps.length && !pendingKps.length && !noAwardKps.length) items.push({ ok: true, text: "All KPs are assigned and qualifying." });
     const unusualScores = state.players.flatMap((player, playerIndex) => player.scores.flatMap((score, holeIndex) => {
       const par = E.COURSE.holes[holeIndex].par;

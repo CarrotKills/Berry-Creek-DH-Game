@@ -128,16 +128,42 @@
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
   }
 
-  function normalizeKpClaims(value, winners, validPlayerIds) {
+  function normalizeKpClaims(value, winners, players) {
+    const activePlayers = new Map(players.filter((player) => player.inGame).map((player) => [player.id, player]));
     const claims = {};
     KP_HOLES.forEach((hole) => {
       const key = String(hole);
       const recorded = Array.isArray(value?.[key]) ? value[key] : [];
       const current = winners[key] ? [winners[key]] : [];
-      const valid = [...new Set([...recorded, ...current].map(String).filter((playerId) => validPlayerIds.has(playerId)))];
+      const candidates = [...new Set([...recorded, ...current].map(String).filter((playerId) => activePlayers.has(playerId)))];
+      const latestClaimByGroup = new Map();
+      candidates.forEach((playerId) => latestClaimByGroup.set(activePlayers.get(playerId).group, playerId));
+      const valid = candidates.filter((playerId) => latestClaimByGroup.get(activePlayers.get(playerId).group) === playerId);
       if (valid.length) claims[key] = valid;
     });
     return claims;
+  }
+
+  function kpWinnerByGroup(claims, players) {
+    const activePlayers = new Map(players.filter((player) => player.inGame).map((player) => [player.id, player]));
+    return (Array.isArray(claims) ? claims : []).reduce((winnerId, playerId) => {
+      const player = activePlayers.get(playerId);
+      if (!player) return winnerId;
+      const winner = activePlayers.get(winnerId);
+      return !winner || GROUPS.indexOf(player.group) >= GROUPS.indexOf(winner.group) ? playerId : winnerId;
+    }, "");
+  }
+
+  function syncKpWinner(state, key) {
+    const winnerId = kpWinnerByGroup(state.settings.kpClaims[key], state.players);
+    if (winnerId) state.settings.kpWinners[key] = winnerId;
+    else delete state.settings.kpWinners[key];
+  }
+
+  function refreshKpState(state) {
+    state.settings.kpClaims = normalizeKpClaims(state.settings.kpClaims, state.settings.kpWinners, state.players);
+    state.settings.kpWinners = {};
+    KP_HOLES.forEach((hole) => syncKpWinner(state, String(hole)));
   }
 
   function normalizeState(value) {
@@ -148,7 +174,12 @@
       if (!activePlayerConflict(players, player)) players.push(player);
     });
     const validPlayerIds = new Set(players.filter((player) => player.inGame).map((player) => player.id));
-    const kpWinners = Object.fromEntries(Object.entries(value.settings?.kpWinners || {}).filter(([hole, playerId]) => KP_HOLES.includes(Number(hole)) && validPlayerIds.has(String(playerId))).map(([hole, playerId]) => [String(hole), String(playerId)]));
+    const recordedKpWinners = Object.fromEntries(Object.entries(value.settings?.kpWinners || {}).filter(([hole, playerId]) => KP_HOLES.includes(Number(hole)) && validPlayerIds.has(String(playerId))).map(([hole, playerId]) => [String(hole), String(playerId)]));
+    const kpClaims = normalizeKpClaims(value.settings?.kpClaims, recordedKpWinners, players);
+    const kpWinners = Object.fromEntries(KP_HOLES.flatMap((hole) => {
+      const winnerId = kpWinnerByGroup(kpClaims[String(hole)], players);
+      return winnerId ? [[String(hole), winnerId]] : [];
+    }));
     const scorekeepers = Object.fromEntries(GROUPS.flatMap((group) => {
       const playerId = String(value.settings?.scorekeepers?.[group] || "");
       return players.some((player) => player.id === playerId && player.group === group) ? [[group, playerId]] : [];
@@ -162,7 +193,7 @@
         ...base.settings,
         ...(value.settings || {}),
         kpWinners,
-        kpClaims: normalizeKpClaims(value.settings?.kpClaims, kpWinners, validPlayerIds),
+        kpClaims,
         scorekeepers,
         photoEmail: normalizePhotoEmail(value.settings?.photoEmail),
         locked: Boolean(value.settings?.locked)
@@ -301,11 +332,11 @@
       if (!player || entry.holeIndex < 0 || entry.holeIndex > 17) return false;
       player.sandies[entry.holeIndex] = !SANDY_DISABLED_HOLES.has(entry.holeIndex + 1) && Boolean(entry.beforeValue);
     } else if (entry.kind === "kp") {
-      if (entry.beforeValue && state.players.some((player) => player.id === entry.beforeValue && player.inGame)) state.settings.kpWinners[String(entry.hole)] = entry.beforeValue;
-      else delete state.settings.kpWinners[String(entry.hole)];
+      const key = String(entry.hole);
       const validClaims = entry.beforeClaims.filter((playerId) => state.players.some((player) => player.id === playerId && player.inGame));
-      if (validClaims.length) state.settings.kpClaims[String(entry.hole)] = validClaims;
-      else delete state.settings.kpClaims[String(entry.hole)];
+      if (validClaims.length) state.settings.kpClaims[key] = validClaims;
+      else delete state.settings.kpClaims[key];
+      syncKpWinner(state, key);
     }
     state.undoStack.splice(targetIndex, 1);
     p.detail = entry.detail;
@@ -356,6 +387,7 @@
           state.settings.kpClaims[hole] = state.settings.kpClaims[hole].filter((playerId) => playerId !== p.playerId);
           if (!state.settings.kpClaims[hole].length) delete state.settings.kpClaims[hole];
         });
+        refreshKpState(state);
         state.undoStack = state.undoStack.filter((entry) => entry.playerId !== p.playerId && entry.beforeValue !== p.playerId && entry.afterValue !== p.playerId && !entry.beforeClaims.includes(p.playerId));
         break;
       case "UPDATE_PLAYER": {
@@ -389,6 +421,7 @@
           });
           state.undoStack = state.undoStack.filter((entry) => entry.playerId !== player.id && entry.beforeValue !== player.id && entry.afterValue !== player.id && !entry.beforeClaims.includes(player.id));
         }
+        refreshKpState(state);
         if (JSON.stringify(state) === JSON.stringify(before)) changed = false;
         break;
       }
@@ -428,13 +461,13 @@
             const claimant = state.players.find((player) => player.id === playerId);
             return claimant && claimant.group !== nextPlayer.group;
           });
-          state.settings.kpWinners[key] = nextPlayerId;
           state.settings.kpClaims[key] = [...correctedClaims, nextPlayerId];
+          syncKpWinner(state, key);
         } else if (nextPlayerId && p.value === false) {
           const remainingClaims = previousClaims.filter((playerId) => playerId !== nextPlayerId);
           if (remainingClaims.length) {
             state.settings.kpClaims[key] = remainingClaims;
-            state.settings.kpWinners[key] = remainingClaims.at(-1);
+            syncKpWinner(state, key);
           } else {
             delete state.settings.kpClaims[key];
             delete state.settings.kpWinners[key];

@@ -107,11 +107,10 @@ const normalizedNoBunkerSandies = R.normalizePlayer({ id: "no-bunker", scores: A
 assert.equal(normalizedNoBunkerSandies.sandies[3], false);
 assert.equal(normalizedNoBunkerSandies.sandies[11], false);
 state = R.applyAction(state, { type: "SET_KP", payload: { hole: 2, playerId: "a1", value: true } });
-assert.equal(state.settings.kpWinners["2"], "a1");
-assert.notEqual(state.settings.kpWinners["2"], "b1");
+assert.equal(state.settings.kpWinners["2"], "b1", "A later click from Group A cannot supplant Group B's claim");
 assert.deepEqual(state.settings.kpClaims["2"], ["b1", "a1"]);
 state = R.applyAction(state, { type: "SET_KP", payload: { hole: 2, playerId: "a2", value: true } });
-assert.equal(state.settings.kpWinners["2"], "a2");
+assert.equal(state.settings.kpWinners["2"], "b1", "The highest group in group order remains the KP holder");
 assert.deepEqual(state.settings.kpClaims["2"], ["b1", "a2"], "A corrected KP replaces the earlier Group A claim only");
 state = R.applyAction(state, { type: "SET_KP", payload: { hole: 2, playerId: "a2", value: false } });
 assert.equal(state.settings.kpWinners["2"], "b1");
@@ -122,6 +121,14 @@ assert.equal(state.settings.kpWinners["2"], "b1");
 assert.deepEqual(state.settings.kpClaims["2"], ["b1"]);
 const migrated = R.normalizeState({ players: state.players, settings: { kpWinners: { 2: "b1" } } });
 assert.deepEqual(migrated.settings.kpClaims["2"], ["b1"]);
+const groupOrderKp = R.normalizeState({
+  players: [
+    { id: "group-a", name: "Group A", group: "A", inGame: true },
+    { id: "group-c", name: "Group C", group: "C", inGame: true }
+  ],
+  settings: { kpWinners: { 2: "group-a" }, kpClaims: { 2: ["group-c", "group-a"] } }
+});
+assert.equal(groupOrderKp.settings.kpWinners["2"], "group-c", "Group C wins over Group A regardless of real-time marking order");
 state = R.applyAction(state, { type: "SET_KP", payload: { hole: 2, playerId: "" } });
 assert.equal(state.settings.kpWinners["2"], undefined);
 assert.equal(state.settings.kpClaims["2"], undefined);

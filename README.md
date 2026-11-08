@@ -1,5 +1,7 @@
 # Berry Creek DH Game
 
+Version 9.26.6 resolves KPs by group order instead of checkbox time. If a later group has already marked a KP, an earlier group's delayed entry remains recorded as KPM but cannot supplant the later group; selecting a different player within the same group still corrects that group's claim. Removing a claim restores the highest remaining group-order claim.
+
 Version 9.26.5 adds a one-time DH Gazette announcement for signed-in players. The next time a player logs in—or opens the app with an existing session—the mobile-friendly pop-up explains how to add hole comments and email photos for the official round record. Acknowledgement is stored per account on each device, so different players sharing a device each receive the notice while acknowledged players are not repeatedly interrupted.
 
 Version 9.26.4 expands the Event Readiness **Last index update** status. It now reports how many saved players were not found in the published index roster and lists those players by name; a nonzero result is shown as a readiness warning. The result is retained for both scheduled and manual index updates, including across server restarts.
